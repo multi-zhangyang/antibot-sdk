@@ -41,6 +41,7 @@ def compact_result(result: Any) -> dict[str, Any]:
                 "error": raw.get("error"),
                 "watchdog": raw.get("watchdog"),
                 "success": raw.get("success"),
+                "token": raw.get("token"),
                 "type": raw.get("type"),
             }.items()
             if v not in (None, "", [], {})

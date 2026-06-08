@@ -1,10 +1,11 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare 流程 / 腾讯滑块验证码 / 阿里云滑块验证码** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / 腾讯滑块验证码 / 阿里云滑块验证码 / GeeTest v4** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
 - Pydoll / CDP 浏览器运行器：页面打开、指纹补丁、Cloudflare/Turnstile/Managed Challenge 相关流程观察与自动化。
+- Turnstile：新增浏览器 hook/observer provider，采集 `turnstile.render()` 配置、callback token、`cf-turnstile-response`、widget DOM 和网络现场。
 - Tencent Captcha：封装腾讯滑块的页面触发、浏览器池、缺口识别、轨迹拖拽、ticket/randstr 输出。
 - Aliyun Captcha：封装阿里云滑块的 Node/Puppeteer runner、站点 profile、attempt/session retry、错误归一、artifact 保留。
 - GeeTest v4：新增浏览器 hook/observer provider，采集 `initGeetest4` 配置、实例方法、运行事件、`getValidate()` 成功载荷和网络现场。
@@ -46,7 +47,72 @@ async with AntibotClient() as client:
 
 ---
 
-### 2. 腾讯滑块验证码
+### 2. Cloudflare Turnstile
+
+Turnstile provider 面向嵌入式 widget，第一版目标是 **可探测、可触发、可采集、可压测、可复盘**。
+
+能力：
+
+- 在页面最早阶段 hook `window.turnstile`。
+- 记录 `turnstile.render(container, options)` 的 sitekey、action、cData、size、theme、execution、appearance。
+- wrap `callback / error-callback / expired-callback / timeout-callback`。
+- 采集成功 token：
+  - `callback(token)`
+  - `turnstile.getResponse()`
+  - `input/textarea[name="cf-turnstile-response"]`
+- 自动尝试 `turnstile.execute()`，并点击可见 widget/iframe 容器。
+- 保留 `turnstile_run.json`、截图、HTML、Turnstile/Cloudflare 相关网络记录。
+- 支持代理、headless/headed、trigger selector、stress 压测。
+
+命令示例：
+
+```bash
+antibot solve turnstile \
+  --url 'https://target.example/path-with-turnstile' \
+  --output-dir /tmp/turnstile-run
+```
+
+指定触发按钮：
+
+```bash
+antibot solve turnstile \
+  --url 'https://target.example/path-with-turnstile' \
+  --trigger '.cf-turnstile' \
+  --trigger 'iframe[src*="challenges.cloudflare.com"]'
+```
+
+压测：
+
+```bash
+antibot stress turnstile \
+  --url 'https://target.example/path-with-turnstile' \
+  --runs 10 \
+  --concurrency 2 \
+  --timeout 90 \
+  --output-json /tmp/turnstile-stress.json
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_turnstile(
+        target_url="https://target.example/path-with-turnstile",
+        output_dir="/tmp/turnstile-run",
+    )
+    print(ret.ok, ret.ticket, ret.diagnostics.get("sitekey"))
+```
+
+当前定位：
+
+- 对无感/低风险直接出 token、页面自身成功 callback、测试页/集成页的 Turnstile token 链路有效。
+- Cloudflare Managed Challenge 页面仍优先使用 `antibot run --mode managed/turnstile` 的 Pydoll 路径；`solve turnstile` 更偏嵌入式 widget token 采集。
+
+---
+
+### 3. 腾讯滑块验证码
 
 能力：
 
@@ -97,7 +163,7 @@ antibot stress tencent \
 
 ---
 
-### 3. 阿里云滑块验证码
+### 4. 阿里云滑块验证码
 
 能力：
 
@@ -175,7 +241,7 @@ antibot stress aliyun \
 
 ---
 
-### 4. GeeTest v4 / 极验
+### 5. GeeTest v4 / 极验
 
 第一版 GeeTest provider 先做 **可探测、可触发、可采集、可压测**，为后续轨迹/图像/行为模型接入打底。
 
@@ -248,14 +314,15 @@ async with AntibotClient() as client:
 
 ---
 
-### 5. 自动分发模式
+### 6. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
 - Qoder / Aliyun 相关 URL -> `aliyun`
 - Tencent / TCaptcha 相关 URL -> `tencent`
 - GeeTest / gcaptcha4 相关 URL -> `geetest`
-- Cloudflare / Turnstile 相关 URL -> `cloudflare/browser`
+- Turnstile / challenges.cloudflare.com 相关 URL -> `turnstile`
+- Cloudflare Managed Challenge / cf-challenge 相关 URL -> `cloudflare/browser`
 - 其他 -> 普通浏览器打开
 
 ```bash
@@ -266,7 +333,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 6. 代理格式
+### 7. 代理格式
 
 支持以下格式：
 
@@ -335,6 +402,12 @@ async def main():
         )
         print(tencent.ok, tencent.ticket, tencent.randstr)
 
+        turnstile = await client.solve_turnstile(
+            target_url="https://target.example/path-with-turnstile",
+            output_dir="/tmp/turnstile-run",
+        )
+        print(turnstile.ok, turnstile.ticket, turnstile.diagnostics.get("sitekey"))
+
         aliyun = await client.solve_aliyun(
             target_url="https://qoder.com/users/sign-up",
             site_profile="qoder_signup",
@@ -376,6 +449,10 @@ antibot auto 'https://qoder.com/users/sign-up' --proxy 'host:port:user:pass'
 antibot solve tencent --profile cloud_product --headless
 antibot stress tencent --profile cloud_product --runs 10 --concurrency 3
 
+# Turnstile
+antibot solve turnstile --url 'https://target.example/path-with-turnstile'
+antibot stress turnstile --url 'https://target.example/path-with-turnstile' --runs 10
+
 # GeeTest
 antibot solve geetest --url 'https://target.example/path-with-geetest'
 antibot stress geetest --url 'https://target.example/path-with-geetest' --runs 10
@@ -397,6 +474,14 @@ attempt_N/aliyun_captcha_run.json
 aliyun_bg_selected.png
 aliyun_puzzle_selected.png
 qoder_precaptcha.png
+```
+
+Turnstile / GeeTest 会保留：
+
+```text
+turnstile_run.json / geetest_run.json
+turnstile_page.png / geetest_page.png
+turnstile_page.html / geetest_page.html
 ```
 
 Stress 输出 JSON 结构：
@@ -433,6 +518,7 @@ src/antibot_sdk/
     tencent.py              # Tencent provider adapter
     aliyun.py               # Aliyun provider adapter
     geetest.py              # GeeTest v4 hook/observer provider
+    turnstile.py            # Cloudflare Turnstile hook/observer provider
   vendor/
     tencent/                # Tencent solver + upstream snapshot
     aliyun/                 # Aliyun Node bridge/runner/site profiles
@@ -450,11 +536,12 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 9 passed
+pytest: 10 passed
 node -c bridge.js/site_profiles.js/runner.js: passed
 uv build: success
 watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON
 geetest mock: initGeetest4/onSuccess/getValidate 链路通过
+turnstile mock: render/callback/input token 链路通过
 ```
 
 腾讯：
@@ -484,6 +571,13 @@ GeeTest：
 
 ```text
 本地 v4 mock 页面：ok=true，成功提取 lot_number/captcha_output/pass_token/gen_time。
+```
+
+Turnstile：
+
+```text
+本地 mock 页面：ok=true，成功提取 callback/input token、sitekey、action。
+stress turnstile mock 2 轮：2/2。
 ```
 
 ---

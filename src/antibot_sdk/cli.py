@@ -59,6 +59,7 @@ def _compact_raw(raw):
         "watchdog": raw.get("watchdog"),
         "watchdogEvents": raw.get("watchdogEvents"),
         "success": raw.get("success"),
+        "token": raw.get("token"),
     }
     return {k: v for k, v in keep.items() if v not in (None, "", [], {})}
 
@@ -105,7 +106,7 @@ async def amain(argv: list[str] | None = None) -> int:
     auto.add_argument("url")
     auto.add_argument(
         "--provider",
-        choices=["auto", "aliyun", "tencent", "geetest", "cloudflare", "browser"],
+        choices=["auto", "aliyun", "tencent", "geetest", "turnstile", "cloudflare", "browser"],
         default="auto",
     )
     auto.add_argument("--headless", default="auto", choices=["auto", "new", "true", "false"])
@@ -168,6 +169,21 @@ async def amain(argv: list[str] | None = None) -> int:
     gt.add_argument("--timezone", default="Asia/Shanghai")
     gt.add_argument("--raw", action="store_true")
 
+    ts = solve_sub.add_parser("turnstile")
+    ts.add_argument("--url", dest="target_url", required=True)
+    ts.add_argument("--headless", default="auto", choices=["auto", "true", "false"])
+    ts.add_argument("--headed", action="store_true")
+    ts.add_argument("--proxy")
+    ts.add_argument("--timeout", type=int, default=90)
+    ts.add_argument("--output-dir")
+    ts.add_argument("--trigger", action="append", default=[])
+    ts.add_argument("--no-auto-trigger", action="store_true")
+    ts.add_argument("--browser-binary")
+    ts.add_argument("--user-agent")
+    ts.add_argument("--locale", default="en-US")
+    ts.add_argument("--timezone", default="America/New_York")
+    ts.add_argument("--raw", action="store_true")
+
     stress = sub.add_parser("stress")
     stress_sub = stress.add_subparsers(dest="provider", required=True)
 
@@ -229,6 +245,20 @@ async def amain(argv: list[str] | None = None) -> int:
     sg.add_argument("--output-json")
     sg.add_argument("--full", action="store_true")
 
+    sts = stress_sub.add_parser("turnstile")
+    sts.add_argument("--url", dest="target_url", required=True)
+    sts.add_argument("--runs", type=int, default=3)
+    sts.add_argument("--concurrency", type=int, default=1)
+    sts.add_argument("--timeout", type=int, default=90)
+    sts.add_argument("--headless", default="auto", choices=["auto", "true", "false"])
+    sts.add_argument("--headed", action="store_true")
+    sts.add_argument("--proxy")
+    sts.add_argument("--trigger", action="append", default=[])
+    sts.add_argument("--no-auto-trigger", action="store_true")
+    sts.add_argument("--output-dir")
+    sts.add_argument("--output-json")
+    sts.add_argument("--full", action="store_true")
+
     args = p.parse_args(argv)
     if args.cmd == "diagnose":
         emit(BrowserAutomation.diagnose(args.browser_binary))
@@ -264,7 +294,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "proxy_server": args.proxy,
             "headless": headless,
         }
-        if provider in (None, "aliyun", "geetest"):
+        if provider in (None, "aliyun", "geetest", "turnstile"):
             common.update({
                 "site_profile": args.site_profile,
                 "output_dir": args.output_dir,
@@ -314,6 +344,23 @@ async def amain(argv: list[str] | None = None) -> int:
     if args.cmd == "solve" and args.provider == "geetest":
         headless = False if args.headed else _headless(args.headless)
         ret = await client.solve_geetest(
+            target_url=args.target_url,
+            headless=headless,
+            proxy_server=args.proxy,
+            timeout_sec=args.timeout,
+            output_dir=args.output_dir,
+            trigger_selectors=args.trigger or None,
+            auto_trigger=not args.no_auto_trigger,
+            browser_binary=args.browser_binary,
+            user_agent=args.user_agent,
+            locale=args.locale,
+            timezone_id=args.timezone,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "turnstile":
+        headless = False if args.headed else _headless(args.headless)
+        ret = await client.solve_turnstile(
             target_url=args.target_url,
             headless=headless,
             proxy_server=args.proxy,
@@ -434,6 +481,27 @@ async def amain(argv: list[str] | None = None) -> int:
             per_run_timeout=args.timeout + 20,
             output_json=args.output_json,
             run_once=lambda i: client.solve_geetest(
+                target_url=args.target_url,
+                headless=headless,
+                proxy_server=args.proxy,
+                timeout_sec=args.timeout,
+                trigger_selectors=args.trigger or None,
+                auto_trigger=not args.no_auto_trigger,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "turnstile":
+        root = Path(args.output_dir) if args.output_dir else None
+        headless = False if args.headed else _headless(args.headless)
+        ret = await run_stress(
+            name="turnstile",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 20,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_turnstile(
                 target_url=args.target_url,
                 headless=headless,
                 proxy_server=args.proxy,
