@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from antibot_sdk.providers.yidun import (
+    YIDUN_RUNTIME_DEBUG_JS,
     _clean_yidun_point_text,
     detect_yidun_point_targets,
     detect_yidun_slide_gap,
@@ -71,6 +72,17 @@ def test_latest_yidun_success_from_jsonp_parsed_check() -> None:
 def test_yidun_point_target_text_cleanup() -> None:
     assert _clean_yidun_point_text('请依次点击 "全" "来" "扩"') == "全来扩"
     assert _clean_yidun_point_text('"全" "来" "扩"') == "全来扩"
+
+
+def test_yidun_runtime_debug_hooks_internal_methods() -> None:
+    for marker in (
+        "addPoint",
+        "shouldVerifyCaptcha",
+        "trackMoving",
+        "VERIFY_CAPTCHA",
+        "store:${name}",
+    ):
+        assert marker in YIDUN_RUNTIME_DEBUG_JS
 
 
 def test_yidun_point_detector_fixture() -> None:

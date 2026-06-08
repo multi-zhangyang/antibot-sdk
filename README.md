@@ -564,6 +564,10 @@ Yidun 现在加入 **jigsaw solver alpha** 和 **picture-click 文字点选原�
 - 在页面最早阶段 hook `window.initNECaptcha`。
 - hook 使用 `Proxy` 包装，保留官方 loader 需要的 `.use()` 等静态属性，避免破坏运行链路。
 - 记录 `captchaId/mode/captchaType/width`、实例方法、网络 `api/v3/get/check`。
+- 可选 `--runtime-debug` 会在运行态包裹 Vue/Store 内部链路，记录
+  `addPoint / trackMoving / shouldVerifyCaptcha / verifyCaptcha /
+  store.dispatch("VERIFY_CAPTCHA")` 的紧凑调用栈，方便确认坐标、轨迹、
+  加密 payload、服务端 check 结果之间的真实关系。
 - 抽取：
   - `.yidun_bg-img` 背景图
   - `.yidun_jigsaw` 拼图 front PNG
@@ -604,6 +608,14 @@ xvfb-run -a antibot solve yidun \
   --output-dir /tmp/yidun-point-run \
   --timeout 120 \
   --point-attempts 4
+
+# 运行态诊断：不靠肉眼补库，抓 SDK 内部 addPoint/VERIFY_CAPTCHA 链路。
+xvfb-run -a antibot solve yidun \
+  --url 'https://dun.163.com/trial/picture-click' \
+  --headed \
+  --runtime-debug \
+  --raw \
+  --output-dir /tmp/yidun-point-debug
 ```
 
 文字点选实现点：
@@ -615,6 +627,8 @@ xvfb-run -a antibot solve yidun \
 - 对 `全/来/扩/类/安/体/库/验/特` 等易混 OCR 字做低权重混淆映射，并用全局一对一 assignment 避免重复点同一候选框。
 - 已加入 `安验特` 这类暗色/旋转字符 fixture，防止只对简单彩色字有效。
 - Headed/Xvfb 实测官方 `trial/picture-click` 可以拿到 `validate/token/zoneId`；headless 下更容易被行为/环境侧拒绝。
+- 注意：混淆映射和 fixture 只作为回归/兜底，不应成为自动化主路线。后续主线是
+  `样本自动采集 -> 合成/真实样本训练 -> 模型定位/识别 -> 官方 SDK 运行态提交`。
 
 压测：
 

@@ -206,6 +206,246 @@ YIDUN_HOOK_JS = r"""
 })();
 """
 
+YIDUN_RUNTIME_DEBUG_JS = r"""
+() => {
+  if (window.__ANTIBOT_YIDUN_RUNTIME?.installed) {
+    try { window.__ANTIBOT_YIDUN_RUNTIME.install(); } catch {}
+    return window.__ANTIBOT_YIDUN_RUNTIME.snapshot();
+  }
+
+  const short = (s, n = 420) => {
+    s = String(s ?? '');
+    return s.length > n ? s.slice(0, n) + `…(${s.length})` : s;
+  };
+  const liteElement = (el) => {
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return {
+      tag: el.tagName,
+      id: el.id || '',
+      className: short(el.className || '', 160),
+      rect: { x: r.x, y: r.y, width: r.width, height: r.height },
+      text: short((el.textContent || '').replace(/\s+/g, ' ').trim(), 160),
+    };
+  };
+  const liteEvent = (ev) => {
+    if (!ev || typeof ev !== 'object') return ev;
+    const native = ev.nativeEvent || ev.event || null;
+    return {
+      type: ev.type || native?.type || '',
+      isTrusted: ev.isTrusted ?? native?.isTrusted,
+      clientX: ev.clientX ?? native?.clientX,
+      clientY: ev.clientY ?? native?.clientY,
+      pageX: ev.pageX ?? native?.pageX,
+      pageY: ev.pageY ?? native?.pageY,
+      target: liteElement(ev.target || native?.target),
+      currentTarget: liteElement(ev.currentTarget || native?.currentTarget),
+    };
+  };
+  const safe = (value, depth = 0, seen = new WeakSet()) => {
+    try {
+      if (depth > 4) return '[depth]';
+      if (value === null || value === undefined) return value;
+      const t = typeof value;
+      if (t === 'string') return short(value);
+      if (t === 'number' || t === 'boolean') return value;
+      if (t === 'function') return `[Function:${value.name || 'anonymous'}]`;
+      if (value instanceof Element) return liteElement(value);
+      if (t === 'object') {
+        if (value.clientX !== undefined || value.nativeEvent || value.event) return liteEvent(value);
+        if (seen.has(value)) return '[cycle]';
+        seen.add(value);
+        if (Array.isArray(value)) return value.slice(0, 40).map((x) => safe(x, depth + 1, seen));
+        const out = {};
+        for (const k of Object.keys(value).slice(0, 80)) {
+          if (/parent|root|children|el|vnode|node|context|window|document/i.test(k)) continue;
+          try { out[k] = safe(value[k], depth + 1, seen); }
+          catch (e) { out[k] = `[throws:${e && e.message}]`; }
+        }
+        return out;
+      }
+      return short(value);
+    } catch (e) {
+      return `[safe:${e && e.message}]`;
+    }
+  };
+  const loadDigest = (load) => {
+    if (!load) return load;
+    const data = load.data || load;
+    return {
+      status: load.status || '',
+      data: data ? {
+        front: data.front || '',
+        token: data.token || '',
+        type: data.type,
+        zoneId: data.zoneId || data.zone_id || '',
+        bgCount: Array.isArray(data.bg) ? data.bg.length : undefined,
+      } : null,
+    };
+  };
+  const dataDigest = (data) => {
+    if (!data) return null;
+    return {
+      type: data.type,
+      token: data.token || '',
+      verifyStatus: data.verifyStatus || '',
+      verifyPayload: safe(data.verifyPayload, 0),
+      loadInfo: loadDigest(data.loadInfo),
+      load: loadDigest(data.load),
+    };
+  };
+  const storeDigest = (storeState) => {
+    if (!storeState) return null;
+    return {
+      version: storeState.version || '',
+      type: storeState.type,
+      token: storeState.token || '',
+      verifyStatus: storeState.verifyStatus || '',
+      load: loadDigest(storeState.load),
+      config: storeState.config ? {
+        captchaId: storeState.config.captchaId || storeState.config.captcha_id || '',
+        captchaType: storeState.config.captchaType || storeState.config.captcha_type,
+        width: storeState.config.width,
+        zoneId: storeState.config.zoneId || storeState.config.zone_id || '',
+      } : null,
+    };
+  };
+
+  const state = {
+    installed: true,
+    at: new Date().toISOString(),
+    calls: [],
+    wraps: [],
+    errors: [],
+    _seen: new WeakSet(),
+    log(type, detail) {
+      try {
+        this.calls.push({ at: Date.now(), type, detail });
+        if (this.calls.length > 240) this.calls.shift();
+      } catch (e) {
+        this.errors.push({ at: Date.now(), source: 'log', message: e && e.message });
+      }
+    },
+  };
+
+  const getRoot = () => window.__ANTIBOT_YIDUN?._instances?.[0]?._captchaIns || null;
+  const walk = (vm, path = 'root', out = []) => {
+    if (!vm || state._seen.has(vm)) return out;
+    state._seen.add(vm);
+    out.push({ vm, path });
+    for (const [idx, child] of Array.from(vm.$children || []).entries()) {
+      walk(child, `${path}.$children[${idx}]`, out);
+    }
+    return out;
+  };
+  const treeSummary = () => {
+    state._seen = new WeakSet();
+    return walk(getRoot()).map(({ vm, path }) => ({
+      path,
+      methods: [
+        'onClick', 'trackMoving', 'addPoint', 'shouldVerifyCaptcha', 'cleanPoints',
+        'verifyCaptcha', 'fetchCaptcha', 'refresh', 'updateVerifyStatus',
+      ].filter((name) => typeof vm[name] === 'function'),
+      dataKeys: vm.$data ? Object.keys(vm.$data).slice(0, 60) : [],
+    }));
+  };
+  const wrapVm = (vm, path) => {
+    for (const name of [
+      'onClick', 'trackMoving', 'addPoint', 'shouldVerifyCaptcha', 'cleanPoints',
+      'verifyCaptcha', 'fetchCaptcha', 'refresh', 'updateVerifyStatus',
+      'changeTipElText', 'changeLoadStatus',
+    ]) {
+      try {
+        if (typeof vm?.[name] !== 'function' || vm[name].__antibotRuntimeWrapped) continue;
+        const original = vm[name];
+        vm[name] = function(...args) {
+          state.log(`method:${name}`, { path, args: safe(args), beforeData: dataDigest(this?.$data) });
+          let ret;
+          try {
+            ret = original.apply(this, args);
+            return ret;
+          } finally {
+            state.log(`method:${name}:after`, {
+              path,
+              ret: safe(ret),
+              afterData: dataDigest(this?.$data),
+            });
+          }
+        };
+        vm[name].__antibotRuntimeWrapped = true;
+        state.wraps.push({ path, name });
+      } catch (e) {
+        state.errors.push({ at: Date.now(), path, name, message: e && e.message });
+      }
+    }
+    try {
+      const data = vm.$data || {};
+      for (const key of Object.keys(data)) {
+        if (typeof data[key] !== 'function' || !/verify|captcha|click|point/i.test(key)) continue;
+        if (data[key].__antibotRuntimeWrapped) continue;
+        const original = data[key];
+        data[key] = function(...args) {
+          state.log(`datafn:${key}`, { path, args: safe(args), beforeData: dataDigest(vm.$data) });
+          const ret = original.apply(this, args);
+          state.log(`datafn:${key}:after`, {
+            path,
+            ret: safe(ret),
+            afterData: dataDigest(vm.$data),
+          });
+          return ret;
+        };
+        data[key].__antibotRuntimeWrapped = true;
+        state.wraps.push({ path, name: `$data.${key}` });
+      }
+    } catch (e) {
+      state.errors.push({ at: Date.now(), path, source: '$data', message: e && e.message });
+    }
+  };
+
+  // Captures store.dispatch("VERIFY_CAPTCHA", payload) without patching
+  // NetEase's encrypted payload builder; this is diagnostic-only.
+  state.install = () => {
+    state._seen = new WeakSet();
+    const root = getRoot();
+    if (!root) return { ok: false, error: 'captcha root not found' };
+    for (const { vm, path } of walk(root)) wrapVm(vm, path);
+    try {
+      const store = root.$store;
+      for (const name of ['dispatch', 'commit']) {
+        if (!store || typeof store[name] !== 'function' || store[name].__antibotRuntimeWrapped) continue;
+        const original = store[name];
+        store[name] = function(...args) {
+          state.log(`store:${name}`, { args: safe(args), state: storeDigest(store.state) });
+          const ret = original.apply(this, args);
+          state.log(`store:${name}:after`, {
+            args: safe(args),
+            ret: safe(ret),
+            state: storeDigest(store.state),
+          });
+          return ret;
+        };
+        store[name].__antibotRuntimeWrapped = true;
+        state.wraps.push({ path: 'store', name });
+      }
+    } catch (e) {
+      state.errors.push({ at: Date.now(), source: 'store', message: e && e.message });
+    }
+    return { ok: true, wraps: state.wraps.length };
+  };
+  state.snapshot = () => ({
+    installed: true,
+    at: state.at,
+    wraps: state.wraps.slice(-80),
+    calls: state.calls.slice(-180),
+    errors: state.errors.slice(-40),
+    tree: treeSummary(),
+  });
+  window.__ANTIBOT_YIDUN_RUNTIME = state;
+  state.install();
+  return state.snapshot();
+}
+"""
+
 YIDUN_POINT_OCR_CONFUSIONS: dict[str, set[str]] = {
     # RapidOCR is strong on clean Chinese crops, but these Yidun characters are
     # rotated, blended into natural photos, and sometimes partially occluded.
@@ -1016,6 +1256,7 @@ class YidunCaptchaSolver:
         slide_max_attempts: int = 3,
         point_solve: bool = True,
         point_max_attempts: int = 6,
+        runtime_debug: bool = False,
         output_dir: str | None = None,
         screenshot: bool = True,
         save_html: bool = True,
@@ -1038,6 +1279,7 @@ class YidunCaptchaSolver:
             "triggerSelectors": list(trigger_selectors or DEFAULT_TRIGGER_SELECTORS),
             "slideAttempts": [],
             "pointAttempts": [],
+            "runtimeDebug": {"enabled": bool(runtime_debug)},
         }
         overall_deadline = time.monotonic() + max(1, timeout_sec)
         browser = None
@@ -1141,6 +1383,9 @@ class YidunCaptchaSolver:
             if auto_trigger:
                 raw["triggerClicks"] = await self._auto_trigger(page, raw["triggerSelectors"])
 
+            if runtime_debug:
+                raw["runtimeDebug"]["install"] = await self._install_runtime_debug(page)
+
             raw["challengeKind"] = await self._wait_challenge_kind(page, raw)
             remaining_sec = int(overall_deadline - time.monotonic())
             if raw["challengeKind"] == "point" and point_solve:
@@ -1150,6 +1395,7 @@ class YidunCaptchaSolver:
                     output_root=output_root,
                     max_attempts=max(1, point_max_attempts),
                     total_timeout_sec=max(3, remaining_sec),
+                    runtime_debug=runtime_debug,
                 )
             elif slide_solve:
                 raw["slideAttempts"] = await self._solve_slide_challenge(
@@ -1175,6 +1421,8 @@ class YidunCaptchaSolver:
             state = await self._state(page)
             success = latest_yidun_success(raw, state)
             raw["state"] = state or {}
+            if runtime_debug:
+                raw["runtimeDebug"]["snapshot"] = await self._runtime_debug_snapshot(page)
             raw["success"] = success
             raw["ok"] = bool(success)
             raw["elapsedMs"] = int((time.monotonic() - started) * 1000)
@@ -1219,6 +1467,20 @@ class YidunCaptchaSolver:
             "() => window.__ANTIBOT_YIDUN && window.__ANTIBOT_YIDUN.snapshot "
             "? window.__ANTIBOT_YIDUN.snapshot() : null"
         )
+
+    async def _install_runtime_debug(self, page: Any) -> dict[str, Any] | None:
+        try:
+            return await page.evaluate(YIDUN_RUNTIME_DEBUG_JS)
+        except Exception as e:
+            return {"installed": False, "error": str(e), "type": type(e).__name__}
+
+    async def _runtime_debug_snapshot(self, page: Any) -> dict[str, Any] | None:
+        try:
+            return await page.evaluate(
+                "() => window.__ANTIBOT_YIDUN_RUNTIME?.snapshot?.() || null"
+            )
+        except Exception as e:
+            return {"installed": False, "error": str(e), "type": type(e).__name__}
 
     async def _challenge_kind(self, page: Any, raw: dict[str, Any] | None = None) -> str:
         dom = await page.evaluate(
@@ -1340,6 +1602,7 @@ class YidunCaptchaSolver:
         output_root: Path,
         max_attempts: int,
         total_timeout_sec: int,
+        runtime_debug: bool = False,
     ) -> list[dict[str, Any]]:
         attempts: list[dict[str, Any]] = []
         deadline = time.monotonic() + total_timeout_sec
@@ -1348,6 +1611,8 @@ class YidunCaptchaSolver:
                 break
             attempt: dict[str, Any] = {"attempt": attempt_no, "mode": "point"}
             try:
+                if runtime_debug:
+                    attempt["runtimeDebugBefore"] = await self._install_runtime_debug(page)
                 info = await self._ensure_point_visible(page)
                 attempt["dom"] = info
                 bg_url = info.get("bgSrc") or ""
@@ -1394,6 +1659,8 @@ class YidunCaptchaSolver:
                 click_result = await self._click_yidun_points(page, detection)
                 attempt["click"] = click_result
                 await page.wait_for_timeout(2400)
+                if runtime_debug:
+                    attempt["runtimeDebugAfterClick"] = await self._runtime_debug_snapshot(page)
                 outcome = await self._point_outcome(page)
                 attempt["outcome"] = outcome
                 attempt["ok"] = bool(outcome.get("success"))
@@ -1857,6 +2124,10 @@ class YidunCaptchaSolver:
         configs = state.get("configs") if isinstance(state, dict) else []
         first_config = configs[0].get("config") if configs and isinstance(configs[0], dict) else {}
         error = raw.get("error") or {}
+        runtime_debug = raw.get("runtimeDebug") if isinstance(raw.get("runtimeDebug"), dict) else {}
+        runtime_snapshot = (
+            runtime_debug.get("snapshot") if isinstance(runtime_debug.get("snapshot"), dict) else {}
+        )
         return CaptchaResult(
             provider="yidun",
             ok=ok,
@@ -1883,6 +2154,9 @@ class YidunCaptchaSolver:
                 "check_responses": len(raw.get("checkResponses") or []),
                 "net_events": len(raw.get("net") or []),
                 "trigger_clicks": len(raw.get("triggerClicks") or []),
+                "runtime_debug": bool(runtime_debug.get("enabled")),
+                "runtime_debug_calls": len(runtime_snapshot.get("calls") or []),
+                "runtime_debug_wraps": len(runtime_snapshot.get("wraps") or []),
                 "proxy": redacted_proxy(proxy_server),
                 "error": error,
             },
