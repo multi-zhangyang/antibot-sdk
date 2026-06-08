@@ -237,7 +237,12 @@ def _css_url(value: str | None) -> str:
     return m.group(1) if m else ""
 
 
-def detect_geetest_slide_gap(bg_bytes: bytes, slice_bytes: bytes) -> dict[str, Any]:
+def detect_geetest_slide_gap(
+    bg_bytes: bytes,
+    slice_bytes: bytes,
+    *,
+    expected_y: float | None = None,
+) -> dict[str, Any]:
     """Detect GeeTest v4 slide distance from background and slice image bytes.
 
     Returns the slider element displacement in source-image pixels. GeeTest's
@@ -266,17 +271,86 @@ def detect_geetest_slide_gap(bg_bytes: bytes, slice_bytes: bytes) -> dict[str, A
     template = rgb[trim_y0:trim_y1, trim_x0:trim_x1]
     template_mask = mask[trim_y0:trim_y1, trim_x0:trim_x1]
 
-    res = cv2.matchTemplate(bg, template, cv2.TM_CCORR_NORMED, mask=template_mask)
-    _min_val, max_val, _min_loc, max_loc = cv2.minMaxLoc(res)
-    raw_x, raw_y = int(max_loc[0]), int(max_loc[1])
-    distance_x = max(0, raw_x - trim_x0)
-    distance_y = max(0, raw_y - trim_y0)
+    candidates: list[dict[str, Any]] = []
+
+    def push_candidate(name: str, score: float, loc: tuple[int, int]) -> dict[str, Any]:
+        raw_x, raw_y = int(loc[0]), int(loc[1])
+        item = {
+            "name": name,
+            "distance_x": max(0, raw_x - trim_x0),
+            "distance_y": max(0, raw_y - trim_y0),
+            "match_x": raw_x,
+            "match_y": raw_y,
+            "score": float(score),
+        }
+        candidates.append(item)
+        return item
+
+    color_res = cv2.matchTemplate(bg, template, cv2.TM_CCORR_NORMED, mask=template_mask)
+    _min_val, color_score, _min_loc, color_loc = cv2.minMaxLoc(color_res)
+    color_candidate = push_candidate("color_template", color_score, color_loc)
+
+    # Direct color matching is strong on some GeeTest assets, but it can lock
+    # onto similar artwork/text elsewhere in the image. The real hole is often
+    # rendered as a low-saturation/darker puzzle-shaped shadow. If the page/DOM
+    # gives us the slice y coordinate, score shadow candidates in that band and
+    # use them only when the color candidate looks suspicious.
+    shadow_candidate: dict[str, Any] | None = None
+    if expected_y is not None:
+        gray = cv2.cvtColor(bg, cv2.COLOR_BGR2GRAY)
+        hsv = cv2.cvtColor(bg, cv2.COLOR_BGR2HSV)
+        maps = {
+            "shadow_dark": 255 - gray,
+            "shadow_dark_low_sat": cv2.normalize(
+                (255 - gray).astype(np.float32) * (255 - hsv[:, :, 1]).astype(np.float32),
+                None,
+                0,
+                255,
+                cv2.NORM_MINMAX,
+            ).astype(np.uint8),
+        }
+        expected_match_y = int(round(float(expected_y) + trim_y0))
+        y_band = max(14, int((trim_y1 - trim_y0) * 0.32))
+        for name, image in maps.items():
+            res = cv2.matchTemplate(image, template_mask, cv2.TM_CCORR_NORMED)
+            ylo = max(0, expected_match_y - y_band)
+            yhi = min(res.shape[0] - 1, expected_match_y + y_band)
+            if yhi <= ylo:
+                continue
+            band = res[ylo : yhi + 1, :]
+            _min_v, score, _min_l, loc = cv2.minMaxLoc(band)
+            loc = (int(loc[0]), int(loc[1]) + ylo)
+            item = push_candidate(name, score, loc)
+            if item["distance_x"] <= 0:
+                continue
+            if shadow_candidate is None or item["score"] > shadow_candidate["score"]:
+                shadow_candidate = item
+
+    chosen = color_candidate
+    if shadow_candidate:
+        diff = abs(float(shadow_candidate["distance_x"]) - float(color_candidate["distance_x"]))
+        direct_edge = color_candidate["distance_x"] <= 3 or color_candidate["distance_x"] >= max(4, bg.shape[1] - piece.shape[1] + 8)
+        shadow_strong = shadow_candidate["score"] >= 0.90
+        direct_weak = color_candidate["score"] < 0.90
+        if (
+            (direct_edge and shadow_candidate["score"] >= 0.84)
+            or (diff > 35 and shadow_strong and direct_weak)
+            or (diff > 20 and shadow_candidate["score"] >= color_candidate["score"] + 0.025)
+            or (diff > 25 and shadow_candidate["score"] >= 0.905 and direct_weak)
+            or (diff > 70 and shadow_candidate["score"] >= 0.86)
+            or (color_candidate["score"] < 0.78 and shadow_candidate["score"] > color_candidate["score"] + 0.04)
+        ):
+            chosen = shadow_candidate
+
     return {
-        "distance_x": distance_x,
-        "distance_y": distance_y,
-        "match_x": raw_x,
-        "match_y": raw_y,
-        "score": float(max_val),
+        "distance_x": int(chosen["distance_x"]),
+        "distance_y": int(chosen["distance_y"]),
+        "match_x": int(chosen["match_x"]),
+        "match_y": int(chosen["match_y"]),
+        "score": float(chosen["score"]),
+        "method": chosen["name"],
+        "expected_y": expected_y,
+        "candidates": candidates[:8],
         "bg_size": {"width": int(bg.shape[1]), "height": int(bg.shape[0])},
         "slice_size": {"width": int(piece.shape[1]), "height": int(piece.shape[0])},
         "trim": {
@@ -554,7 +628,8 @@ class GeeTestCaptchaSolver:
                 slice_path.write_bytes(slice_bytes)
                 attempt["artifacts"] = {"bg": str(bg_path), "slice": str(slice_path)}
 
-                detection = detect_geetest_slide_gap(bg_bytes, slice_bytes)
+                expected_y = self._expected_slide_y(info, bg_width_hint=300)
+                detection = detect_geetest_slide_gap(bg_bytes, slice_bytes, expected_y=expected_y)
                 attempt["detection"] = detection
                 bg_size = detection.get("bg_size") or {}
                 bg_width = max(1, int(bg_size.get("width") or 1))
@@ -613,6 +688,16 @@ class GeeTestCaptchaSolver:
               };
             }"""
         )
+
+    def _expected_slide_y(self, info: dict[str, Any], *, bg_width_hint: int) -> float | None:
+        bg_rect = info.get("bgRect") or {}
+        slice_rect = info.get("sliceRect") or {}
+        if not bg_rect or not slice_rect:
+            return None
+        display_width = float(bg_rect.get("width") or 0)
+        if display_width <= 0:
+            return None
+        return max(0.0, (float(slice_rect.get("y") or 0) - float(bg_rect.get("y") or 0)) * bg_width_hint / display_width)
 
     async def _ensure_slide_visible(self, page: Any) -> None:
         await page.evaluate(

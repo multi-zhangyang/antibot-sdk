@@ -471,7 +471,11 @@ GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：�
   - `.geetest_bg` 背景图
   - `.geetest_slice_bg` 滑块图
   - `.geetest_btn` / track DOM 坐标
-- 使用 OpenCV 模板匹配估算缺口距离，保存 `geetest_slide_bg_N.png` 和 `geetest_slide_slice_N.png`。
+- 使用 OpenCV 估算缺口距离，当前会综合：
+  - 原始 slice 色彩模板匹配 `color_template`
+  - 基于 DOM/服务端 `ypos` 的纵向约束
+  - 背景中低饱和/暗色缺口阴影匹配 `shadow_dark`
+- 保存 `geetest_slide_bg_N.png` 和 `geetest_slide_slice_N.png`。
 - 生成带缓动、抖动和 hold 的浏览器 mouse trace 进行拖拽。
 - 当页面触发 `onSuccess` 时，自动读取 v4 成功载荷：
 
@@ -522,6 +526,7 @@ antibot stress geetest \
   --runs 10 \
   --concurrency 2 \
   --timeout 90 \
+  --slide-attempts 4 \
   --output-json /tmp/geetest-stress.json
 ```
 
@@ -543,7 +548,8 @@ async with AntibotClient() as client:
 
 - 已能处理无感/低风险直接成功、页面自身成功回调、以及本地/测试页面的 GeeTest v4 成功链路。
 - 官方 `slide-popup-zh.html` 已出现单轮成功：返回 `pass_token/lot_number/captcha_output/gen_time`。
-- 目前压测还不稳定，最近 3 轮官方 slide stress 出现过 `1/3` 和 `0/3`，失败多为距离误匹配或轨迹被判失败；这说明它是 solver alpha，不是稳定产品级。
+- 最近一次官方 `slide-popup-zh.html` stress：`3/3`，avg≈16.35s，p95≈21.5s；其中既有 `color_template` 命中，也有 `shadow_dark` 命中。
+- 但样本仍小，真实站点不能包装成稳定通杀；下一步还要扩大到 10/20 轮和不同 GeeTest 皮肤。
 - 下一步重点是多特征缺口定位、轨迹模型分层、失败后刷新/重试策略，而不是再做 observer。
 
 ---
@@ -804,7 +810,7 @@ src/antibot_sdk/
     cloudflare.py           # Pydoll runner
     tencent.py              # Tencent provider adapter
     aliyun.py               # Aliyun provider adapter
-    geetest.py              # GeeTest v4 hook/observer provider
+    geetest.py              # GeeTest v4 hook + slide solver alpha
     hcaptcha.py             # hCaptcha hook/observer provider
     recaptcha.py            # reCAPTCHA/Enterprise hook/observer provider
     turnstile.py            # Cloudflare Turnstile hook/observer provider
@@ -826,13 +832,13 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 15 passed
+pytest: 16 passed
 node -c bridge.js/site_profiles.js/runner.js: passed
 uv build: success
 watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON
 geetest mock: initGeetest4/onSuccess/getValidate 链路通过
 geetest official slide: 单次 solve 成功提取 pass_token/lot_number/captcha_output/gen_time
-geetest official slide stress: 当前不稳定，观测到 1/3 和 0/3，已保留失败现场用于继续优化
+geetest official slide stress: 最新 3/3，avg≈16.35s，p95≈21.5s，命中过 color_template/shadow_dark 两种定位分支
 turnstile mock: render/callback/input token 链路通过
 hcaptcha mock: render/callback/input token 链路通过
 recaptcha mock: render/enterprise execute/callback/input token 链路通过
