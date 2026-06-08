@@ -8,6 +8,7 @@ from .providers.aliyun import AliyunCaptchaSolver
 from .providers.ajcaptcha import AJCaptchaSolver
 from .providers.altcha import AltchaSolver
 from .providers.browser import BrowserAutomation
+from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.hcaptcha import HCaptchaSolver
 from .providers.recaptcha import ReCaptchaSolver
@@ -25,6 +26,7 @@ class AntibotClient:
         self.browser = BrowserAutomation()
         self.ajcaptcha = AJCaptchaSolver()
         self.altcha = AltchaSolver()
+        self.friendlycaptcha = FriendlyCaptchaSolver()
         self.tencent = TencentCaptchaSolver()
         self.aliyun = AliyunCaptchaSolver()
         self.geetest = GeeTestCaptchaSolver()
@@ -54,6 +56,9 @@ class AntibotClient:
 
     async def solve_altcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.altcha.solve(**kwargs)
+
+    async def solve_friendlycaptcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.friendlycaptcha.solve(**kwargs)
 
     async def solve_geetest(self, **kwargs: Any) -> CaptchaResult:
         return await self.geetest.solve(**kwargs)
@@ -125,6 +130,28 @@ class AntibotClient:
             }
             altcha_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_altcha(**altcha_kwargs)
+        if provider == "friendlycaptcha":
+            frc_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "puzzle",
+                    "puzzle_file",
+                    "puzzle_url",
+                    "sitekey",
+                    "max_attempts_per_solution",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "frc_client",
+                }
+                and v is not None
+            }
+            frc_kwargs.setdefault("puzzle_url", target_url)
+            return await self.solve_friendlycaptcha(**frc_kwargs)
         if provider == "aliyun":
             return await self.solve_aliyun(target_url=target_url, **kwargs)
         if provider == "recaptcha":

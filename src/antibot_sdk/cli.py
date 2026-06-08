@@ -130,6 +130,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "altcha",
             "aliyun",
             "tencent",
+            "friendlycaptcha",
             "geetest",
             "yidun",
             "hcaptcha",
@@ -220,6 +221,20 @@ async def amain(argv: list[str] | None = None) -> int:
     alt.add_argument("--include-took", action="store_true")
     alt.add_argument("--mode", choices=["form", "m2m"], default="form")
     alt.add_argument("--raw", action="store_true")
+
+    frc = solve_sub.add_parser("friendlycaptcha")
+    frc_source = frc.add_mutually_exclusive_group(required=True)
+    frc_source.add_argument("--puzzle", help="inline '<signature>.<puzzle_b64>', or @/path")
+    frc_source.add_argument("--puzzle-file")
+    frc_source.add_argument("--puzzle-url")
+    frc.add_argument("--sitekey")
+    frc.add_argument("--max-attempts-per-solution", type=int, default=10_000_000)
+    frc.add_argument("--workers", type=int, default=1)
+    frc.add_argument("--timeout", type=int, default=60)
+    frc.add_argument("--proxy")
+    frc.add_argument("--output-dir")
+    frc.add_argument("--frc-client", default="js-0.9.19")
+    frc.add_argument("--raw", action="store_true")
 
     gt = solve_sub.add_parser("geetest")
     gt.add_argument("--url", dest="target_url", required=True)
@@ -373,6 +388,19 @@ async def amain(argv: list[str] | None = None) -> int:
     salt.add_argument("--output-dir")
     salt.add_argument("--output-json")
     salt.add_argument("--full", action="store_true")
+
+    sfrc = stress_sub.add_parser("friendlycaptcha")
+    sfrc.add_argument("--puzzle-url", required=True)
+    sfrc.add_argument("--sitekey")
+    sfrc.add_argument("--runs", type=int, default=10)
+    sfrc.add_argument("--concurrency", type=int, default=2)
+    sfrc.add_argument("--timeout", type=int, default=60)
+    sfrc.add_argument("--max-attempts-per-solution", type=int, default=10_000_000)
+    sfrc.add_argument("--workers", type=int, default=1)
+    sfrc.add_argument("--proxy")
+    sfrc.add_argument("--output-dir")
+    sfrc.add_argument("--output-json")
+    sfrc.add_argument("--full", action="store_true")
 
     sg = stress_sub.add_parser("geetest")
     sg.add_argument("--url", dest="target_url", required=True)
@@ -628,6 +656,21 @@ async def amain(argv: list[str] | None = None) -> int:
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "friendlycaptcha":
+        ret = await client.solve_friendlycaptcha(
+            puzzle=args.puzzle,
+            puzzle_file=args.puzzle_file,
+            puzzle_url=args.puzzle_url,
+            sitekey=args.sitekey,
+            max_attempts_per_solution=args.max_attempts_per_solution,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            frc_client=args.frc_client,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
     if args.cmd == "solve" and args.provider == "geetest":
         headless = False if args.headed else _headless(args.headless)
         ret = await client.solve_geetest(
@@ -846,6 +889,26 @@ async def amain(argv: list[str] | None = None) -> int:
             run_once=lambda i: client.solve_altcha(
                 challenge_url=args.challenge_url,
                 max_number=args.max_number,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "friendlycaptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="friendlycaptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_friendlycaptcha(
+                puzzle_url=args.puzzle_url,
+                sitekey=args.sitekey,
+                max_attempts_per_solution=args.max_attempts_per_solution,
                 workers=args.workers,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,

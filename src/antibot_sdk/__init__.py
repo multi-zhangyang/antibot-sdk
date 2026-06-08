@@ -17,6 +17,13 @@ from .providers.altcha import (
     parse_altcha_payload_b64,
     solve_altcha_challenge,
 )
+from .providers.friendlycaptcha import (
+    FriendlyPuzzle,
+    FriendlySolution,
+    friendly_difficulty_to_threshold,
+    parse_friendly_solution_payload,
+    solve_friendly_puzzle,
+)
 from .providers.hcaptcha import is_hcaptcha_token, latest_hcaptcha_token
 from .providers.recaptcha import is_recaptcha_token, latest_recaptcha_token
 from .providers.turnstile import is_turnstile_token, latest_turnstile_token
@@ -32,6 +39,8 @@ __all__ = [
     "CaptchaResult",
     "AltchaChallenge",
     "AltchaSolution",
+    "FriendlyPuzzle",
+    "FriendlySolution",
     "FailureClassifier",
     "PolicyDecision",
     "SubmitFlow",
@@ -48,6 +57,9 @@ __all__ = [
     "altcha_hash_hex",
     "parse_altcha_payload_b64",
     "solve_altcha_challenge",
+    "friendly_difficulty_to_threshold",
+    "parse_friendly_solution_payload",
+    "solve_friendly_puzzle",
     "is_geetest_success_payload",
     "is_hcaptcha_token",
     "is_recaptcha_token",

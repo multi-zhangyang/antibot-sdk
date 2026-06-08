@@ -41,6 +41,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "base64 payload / Authorization header",
         "scope": "ALTCHA v1 PoW：解析 challenge 或 WWW-Authenticate，计算 number，输出表单 payload 或 M2M Authorization header；不启动浏览器。",
     },
+    "friendlycaptcha": {
+        "provider": "friendlycaptcha",
+        "name": "FriendlyCaptcha",
+        "category": "solver",
+        "captcha_type": "proof_of_work",
+        "status": "alpha",
+        "output": "frc-captcha-solution payload",
+        "scope": "FriendlyCaptcha classic PoW：获取 puzzle，按 friendly-pow/blake2b 求解多段 nonce，输出隐藏表单字段 payload；不启动浏览器。",
+    },
     "geetest": {
         "provider": "geetest",
         "name": "GeeTest v4",

@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / FriendlyCaptcha PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -13,6 +13,7 @@
 - Aliyun Captcha：封装阿里云滑块的 Node/Puppeteer runner、站点 profile、attempt/session retry、错误归一、artifact 保留。
 - AJ-Captcha / Anji：新增纯 HTTP 协议 solver，走 `/captcha/get` 图像缺口定位、AES `pointJson`、`/captcha/check`，输出二次校验用的 `captchaVerification`，不启动浏览器。
 - ALTCHA：新增 PoW 协议 solver，解析 challenge / `WWW-Authenticate: Altcha ...`，计算 number，输出表单 base64 payload 或 M2M Authorization header，不启动浏览器。
+- FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
 - GeeTest v4：从 observer 升级出滑动 solver alpha，抓取 bg/slice、CV 匹配缺口、生成拖动轨迹，并提取 `lot_number/captcha_output/pass_token/gen_time`。
 - 网易易盾 / Yidun：滑动拼图 solver alpha，抓取 bg/front、OpenCV 定位缺口、模拟滑块轨迹，并提取 `validate/token/zoneId`。
 - Policy Engine：把 `F001/F015/NONE/gap/candidate/watchdog timeout` 等失败归类，决定是否换 session，并输出下一步调参建议。
@@ -32,6 +33,7 @@
 | Aliyun Captcha | 真实 solver | `slider` | primary | `VerifyCode` / artifacts |
 | AJ-Captcha / Anji | 协议 solver | `slider_protocol` | alpha | `captchaVerification/token` |
 | ALTCHA | 协议 solver | `proof_of_work` | alpha | base64 payload / Authorization header |
+| FriendlyCaptcha | 协议 solver | `proof_of_work` | alpha | `frc-captcha-solution` payload |
 | GeeTest v4 | 真实 solver | `slider` | alpha | `pass_token/lot_number` |
 | NetEase Yidun | 真实 solver | `jigsaw` | alpha | `validate/token/zoneId` |
 | Turnstile | 流程/Token 观察采集 | `token_widget` | observer | widget token / artifacts |
@@ -652,7 +654,79 @@ async with AntibotClient() as client:
 
 ---
 
-### 10. GeeTest v4 / 极验
+### 10. FriendlyCaptcha classic PoW
+
+FriendlyCaptcha classic 的核心不是图片识别，而是 `friendly-pow`：服务端返回一个 signed puzzle，浏览器 widget 在 worker/WASM 里计算多个 8 字节 nonce，最后把结果写入隐藏字段 `frc-captcha-solution`。
+
+SDK 现在把这条链路下沉成纯协议 solver：
+
+- GET puzzle endpoint，兼容官方形态：
+  - `https://api.friendlycaptcha.com/api/v1/puzzle?sitekey=...`
+  - 响应 `{"data":{"puzzle":"<signature>.<base64 puzzle>"}}`
+- 也支持直接传入 puzzle 字符串或文件。
+- 解析 puzzle buffer：
+  - solution count：offset `14`
+  - difficulty：offset `15`
+  - threshold：`floor(2^((255.999-d)/8))`
+- 按 FriendlyCaptcha 的 `friendly-pow` 逻辑求解：
+  - puzzle buffer 补零到 128 bytes
+  - `input[120] = puzzle_index`
+  - 搜索 `input[123] + input[124:128]` nonce
+  - `blake2b-256(input)` 前 4 字节 little-endian 小于 threshold 即命中
+- 输出完整 hidden field payload：
+
+```text
+<signature>.<puzzle_b64>.<solutions_b64>.<diagnostics_b64>
+```
+
+命令示例：
+
+```bash
+antibot solve friendlycaptcha \
+  --puzzle-url 'https://api.friendlycaptcha.com/api/v1/puzzle' \
+  --sitekey 'FCxxxxx'
+```
+
+直接传 puzzle：
+
+```bash
+antibot solve friendlycaptcha \
+  --puzzle 'signature.base64Puzzle'
+```
+
+压测：
+
+```bash
+antibot stress friendlycaptcha \
+  --puzzle-url 'https://api.friendlycaptcha.com/api/v1/puzzle' \
+  --sitekey 'FCxxxxx' \
+  --runs 20 \
+  --concurrency 2 \
+  --timeout 60
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_friendlycaptcha(
+        puzzle_url="https://api.friendlycaptcha.com/api/v1/puzzle",
+        sitekey="FCxxxxx",
+    )
+    print(ret.ok, ret.ticket)
+```
+
+当前定位：
+
+- 这是 FriendlyCaptcha classic PoW solver，不是 hCaptcha/reCAPTCHA 那种图片挑战 solver。
+- 默认单 worker，`--workers` 可加速，但 VPS 上不建议盲目开太大。
+- 默认每段 solution 最多搜索 `10,000,000` 次，可用 `--max-attempts-per-solution` 调整。
+
+---
+
+### 11. GeeTest v4 / 极验
 
 GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：能在官方 v4 slide demo 上完成图片定位、轨迹拖动和成功载荷提取。但这个能力还不是稳定通杀，真实站点仍会受风险策略、设备指纹、轨迹质量和出口 IP 影响。
 
@@ -749,7 +823,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 11. 网易易盾 / Yidun 滑动拼图
+### 12. 网易易盾 / Yidun 滑动拼图
 
 Yidun 现在保留 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
 
@@ -820,13 +894,14 @@ async with AntibotClient() as client:
 
 ---
 
-### 12. 自动分发模式
+### 13. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
 - Qoder / Aliyun 相关 URL -> `aliyun`
 - AJ-Captcha / Anji / `/captcha/get` 相关 URL -> `ajcaptcha`
 - ALTCHA 相关 URL -> `altcha`
+- FriendlyCaptcha / `frc-captcha` 相关 URL -> `friendlycaptcha`
 - Tencent / TCaptcha 相关 URL -> `tencent`
 - GeeTest / gcaptcha4 相关 URL -> `geetest`
 - Yidun / NetEase Dun / necaptcha / dun.163.com 相关 URL -> `yidun`
@@ -844,7 +919,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 13. 代理格式
+### 14. 代理格式
 
 支持以下格式：
 
@@ -1014,6 +1089,10 @@ antibot stress ajcaptcha --base-url 'http://127.0.0.1:18080' --runs 50 --concurr
 antibot solve altcha --challenge-url 'https://target.example/altcha/challenge'
 antibot stress altcha --challenge-url 'https://target.example/altcha/challenge' --runs 50 --concurrency 5
 
+# FriendlyCaptcha
+antibot solve friendlycaptcha --puzzle-url 'https://api.friendlycaptcha.com/api/v1/puzzle' --sitekey 'FCxxxxx'
+antibot stress friendlycaptcha --puzzle-url 'https://api.friendlycaptcha.com/api/v1/puzzle' --sitekey 'FCxxxxx' --runs 20
+
 # Submit verification，证明 token 是否真过页面流程
 antibot verify recaptcha --url 'https://target.example/form' --captcha-json /tmp/recaptcha-run/recaptcha_run.json --submit '#submit' --success '.ok' --failure '.captcha-error'
 antibot verify hcaptcha --url 'https://target.example/form' --token 'P1_xxx' --submit '#submit' --success '.ok'
@@ -1046,7 +1125,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / FriendlyCaptcha / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -1054,6 +1133,7 @@ turnstile_page.png / hcaptcha_page.png / recaptcha_page.png / geetest_page.png
 turnstile_page.html / hcaptcha_page.html / recaptcha_page.html / geetest_page.html
 ajcaptcha_run.json / ajcaptcha_original.png / ajcaptcha_jigsaw.png
 altcha_run.json
+friendlycaptcha_run.json
 geetest_slide_bg_N.png / geetest_slide_slice_N.png
 yidun_run.json / yidun_page.png / yidun_page.html
 yidun_slide_bg_N.jpg / yidun_slide_front_N.png
@@ -1103,6 +1183,7 @@ src/antibot_sdk/
     aliyun.py               # Aliyun provider adapter
     ajcaptcha.py            # AJ-Captcha blockPuzzle protocol solver
     altcha.py               # ALTCHA PoW protocol solver
+    friendlycaptcha.py      # FriendlyCaptcha classic PoW protocol solver
     geetest.py              # GeeTest v4 hook + slide solver alpha
     hcaptcha.py             # hCaptcha hook/observer provider
     recaptcha.py            # reCAPTCHA/Enterprise hook/observer provider
@@ -1119,6 +1200,7 @@ tests/
   test_verification.py
   test_ajcaptcha.py
   test_altcha.py
+  test_friendlycaptcha.py
   test_yidun_slide.py
 ```
 
@@ -1198,6 +1280,14 @@ M2M header 解析：WWW-Authenticate -> AltchaChallenge -> Authorization header�
 固定 SHA-256 challenge：成功定位 number，并可反解 payload JSON。
 ```
 
+FriendlyCaptcha：
+
+```text
+friendly-pow 官方 easy fixture：成功命中 nonce bytes 00 00 00 00 9a 00 00 00。
+本地 puzzle endpoint：ok=true，成功输出 frc-captcha-solution payload。
+诊断字段按官方 DataView 默认 big-endian 生成。
+```
+
 Turnstile：
 
 ```text
@@ -1226,6 +1316,7 @@ stress recaptcha mock 2 轮：2/2。
 - Qoder/Aliyun 的 `F001` 常和出口 IP / session reputation / 当前页面状态有关。
 - AJ-Captcha 的主要误差来自白色描边过弱、服务端自定义模板/尺寸、以及干扰图与真实模板相似；优先调 `--min-score`、保存 `ajcaptcha_original.png / ajcaptcha_jigsaw.png` 复盘。
 - ALTCHA 是 PoW，不是识图；耗时主要由 `maxnumber`、命中位置和 `workers` 决定。VPS 上默认单 worker，避免把 CPU 打满。
+- FriendlyCaptcha classic 也是 PoW；耗时主要由 difficulty、solution count、命中位置和 worker 数决定。默认 `10,000,000` 次/段 solution 上限，真实站点不够时调 `--max-attempts-per-solution`。
 - Yidun 的误差主要来自三类：浅色缺口的 `color_template` / 暗色缺口的 `shadow_*` 分支选择、front 图片相对 slider 的视觉偏移、以及轨迹/IP/设备指纹。
 - 代理池能明显降低部分 F001，但仍会出现 `NONE`、`gap not found`、`candidate rejected` 等临时状态。
 - 当前最佳基线是：**Qoder + proxy + 快 session 策略**。
