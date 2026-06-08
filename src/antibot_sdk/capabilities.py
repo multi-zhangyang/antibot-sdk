@@ -176,6 +176,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "nonce / validated OK",
         "scope": "sequentialread/PoW Bot Deterrent scrypt-WASM 协议 solver：解析 base64 JSON challenge，复现 scrypt(nonce_bytes,preimage_bytes,N/r/p/klen) 尾部阈值比较，可提交 /Verify；不启动浏览器。",
     },
+    "powchallenge": {
+        "provider": "powchallenge",
+        "name": "POWChallenge / powchallenge-server",
+        "category": "solver",
+        "captcha_type": "argon2id_memory_pow",
+        "status": "alpha",
+        "output": "verify body / validated message",
+        "scope": "powchallenge-server Argon2id memory-hard PoW：解析 GET /challenge 的 req_id+challenge+difficulty，复现 t=1,m=19456KiB,p=1 的 Argon2id 前导零 bit，输出 /verify body；不启动浏览器。",
+    },
     "powreaction": {
         "provider": "powreaction",
         "name": "pow-reaction",

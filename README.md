@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / pow-reaction JWT 多轮 PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -34,6 +34,7 @@
 - P-Captcha：新增 QuadraticResidueProblem 协议 solver，解析 Woodall prime challenge，用模平方根直接求 answer，可提交 `{id, answer}`，不启动浏览器。
 - pow_captcha：新增二进制 buffer reconstruction PoW solver，解析 serialized quiz、按 uncertainty ranges 做 mixed-radix 搜索，输出命中 SHA-256 的 answer，不启动浏览器。
 - PoW Bot Deterrent：新增 scrypt-WASM PoW 协议 solver，解析 base64 JSON challenge，复现 `scrypt(nonce_bytes, preimage_bytes, N/r/p/klen)` 与尾部阈值比较，可提交 `/Verify`，不启动浏览器。
+- POWChallenge / powchallenge-server：新增 Argon2id memory-hard PoW 协议 solver，解析 `GET /challenge` 的 `req_id/challenge/difficulty`，复现 `t=1,m=19456KiB,p=1` 前导零 bit 校验，可提交 `/verify`，不启动浏览器。
 - pow-reaction：新增 JWT 签名多轮 PoW 协议 solver，解析 HS256 challenge、clientId/context 绑定和 rounds，复现 `SHA256(round+"."+nonce)` 前导零 bit，可提交 reactions endpoint，不启动浏览器。
 - GeeTest v4：从 observer 升级出滑动 solver alpha，抓取 bg/slice、CV 匹配缺口、生成拖动轨迹，并提取 `lot_number/captcha_output/pass_token/gen_time`。
 - 网易易盾 / Yidun：滑动拼图 solver alpha，抓取 bg/front、OpenCV 定位缺口、模拟滑块轨迹，并提取 `validate/token/zoneId`。
@@ -75,6 +76,7 @@
 | P-Captcha | 协议 solver | `quadratic_residue_pow` | alpha | `answer` / `{id, answer}` |
 | pow_captcha | 协议 solver | `buffer_reconstruction_pow` | alpha | answer buffer / verify body |
 | PoW Bot Deterrent | 协议 solver | `scrypt_pow` | alpha | nonce / validated OK |
+| POWChallenge / powchallenge-server | 协议 solver | `argon2id_memory_pow` | alpha | verify body / validated message |
 | pow-reaction | 协议 solver | `signed_multi_round_pow` | alpha | `{challenge, solutions, reaction}` / success |
 | GeeTest v4 | 真实 solver | `slider` | alpha | `pass_token/lot_number` |
 | NetEase Yidun | 真实 solver | `jigsaw` | alpha | `validate/token/zoneId` |
@@ -1799,7 +1801,67 @@ antibot stress powbot \
 
 ---
 
-### 22.2 pow-reaction JWT signed multi-round PoW
+### 22.2 POWChallenge / powchallenge-server Argon2id Memory PoW
+
+`powchallenge-server` 这一类挑战比普通 hashcash 更重：服务端签发 32-byte challenge，浏览器 client-js/WASM 用 Argon2id 反复计算 nonce，服务端验证 hash 前导零 bit。它适合 VPS/headless 受限环境下做协议层 solver，因为全流程不依赖页面渲染或识图。
+
+核心参数与 upstream 对齐：
+
+```text
+challenge = base64(16 random bytes || 16 ip_salt bytes)
+hash = Argon2id(secret=nonce_bytes, salt=challenge_bytes, t=1, m=19456KiB, p=1, hash_len=32)
+pass = leading_zero_bits(hash) >= difficulty
+POST /verify {req_id, challenge, timestamp, difficulty, nonce}
+```
+
+SDK 当前支持：
+
+- `GET /challenge` 获取 `{req_id, challenge, difficulty}`；
+- 复现 Argon2id `t=1,m=19456KiB,p=1` memory-hard PoW；
+- nonce 默认用 `counter.to_bytes(32, "little")`，也支持 `--nonce-seed` 模拟浏览器随机 seed 后递增；
+- 输出标准 padded base64 nonce，同时兼容解析 base64url/no-padding；
+- 可提交 `/verify` 完成闭环；
+- 不启动浏览器。
+
+只解本地 challenge：
+
+```bash
+antibot solve powchallenge \
+  --challenge-json '{"req_id":"019aa0e6-b33f-7000-8000-000000000001","challenge":"MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=","difficulty":2}' \
+  --max-attempts 20 \
+  --timeout 10 \
+  --raw
+```
+
+完整协议闭环：
+
+```bash
+antibot solve powchallenge \
+  --base-url 'https://powchallenge.example' \
+  --submit \
+  --timeout 60
+```
+
+压测：
+
+```bash
+antibot stress powchallenge \
+  --base-url 'https://powchallenge.example' \
+  --submit \
+  --runs 10 \
+  --concurrency 2 \
+  --timeout 60
+```
+
+当前定位：
+
+- 这是 Argon2id memory-hard 协议 solver，不是滑块/图片 solver；
+- 每次尝试约 19 MiB 内存成本，VPS 上默认单 worker，压测时不要盲目拉高 `--workers/--concurrency`；
+- 服务端 challenge 绑定 IP 且一次性删除，live 压测必须每轮重新拉 `/challenge`。
+
+---
+
+### 22.3 pow-reaction JWT signed multi-round PoW
 
 `pow-reaction` 是一个把“反刷 reaction/表单动作”做成 PoW captcha 的 Svelte 组件。它的关键不在图像，而在 **签名 challenge + clientId/context 绑定 + 多轮 PoW + redeem 防重放**：
 
@@ -2328,6 +2390,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - P-Captcha / QuadraticResidueProblem 相关 URL -> `pcaptcha`
 - pow_captcha / powcaptcha / takeTest 相关 URL -> `powcaptcha`
 - PoW Bot Deterrent / `/GetChallenges?difficultyLevel=` 相关 URL -> `powbot`
+- POWChallenge / powchallenge-server 相关 URL -> `powchallenge`
 - pow-reaction / `/reactions/challenge` 相关 URL -> `powreaction`
 - Tencent / TCaptcha 相关 URL -> `tencent`
 - GeeTest / gcaptcha4 相关 URL -> `geetest`
@@ -2637,6 +2700,11 @@ antibot solve powcaptcha --quiz-b64 'AP8AAQAAAAPbwbTJAP/kjVdbXaXGOAQBJfZdsP4+JEl
 antibot solve powcaptcha --challenge-url 'https://target.example/powcaptcha/challenge' --verify-url 'https://target.example/powcaptcha/verify' --submit
 antibot stress powcaptcha --challenge-url 'https://target.example/powcaptcha/challenge' --runs 20 --concurrency 4
 
+# POWChallenge / powchallenge-server
+antibot solve powchallenge --base-url 'https://powchallenge.example' --submit --timeout 60
+antibot solve powchallenge --challenge-json '{"req_id":"019aa0e6-b33f-7000-8000-000000000001","challenge":"MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=","difficulty":2}' --max-attempts 20 --timeout 10
+antibot stress powchallenge --base-url 'https://powchallenge.example' --submit --runs 10 --concurrency 2
+
 # pow-reaction
 antibot solve powreaction --base-url 'https://pow-reaction.pages.dev/demo/reactions' --reaction '👍' --submit --workers 4
 antibot solve powreaction --challenge-json '{"challenge":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}' --timeout 30
@@ -2693,6 +2761,7 @@ silentchallenge_run.json
 pcaptcha_run.json
 powcaptcha_run.json
 powbot_run.json
+powchallenge_run.json
 powreaction_run.json
 geetest_slide_bg_N.png / geetest_slide_slice_N.png
 yidun_run.json / yidun_page.png / yidun_page.html
@@ -2760,6 +2829,7 @@ src/antibot_sdk/
     pcaptcha.py             # P-Captcha quadratic residue protocol solver
     powcaptcha.py           # pow_captcha buffer reconstruction PoW protocol solver
     powbot.py               # PoW Bot Deterrent scrypt-WASM PoW protocol solver
+    powchallenge.py         # POWChallenge Argon2id memory-hard PoW protocol solver
     powreaction.py          # pow-reaction HS256 JWT multi-round SHA-256 PoW solver
     geetest.py              # GeeTest v4 hook + slide solver alpha
     hcaptcha.py             # hCaptcha hook/observer provider
@@ -2788,6 +2858,7 @@ tests/
   test_pcaptcha.py
   test_powcaptcha.py
   test_powbot.py
+  test_powchallenge.py
   test_powreaction.py
   test_yourcaptcha.py
   test_silentchallenge.py

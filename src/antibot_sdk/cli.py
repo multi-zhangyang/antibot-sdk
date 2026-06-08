@@ -145,6 +145,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "pcaptcha",
             "powcaptcha",
             "powbot",
+            "powchallenge",
             "powreaction",
             "privatecaptcha",
             "portcullis",
@@ -517,6 +518,25 @@ async def amain(argv: list[str] | None = None) -> int:
     powbot.add_argument("--proxy")
     powbot.add_argument("--output-dir")
     powbot.add_argument("--raw", action="store_true")
+
+    powch = solve_sub.add_parser("powchallenge")
+    powch_source = powch.add_mutually_exclusive_group(required=True)
+    powch_source.add_argument("--base-url", help="powchallenge-server root; infers /challenge and /verify")
+    powch_source.add_argument("--challenge-json", help="inline {req_id,challenge,difficulty} JSON, or @/path")
+    powch_source.add_argument("--challenge-file")
+    powch_source.add_argument("--challenge-url", help="GET endpoint returning {req_id,challenge,difficulty}")
+    powch.add_argument("--verify-url", help="POST endpoint accepting {req_id,challenge,timestamp,difficulty,nonce}")
+    powch.add_argument("--submit", action="store_true")
+    powch.add_argument("--start", type=int, default=0)
+    powch.add_argument("--max-attempts", type=int, default=100_000)
+    powch.add_argument("--workers", type=int, default=1)
+    powch.add_argument("--timeout", type=int, default=60)
+    powch.add_argument("--nonce-seed", help="optional base64/hex seed to increment like browser miners")
+    powch.add_argument("--nonce-length", type=int, default=32)
+    powch.add_argument("--proxy")
+    powch.add_argument("--output-dir")
+    powch.add_argument("--user-agent")
+    powch.add_argument("--raw", action="store_true")
 
     powr = solve_sub.add_parser("powreaction")
     powr_source = powr.add_mutually_exclusive_group(required=True)
@@ -1098,6 +1118,28 @@ async def amain(argv: list[str] | None = None) -> int:
     spowbot.add_argument("--output-json")
     spowbot.add_argument("--full", action="store_true")
 
+    spowch = stress_sub.add_parser("powchallenge")
+    spowch_source = spowch.add_mutually_exclusive_group(required=True)
+    spowch_source.add_argument("--base-url")
+    spowch_source.add_argument("--challenge-json")
+    spowch_source.add_argument("--challenge-file")
+    spowch_source.add_argument("--challenge-url")
+    spowch.add_argument("--verify-url")
+    spowch.add_argument("--submit", action="store_true")
+    spowch.add_argument("--runs", type=int, default=10)
+    spowch.add_argument("--concurrency", type=int, default=2)
+    spowch.add_argument("--timeout", type=int, default=60)
+    spowch.add_argument("--start", type=int, default=0)
+    spowch.add_argument("--max-attempts", type=int, default=100_000)
+    spowch.add_argument("--workers", type=int, default=1)
+    spowch.add_argument("--nonce-seed")
+    spowch.add_argument("--nonce-length", type=int, default=32)
+    spowch.add_argument("--proxy")
+    spowch.add_argument("--output-dir")
+    spowch.add_argument("--output-json")
+    spowch.add_argument("--user-agent")
+    spowch.add_argument("--full", action="store_true")
+
     spowr = stress_sub.add_parser("powreaction")
     spowr_source = spowr.add_mutually_exclusive_group(required=True)
     spowr_source.add_argument("--base-url")
@@ -1410,6 +1452,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "pcaptcha",
             "powcaptcha",
             "powbot",
+            "powchallenge",
             "powreaction",
             "privatecaptcha",
             "portcullis",
@@ -1820,6 +1863,26 @@ async def amain(argv: list[str] | None = None) -> int:
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "powchallenge":
+        ret = await client.solve_powchallenge(
+            base_url=args.base_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            submit=args.submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            nonce_seed=args.nonce_seed,
+            nonce_length=args.nonce_length,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -2572,6 +2635,34 @@ async def amain(argv: list[str] | None = None) -> int:
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "powchallenge":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="powchallenge",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_powchallenge(
+                base_url=args.base_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                submit=args.submit,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                nonce_seed=args.nonce_seed,
+                nonce_length=args.nonce_length,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
             ),
         )
         emit_stress(ret, full=args.full)
