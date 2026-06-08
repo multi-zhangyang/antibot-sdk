@@ -104,6 +104,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "private-captcha-solution payload",
         "scope": "PrivateCaptcha compute puzzle：解析 puzzle/signature payload，复现 blake2b-256 threshold 多解 PoW 与 solutions metadata，输出 widget response；不启动浏览器。",
     },
+    "portcullis": {
+        "provider": "portcullis",
+        "name": "Portcullis",
+        "category": "solver",
+        "captcha_type": "argon2_pow",
+        "status": "alpha",
+        "output": "verify body / captcha_token",
+        "scope": "Portcullis Argon2id + SHA-256 PoW：解析 signed challenge，先计算 Argon2id base hash，再搜索 SHA256(base||nonce_le) 前导零，可提交 /verify 换 token；不启动浏览器。",
+    },
     "wicketkeeper": {
         "provider": "wicketkeeper",
         "name": "Wicketkeeper",

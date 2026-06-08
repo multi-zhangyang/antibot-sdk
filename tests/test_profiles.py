@@ -26,6 +26,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://developers.cloudflare.com/turnstile/") == "turnstile"
     assert detect_provider_for_url("https://captcha.example/powcaptcha/challenge") == "powcaptcha"
     assert detect_provider_for_url("https://api.privatecaptcha.com/puzzle") == "privatecaptcha"
+    assert detect_provider_for_url("https://captcha.example/api/v1/challenge") == "portcullis"
     assert detect_provider_for_url("https://example.com") == "browser"
     assert "qoder_signup" in list_profiles()["aliyun"]
     assert "generic_v4" in list_profiles()["geetest"]
@@ -35,6 +36,7 @@ def test_generic_provider_detection():
     assert "generic_widget" in list_profiles()["turnstile"]
     assert "buffer_reconstruction_pow" in list_profiles()["powcaptcha"]
     assert "compute_pow" in list_profiles()["privatecaptcha"]
+    assert "argon2_pow" in list_profiles()["portcullis"]
 
 
 def test_vendored_upstream_snapshots_present():

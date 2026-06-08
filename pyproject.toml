@@ -20,6 +20,7 @@ dependencies = [
   "opencv-python>=4.8",
   "numpy>=1.26",
   "pycryptodome>=3.20",
+  "argon2-cffi>=23.1",
 ]
 
 [project.optional-dependencies]

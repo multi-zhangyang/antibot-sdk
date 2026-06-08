@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / FriendlyCaptcha PoW / PrivateCaptcha Compute PoW / Cap PoW / mCaptcha PoW / Wicketkeeper JWT PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / FriendlyCaptcha PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / mCaptcha PoW / Wicketkeeper JWT PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -16,6 +16,7 @@
 - Anubis：新增 `fast/slow` PoW 协议 solver，解析 challenge 页面或 make-challenge JSON，计算 `SHA256(randomData+nonce)` 前导零，可生成 `pass-challenge` 参数或直接换取 auth cookie，不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
 - PrivateCaptcha：新增 compute puzzle 协议 solver，解析 `puzzle.signature`，复现 blake2b-256 threshold 多解 PoW 与 solutions metadata，输出 `private-captcha-solution` payload，不启动浏览器。
+- Portcullis：新增 Argon2id + SHA-256 双阶段 PoW 协议 solver，解析 signed challenge，计算内存硬化 base hash 后搜索 nonce，可提交 `/api/v1/verify` 换 `captcha_token`，不启动浏览器。
 - Cap / @cap.js：新增 SHA-256 PoW 协议 solver，支持 v1 seeded challenge 与 format-2 `sha256-pow`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
 - mCaptcha：新增 SHA-256 PoW 协议 solver，复现 Rust/JS 的 `bincode(String)+u128 score` 规则，获取 `/api/v1/pow/config` 后本地找 nonce，可提交 `/api/v1/pow/verify` 换 token，不启动浏览器。
 - Wicketkeeper：新增 EdDSA-JWT PoW 协议 solver，获取 `/v0/challenge` 后计算 `SHA256(challenge+nonce)` 前导零，可提交 `/v0/siteverify` 换 success JWT，不启动浏览器。
@@ -43,6 +44,7 @@
 | Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
 | FriendlyCaptcha | 协议 solver | `proof_of_work` | alpha | `frc-captcha-solution` payload |
 | PrivateCaptcha | 协议 solver | `compute_pow` | alpha | `private-captcha-solution` payload |
+| Portcullis | 协议 solver | `argon2_pow` | alpha | verify body / `captcha_token` |
 | Cap / @cap.js | 协议 solver | `proof_of_work` | alpha | `/redeem` body / Cap token |
 | mCaptcha | 协议 solver | `proof_of_work` | alpha | verify body / mCaptcha token |
 | Wicketkeeper | 协议 solver | `proof_of_work` | alpha | hidden-input solution / success JWT |
@@ -902,7 +904,83 @@ async with AntibotClient() as client:
 
 ---
 
-### 13. Cap / @cap.js PoW
+### 13. Portcullis Argon2id + SHA-256 PoW
+
+Portcullis 是更硬一点的 PoW CAPTCHA：不是直接对 nonce 做 hash，而是先对 challenge 做一次 Argon2id 内存硬化，得到 32 字节 `base_hash`，再在内循环里搜索 `SHA256(base_hash || nonce_le_8)` 的前导零 bit。challenge 本身带 HMAC-SHA256 签名，客户端解题后原样回传 challenge/sig/nonce，服务端 `/api/v1/verify` 换 `captcha_token`。
+
+关键点：
+
+- challenge endpoint：`POST /api/v1/challenge`，请求 `{"site_key":"pk_test"}`。
+- challenge 字段：`id/salt/diff/exp/site_key/m_cost/t_cost/p_cost`。
+- Phase 1：`Argon2id(password=id, salt=salt, m/t/p, out=32)`。
+- Phase 2：`SHA256(base_hash || nonce_le_8)`。
+- 通过条件：digest 前导零 bit 数 `>= diff`。
+- verify endpoint：`POST /api/v1/verify`，提交 `challenge/sig/nonce`，成功返回 `captcha_token`。
+- 可选 siteverify：`POST /api/v1/siteverify`，提交 `token/secret_key/client_ip/user_agent`。
+
+命令示例：
+
+```bash
+antibot solve portcullis \
+  --base-url 'https://captcha.example' \
+  --sitekey 'pk_test' \
+  --submit
+```
+
+只解本地 challenge，不请求网络：
+
+```bash
+antibot solve portcullis \
+  --challenge-json '{"challenge":{"id":"...","salt":"...","diff":18,"exp":9999999999999,"site_key":"pk_test","m_cost":4096,"t_cost":1,"p_cost":1},"sig":"..."}' \
+  --max-iters 10000000
+```
+
+带业务后端核验：
+
+```bash
+antibot solve portcullis \
+  --base-url 'https://captcha.example' \
+  --sitekey 'pk_test' \
+  --submit \
+  --siteverify-url 'https://captcha.example/api/v1/siteverify' \
+  --secret-key 'sk_test_secret_at_least16'
+```
+
+压测：
+
+```bash
+antibot stress portcullis \
+  --base-url 'https://captcha.example' \
+  --sitekey 'pk_test' \
+  --submit \
+  --runs 20 \
+  --concurrency 4
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_portcullis(
+        base_url="https://captcha.example",
+        sitekey="pk_test",
+        submit=True,
+    )
+    print(ret.ok, ret.ticket, ret.verify_code, ret.diagnostics.get("nonce"))
+```
+
+当前定位：
+
+- 这是协议层内存硬化 PoW solver，不启动浏览器。
+- 已和 upstream `captcha-core/src/pow.rs` / `challenge.rs` 对齐。
+- SDK 不伪造 challenge 签名；有 `sig` 时原样回传，签名仍由服务端验证。
+- `m_cost/t_cost/diff` 都会显著影响耗时，VPS 上优先使用低并发，必要时再开 `--workers`。
+
+---
+
+### 14. Cap / @cap.js PoW
 
 Cap 是 self-hosted CAPTCHA 方向里比较适合 SDK 化的一类：核心是 SHA-256 proof-of-work。SDK 当前只做协议层可验证的部分，不启动浏览器。
 
@@ -971,7 +1049,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 14. P-Captcha QuadraticResidueProblem
+### 15. P-Captcha QuadraticResidueProblem
 
 P-Captcha 比普通 hashcash 更有意思：服务端给出 Woodall prime `p` 下的一组二次剩余 `n = x² mod p`，浏览器 worker 用 Tonelli-Shanks 求模平方根并把答案串提交给服务端。SDK 当前把这条链路下沉成纯 Python 协议 solver。
 
@@ -1050,7 +1128,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 15. pow_captcha Buffer Reconstruction PoW
+### 16. pow_captcha Buffer Reconstruction PoW
 
 pow_captcha 不是普通前导零 hashcash，而是把“正确 buffer 的 SHA-256、当前被污染 buffer、每个不确定字节的取值范围”序列化到 quiz 里。前端 `takeTest`/WASM 会按 mixed-radix 方式枚举这些不确定字节，直到 `SHA256(candidate_buffer)` 命中目标 hash。SDK 当前把这条链路复现成纯 Python 协议 solver。
 
@@ -1113,7 +1191,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 16. mCaptcha PoW
+### 17. mCaptcha PoW
 
 mCaptcha 是 self-hosted PoW CAPTCHA。浏览器 widget 的流程是：`POST /api/v1/pow/config` 取 `string/difficulty_factor/salt`，本地搜索 nonce，再 `POST /api/v1/pow/verify` 换取服务端 token。SDK 当前把这条链路做成纯协议 solver。
 
@@ -1185,7 +1263,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 17. Wicketkeeper JWT PoW
+### 18. Wicketkeeper JWT PoW
 
 Wicketkeeper 是 self-hosted PoW CAPTCHA：服务端签发 EdDSA JWT challenge，前端 worker 搜索 nonce，后端 `/v0/siteverify` 校验 JWT、PoW 和 replay 状态后返回 success JWT。SDK 当前把这条链路做成纯协议 solver。
 
@@ -1245,7 +1323,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 18. GeeTest v4 / 极验
+### 19. GeeTest v4 / 极验
 
 GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：能在官方 v4 slide demo 上完成图片定位、轨迹拖动和成功载荷提取。但这个能力还不是稳定通杀，真实站点仍会受风险策略、设备指纹、轨迹质量和出口 IP 影响。
 
@@ -1342,7 +1420,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 19. 网易易盾 / Yidun 滑动拼图
+### 20. 网易易盾 / Yidun 滑动拼图
 
 Yidun 现在保留 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
 
@@ -1413,7 +1491,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 20. 自动分发模式
+### 21. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
@@ -1423,6 +1501,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - Anubis / `.within.website/x/cmd/anubis` 相关 URL -> `anubis`
 - FriendlyCaptcha / `frc-captcha` 相关 URL -> `friendlycaptcha`
 - PrivateCaptcha / private-captcha / api.privatecaptcha.com 相关 URL -> `privatecaptcha`
+- Portcullis / pow-captcha / `/api/v1/challenge` 相关 URL -> `portcullis`
 - Cap / trycap / cap-widget 相关 URL -> `cap`
 - mCaptcha / `/api/v1/pow/config` 相关 URL -> `mcaptcha`
 - Wicketkeeper / `/v0/challenge` 相关 URL -> `wicketkeeper`
@@ -1445,7 +1524,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 21. 代理格式
+### 22. 代理格式
 
 支持以下格式：
 
@@ -1544,6 +1623,13 @@ async def main():
             sitekey="site-key",
         )
         print(privatecaptcha.ok, privatecaptcha.ticket, privatecaptcha.verify_code)
+
+        portcullis = await client.solve_portcullis(
+            base_url="https://captcha.example",
+            sitekey="pk_test",
+            submit=True,
+        )
+        print(portcullis.ok, portcullis.ticket, portcullis.verify_code)
 
         cap = await client.solve_cap(
             api_endpoint="https://target.example/cap/",
@@ -1661,6 +1747,11 @@ antibot stress friendlycaptcha --puzzle-url 'https://api.friendlycaptcha.com/api
 antibot solve privatecaptcha --puzzle-url 'https://captcha.example/puzzle' --sitekey 'site-key'
 antibot solve privatecaptcha --puzzle 'puzzle_b64.signature_b64'
 antibot stress privatecaptcha --puzzle-url 'https://captcha.example/puzzle' --sitekey 'site-key' --runs 20
+
+# Portcullis
+antibot solve portcullis --base-url 'https://captcha.example' --sitekey 'pk_test' --submit
+antibot solve portcullis --challenge-json '{"challenge":{"id":"...","salt":"...","diff":18,"exp":9999999999999,"site_key":"pk_test"},"sig":"..."}'
+antibot stress portcullis --base-url 'https://captcha.example' --sitekey 'pk_test' --runs 20
 
 # Cap / @cap.js
 antibot solve cap --api-endpoint 'https://target.example/cap/'
@@ -1781,6 +1872,7 @@ src/antibot_sdk/
     anubis.py               # Anubis SHA-256 PoW protocol solver
     friendlycaptcha.py      # FriendlyCaptcha classic PoW protocol solver
     privatecaptcha.py       # PrivateCaptcha blake2b compute PoW protocol solver
+    portcullis.py           # Portcullis Argon2id + SHA-256 PoW protocol solver
     cap.py                  # Cap/@cap.js SHA-256 PoW protocol solver
     mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
     wicketkeeper.py         # Wicketkeeper JWT PoW protocol solver
@@ -1805,6 +1897,7 @@ tests/
   test_anubis.py
   test_friendlycaptcha.py
   test_privatecaptcha.py
+  test_portcullis.py
   test_cap.py
   test_pcaptcha.py
   test_powcaptcha.py
@@ -1818,7 +1911,7 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 57 passed
+pytest: 60 passed
 node -c bridge.js/site_profiles.js/runner.js: passed
 uv build: success
 watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON
@@ -1914,6 +2007,16 @@ Python 产出 payload 被 upstream Go ParseVerifyPayload + VerifySolutions 接�
 本地 PrivateCaptcha fixture stress 20 轮/concurrency=4：20/20，avg≈1.2ms，p95≈3ms。
 ```
 
+Portcullis：
+
+```text
+upstream captcha-core/src/pow.rs + challenge.rs：确认 Argon2id(id,salt,m/t/p,out=32) + SHA256(base||nonce_le_8) + leading_zero_bits 规则。
+Rust/Python cross-check fixture：base_hash=9ad549858f257bbed625072cd542f88746b3a3a2f711fb97454ac955c02e41dd。
+fixture diff=12,m_cost=8,t_cost=1：nonce=1756，hash=0007dc26538be91230b0bcde0acc3a824b064dc19b1d17ec5d259255c19dc820。
+本地 mock challenge + verify + siteverify：ok=true，成功返回 captcha_token。
+本地 Portcullis fixture stress 20 轮/concurrency=4：20/20，avg≈8.8ms，p95≈13ms。
+```
+
 Cap / @cap.js：
 
 ```text
@@ -1991,6 +2094,7 @@ stress recaptcha mock 2 轮：2/2。
 - Anubis 是 SHA-256 前导零 PoW；difficulty 每加 1，平均搜索空间约乘 16。页面解析和提交 cookie 是协议闭环，但高 difficulty 仍会吃 CPU。
 - FriendlyCaptcha classic 也是 PoW；耗时主要由 difficulty、solution count、命中位置和 worker 数决定。默认 `10,000,000` 次/段 solution 上限，真实站点不够时调 `--max-attempts-per-solution`。
 - PrivateCaptcha compute puzzle 的 difficulty 每 +8 平均搜索空间约乘 2，solutionsCount 常是多解；先控制 `--concurrency`，再按 CPU 调 `--workers`。
+- Portcullis 多了 Argon2id 内存成本，`m_cost` 默认可到 19456 KiB；压测时先用低 concurrency，避免 VPS 内存抖动。
 - Cap PoW 耗时主要由 `c/s/d`、format-2 target 长度、命中位置和 worker 数决定；遇到 `rsw/instrumentation` 时不要硬解，当前版本会按 unsupported 返回。
 - mCaptcha PoW 耗时主要由 `difficulty_factor`、nonce 命中位置和 worker 数决定；默认单 worker，压测时先控制并发避免把 VPS CPU 打满。
 - Wicketkeeper difficulty 是前导 0 nibble 个数，每 +1 平均搜索空间约乘 16；success JWT 只能由服务端 `/siteverify` 签发。

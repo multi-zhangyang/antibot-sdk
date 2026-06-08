@@ -137,6 +137,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "pcaptcha",
             "powcaptcha",
             "privatecaptcha",
+            "portcullis",
             "wicketkeeper",
             "geetest",
             "yidun",
@@ -360,6 +361,29 @@ async def amain(argv: list[str] | None = None) -> int:
     priv.add_argument("--proxy")
     priv.add_argument("--output-dir")
     priv.add_argument("--raw", action="store_true")
+
+    port = solve_sub.add_parser("portcullis")
+    port_source = port.add_mutually_exclusive_group(required=True)
+    port_source.add_argument("--challenge", help="inline challenge JSON or full challenge response")
+    port_source.add_argument("--challenge-json", help="inline JSON object, or @/path/to/challenge.json")
+    port_source.add_argument("--challenge-file")
+    port_source.add_argument("--challenge-url", help="Portcullis /api/v1/challenge endpoint")
+    port_source.add_argument("--base-url", help="Portcullis instance root; infers /api/v1/{challenge,verify}")
+    port.add_argument("--sitekey", help="site_key used when fetching challenge")
+    port.add_argument("--sig", help="challenge signature when --challenge only contains challenge object")
+    port.add_argument("--verify-url", help="Portcullis /api/v1/verify endpoint")
+    port.add_argument("--siteverify-url", help="Portcullis /api/v1/siteverify endpoint")
+    port.add_argument("--submit", action="store_true", help="POST solved body to --verify-url/base-url")
+    port.add_argument("--secret-key", help="siteverify secret_key")
+    port.add_argument("--client-ip")
+    port.add_argument("--user-agent")
+    port.add_argument("--start", type=int, default=0)
+    port.add_argument("--max-iters", type=int, default=10_000_000)
+    port.add_argument("--workers", type=int, default=1)
+    port.add_argument("--timeout", type=int, default=60)
+    port.add_argument("--proxy")
+    port.add_argument("--output-dir")
+    port.add_argument("--raw", action="store_true")
 
     wk = solve_sub.add_parser("wicketkeeper")
     wk_source = wk.add_mutually_exclusive_group(required=True)
@@ -658,6 +682,31 @@ async def amain(argv: list[str] | None = None) -> int:
     spriv.add_argument("--output-json")
     spriv.add_argument("--full", action="store_true")
 
+    sport = stress_sub.add_parser("portcullis")
+    sport_source = sport.add_mutually_exclusive_group(required=True)
+    sport_source.add_argument("--challenge")
+    sport_source.add_argument("--challenge-json")
+    sport_source.add_argument("--challenge-file")
+    sport_source.add_argument("--challenge-url")
+    sport_source.add_argument("--base-url")
+    sport.add_argument("--sitekey")
+    sport.add_argument("--sig")
+    sport.add_argument("--verify-url")
+    sport.add_argument("--siteverify-url")
+    sport.add_argument("--submit", action="store_true")
+    sport.add_argument("--secret-key")
+    sport.add_argument("--client-ip")
+    sport.add_argument("--user-agent")
+    sport.add_argument("--runs", type=int, default=10)
+    sport.add_argument("--concurrency", type=int, default=2)
+    sport.add_argument("--timeout", type=int, default=60)
+    sport.add_argument("--max-iters", type=int, default=10_000_000)
+    sport.add_argument("--workers", type=int, default=1)
+    sport.add_argument("--proxy")
+    sport.add_argument("--output-dir")
+    sport.add_argument("--output-json")
+    sport.add_argument("--full", action="store_true")
+
     swk = stress_sub.add_parser("wicketkeeper")
     swk_source = swk.add_mutually_exclusive_group(required=True)
     swk_source.add_argument("--challenge-url")
@@ -828,6 +877,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "pcaptcha",
             "powcaptcha",
             "privatecaptcha",
+            "portcullis",
             "wicketkeeper",
             "anubis",
         ):
@@ -1077,6 +1127,30 @@ async def amain(argv: list[str] | None = None) -> int:
             secret=args.secret,
             start=args.start,
             max_attempts_per_solution=args.max_attempts_per_solution,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "portcullis":
+        ret = await client.solve_portcullis(
+            challenge=args.challenge,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            base_url=args.base_url,
+            sitekey=args.sitekey,
+            sig=args.sig,
+            verify_url=args.verify_url,
+            siteverify_url=args.siteverify_url,
+            submit=args.submit,
+            secret_key=args.secret_key,
+            client_ip=args.client_ip,
+            user_agent=args.user_agent,
+            start=args.start,
+            max_iters=args.max_iters,
             workers=args.workers,
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
@@ -1491,6 +1565,37 @@ async def amain(argv: list[str] | None = None) -> int:
                 api_key=args.api_key,
                 secret=args.secret,
                 max_attempts_per_solution=args.max_attempts_per_solution,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "portcullis":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="portcullis",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_portcullis(
+                challenge=args.challenge,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                base_url=args.base_url,
+                sitekey=args.sitekey,
+                sig=args.sig,
+                verify_url=args.verify_url,
+                siteverify_url=args.siteverify_url,
+                submit=args.submit,
+                secret_key=args.secret_key,
+                client_ip=args.client_ip,
+                user_agent=args.user_agent,
+                max_iters=args.max_iters,
                 workers=args.workers,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,

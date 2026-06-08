@@ -17,6 +17,7 @@ from .providers.mcaptcha import MCaptchaSolver
 from .providers.pcaptcha import PCaptchaSolver
 from .providers.powcaptcha import PowCaptchaSolver
 from .providers.privatecaptcha import PrivateCaptchaSolver
+from .providers.portcullis import PortcullisSolver
 from .providers.recaptcha import ReCaptchaSolver
 from .providers.tencent import TencentCaptchaSolver
 from .providers.turnstile import TurnstileSolver
@@ -40,6 +41,7 @@ class AntibotClient:
         self.pcaptcha = PCaptchaSolver()
         self.powcaptcha = PowCaptchaSolver()
         self.privatecaptcha = PrivateCaptchaSolver()
+        self.portcullis = PortcullisSolver()
         self.wicketkeeper = WicketkeeperSolver()
         self.tencent = TencentCaptchaSolver()
         self.aliyun = AliyunCaptchaSolver()
@@ -91,6 +93,9 @@ class AntibotClient:
 
     async def solve_privatecaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.privatecaptcha.solve(**kwargs)
+
+    async def solve_portcullis(self, **kwargs: Any) -> CaptchaResult:
+        return await self.portcullis.solve(**kwargs)
 
     async def solve_wicketkeeper(self, **kwargs: Any) -> CaptchaResult:
         return await self.wicketkeeper.solve(**kwargs)
@@ -358,6 +363,41 @@ class AntibotClient:
             }
             pc_kwargs.setdefault("puzzle_url", target_url)
             return await self.solve_privatecaptcha(**pc_kwargs)
+        if provider == "portcullis":
+            pc_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "base_url",
+                    "sitekey",
+                    "sig",
+                    "verify_url",
+                    "siteverify_url",
+                    "submit",
+                    "secret_key",
+                    "client_ip",
+                    "user_agent",
+                    "start",
+                    "max_iters",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            if not pc_kwargs.get("challenge_url") and not pc_kwargs.get("base_url"):
+                if target_url.rstrip("/").endswith("/challenge"):
+                    pc_kwargs["challenge_url"] = target_url
+                else:
+                    pc_kwargs["base_url"] = target_url
+            return await self.solve_portcullis(**pc_kwargs)
         if provider == "wicketkeeper":
             wk_kwargs = {
                 k: v
