@@ -130,6 +130,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "kerberus"
     if any(x in u or x in host for x in ("mcaptcha", "/api/v1/pow/config", "/api/v1/pow/verify")):
         return "mcaptcha"
+    if any(x in u or x in host for x in ("pauldotsh", "bcrypt_pow", "bcrypt-captcha", "/paulpow/")):
+        return "paulpow"
     if any(x in u or x in host for x in ("p-captcha", "pcaptcha", "quadraticresidueproblem")):
         return "pcaptcha"
     if any(x in u or x in host for x in ("pow_captcha", "powcaptcha", "taketest", "/powcaptcha/")):
@@ -254,6 +256,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "mcaptcha-sha256-pow-protocol-solver",
                 "successFields": ["verify body", "mCaptcha token"],
                 "endpoints": ["/api/v1/pow/config", "/api/v1/pow/verify", "/api/v1/pow/siteverify"],
+            }
+        },
+        "paulpow": {
+            "bcrypt_pow": {
+                "patterns": ["PaulDotSH/pow-captcha", "bcrypt_pow", "bcrypt-captcha"],
+                "mode": "bcrypt-exact-prefix-protocol-solver",
+                "successFields": ["CaptchaServerInfo JSON", "nonce"],
+                "endpoints": ["challenge endpoint returning client info", "verify endpoint accepting clientInfo+nonce"],
             }
         },
         "pcaptcha": {

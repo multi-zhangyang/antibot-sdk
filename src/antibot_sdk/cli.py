@@ -138,6 +138,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "impost",
             "kerberus",
             "mcaptcha",
+            "paulpow",
             "pcaptcha",
             "powcaptcha",
             "privatecaptcha",
@@ -384,6 +385,21 @@ async def amain(argv: list[str] | None = None) -> int:
     mc.add_argument("--proxy")
     mc.add_argument("--output-dir")
     mc.add_argument("--raw", action="store_true")
+
+    pp = solve_sub.add_parser("paulpow")
+    pp_source = pp.add_mutually_exclusive_group(required=True)
+    pp_source.add_argument("--challenge-json", help="inline JSON object, or @/path/to/challenge.json")
+    pp_source.add_argument("--challenge-file")
+    pp_source.add_argument("--challenge-url")
+    pp.add_argument("--verify-url", help="endpoint accepting {clientInfo, nonce}")
+    pp.add_argument("--submit", action="store_true", help="POST solution to --verify-url")
+    pp.add_argument("--start", type=int, default=0)
+    pp.add_argument("--max-attempts", type=int)
+    pp.add_argument("--workers", type=int, default=1)
+    pp.add_argument("--timeout", type=int, default=60)
+    pp.add_argument("--proxy")
+    pp.add_argument("--output-dir")
+    pp.add_argument("--raw", action="store_true")
 
     pc = solve_sub.add_parser("pcaptcha")
     pc_source = pc.add_mutually_exclusive_group(required=True)
@@ -786,6 +802,23 @@ async def amain(argv: list[str] | None = None) -> int:
     smc.add_argument("--output-json")
     smc.add_argument("--full", action="store_true")
 
+    spp = stress_sub.add_parser("paulpow")
+    spp_source = spp.add_mutually_exclusive_group(required=True)
+    spp_source.add_argument("--challenge-json")
+    spp_source.add_argument("--challenge-file")
+    spp_source.add_argument("--challenge-url")
+    spp.add_argument("--verify-url")
+    spp.add_argument("--submit", action="store_true")
+    spp.add_argument("--runs", type=int, default=10)
+    spp.add_argument("--concurrency", type=int, default=2)
+    spp.add_argument("--timeout", type=int, default=60)
+    spp.add_argument("--max-attempts", type=int)
+    spp.add_argument("--workers", type=int, default=1)
+    spp.add_argument("--proxy")
+    spp.add_argument("--output-dir")
+    spp.add_argument("--output-json")
+    spp.add_argument("--full", action="store_true")
+
     spc = stress_sub.add_parser("pcaptcha")
     spc.add_argument("--challenge-url", required=True)
     spc.add_argument("--validate-url")
@@ -1039,6 +1072,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "impost",
             "kerberus",
             "mcaptcha",
+            "paulpow",
             "pcaptcha",
             "powcaptcha",
             "privatecaptcha",
@@ -1310,6 +1344,22 @@ async def amain(argv: list[str] | None = None) -> int:
             siteverify_url=args.siteverify_url,
             siteverify=args.siteverify,
             secret=args.secret,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "paulpow":
+        ret = await client.solve_paulpow(
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            submit=args.submit,
             start=args.start,
             max_attempts=args.max_attempts,
             workers=args.workers,
@@ -1838,6 +1888,29 @@ async def amain(argv: list[str] | None = None) -> int:
                 sitekey=args.sitekey,
                 verify_url=args.verify_url,
                 submit=not args.no_submit,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "paulpow":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="paulpow",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_paulpow(
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                submit=args.submit,
                 max_attempts=args.max_attempts,
                 workers=args.workers,
                 timeout_sec=args.timeout,

@@ -113,6 +113,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "verify body / mCaptcha token",
         "scope": "mCaptcha SHA-256 PoW：获取 /api/v1/pow/config，复现 bincode(String)+u128 score nonce 搜索，可提交 /verify 换 token；不启动浏览器。",
     },
+    "paulpow": {
+        "provider": "paulpow",
+        "name": "PaulDotSH/pow-captcha",
+        "category": "solver",
+        "captcha_type": "bcrypt_pow",
+        "status": "alpha",
+        "output": "CaptchaServerInfo JSON / validated token",
+        "scope": "PaulDotSH pow-captcha bcrypt PoW：复现 exact 与 prefix 两种 bcrypt 校验；exact 用 bcrypt verify 反查小范围 nonce，prefix 用 salt 前 16 字节构造 bcrypt salt 后匹配 hash 前缀；不启动浏览器。",
+    },
     "pcaptcha": {
         "provider": "pcaptcha",
         "name": "P-Captcha",

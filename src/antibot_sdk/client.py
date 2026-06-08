@@ -18,6 +18,7 @@ from .providers.hcaptcha import HCaptchaSolver
 from .providers.impost import ImpostSolver
 from .providers.kerberus import KerberusSolver
 from .providers.mcaptcha import MCaptchaSolver
+from .providers.paulpow import PaulPowSolver
 from .providers.pcaptcha import PCaptchaSolver
 from .providers.powcaptcha import PowCaptchaSolver
 from .providers.privatecaptcha import PrivateCaptchaSolver
@@ -44,6 +45,7 @@ class AntibotClient:
         self.auro = AuroSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
         self.mcaptcha = MCaptchaSolver()
+        self.paulpow = PaulPowSolver()
         self.pcaptcha = PCaptchaSolver()
         self.powcaptcha = PowCaptchaSolver()
         self.privatecaptcha = PrivateCaptchaSolver()
@@ -98,6 +100,9 @@ class AntibotClient:
 
     async def solve_mcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.mcaptcha.solve(**kwargs)
+
+    async def solve_paulpow(self, **kwargs: Any) -> CaptchaResult:
+        return await self.paulpow.solve(**kwargs)
 
     async def solve_pcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.pcaptcha.solve(**kwargs)
@@ -411,6 +416,29 @@ class AntibotClient:
                 else:
                     mc_kwargs["base_url"] = target_url
             return await self.solve_mcaptcha(**mc_kwargs)
+        if provider == "paulpow":
+            pp_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "submit",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            pp_kwargs.setdefault("challenge_url", target_url)
+            return await self.solve_paulpow(**pp_kwargs)
         if provider == "pcaptcha":
             pc_kwargs = {
                 k: v
