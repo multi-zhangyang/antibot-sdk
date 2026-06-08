@@ -8,6 +8,7 @@ from .providers.aliyun import AliyunCaptchaSolver
 from .providers.ajcaptcha import AJCaptchaSolver
 from .providers.altcha import AltchaSolver
 from .providers.browser import BrowserAutomation
+from .providers.cap import CapSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.hcaptcha import HCaptchaSolver
@@ -24,6 +25,7 @@ class AntibotClient:
         self.profile = profile
         self.browser_binary = browser_binary
         self.browser = BrowserAutomation()
+        self.cap = CapSolver()
         self.ajcaptcha = AJCaptchaSolver()
         self.altcha = AltchaSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
@@ -53,6 +55,9 @@ class AntibotClient:
 
     async def solve_ajcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.ajcaptcha.solve(**kwargs)
+
+    async def solve_cap(self, **kwargs: Any) -> CaptchaResult:
+        return await self.cap.solve(**kwargs)
 
     async def solve_altcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.altcha.solve(**kwargs)
@@ -152,6 +157,34 @@ class AntibotClient:
             }
             frc_kwargs.setdefault("puzzle_url", target_url)
             return await self.solve_friendlycaptcha(**frc_kwargs)
+        if provider == "cap":
+            cap_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "token",
+                    "c",
+                    "s",
+                    "d",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "api_endpoint",
+                    "redeem_url",
+                    "redeem",
+                    "start",
+                    "max_attempts_per_challenge",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            cap_kwargs.setdefault("challenge_url", target_url)
+            return await self.solve_cap(**cap_kwargs)
         if provider == "aliyun":
             return await self.solve_aliyun(target_url=target_url, **kwargs)
         if provider == "recaptcha":

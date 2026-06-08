@@ -17,6 +17,16 @@ from .providers.altcha import (
     parse_altcha_payload_b64,
     solve_altcha_challenge,
 )
+from .providers.cap import (
+    CapChallenge,
+    CapSolution,
+    cap_hash_hex,
+    cap_pow_matches,
+    cap_seeded_challenges,
+    solve_cap_challenges,
+    solve_cap_seeded,
+    verify_cap_solution,
+)
 from .providers.friendlycaptcha import (
     FriendlyPuzzle,
     FriendlySolution,
@@ -39,6 +49,8 @@ __all__ = [
     "CaptchaResult",
     "AltchaChallenge",
     "AltchaSolution",
+    "CapChallenge",
+    "CapSolution",
     "FriendlyPuzzle",
     "FriendlySolution",
     "FailureClassifier",
@@ -57,6 +69,12 @@ __all__ = [
     "altcha_hash_hex",
     "parse_altcha_payload_b64",
     "solve_altcha_challenge",
+    "cap_hash_hex",
+    "cap_pow_matches",
+    "cap_seeded_challenges",
+    "solve_cap_challenges",
+    "solve_cap_seeded",
+    "verify_cap_solution",
     "friendly_difficulty_to_threshold",
     "parse_friendly_solution_payload",
     "solve_friendly_puzzle",

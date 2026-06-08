@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / FriendlyCaptcha PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / FriendlyCaptcha PoW / Cap PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -14,6 +14,7 @@
 - AJ-Captcha / Anji：新增纯 HTTP 协议 solver，走 `/captcha/get` 图像缺口定位、AES `pointJson`、`/captcha/check`，输出二次校验用的 `captchaVerification`，不启动浏览器。
 - ALTCHA：新增 PoW 协议 solver，解析 challenge / `WWW-Authenticate: Altcha ...`，计算 number，输出表单 base64 payload 或 M2M Authorization header，不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
+- Cap / @cap.js：新增 SHA-256 PoW 协议 solver，支持 v1 seeded challenge 与 format-2 `sha256-pow`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
 - GeeTest v4：从 observer 升级出滑动 solver alpha，抓取 bg/slice、CV 匹配缺口、生成拖动轨迹，并提取 `lot_number/captcha_output/pass_token/gen_time`。
 - 网易易盾 / Yidun：滑动拼图 solver alpha，抓取 bg/front、OpenCV 定位缺口、模拟滑块轨迹，并提取 `validate/token/zoneId`。
 - Policy Engine：把 `F001/F015/NONE/gap/candidate/watchdog timeout` 等失败归类，决定是否换 session，并输出下一步调参建议。
@@ -34,6 +35,7 @@
 | AJ-Captcha / Anji | 协议 solver | `slider_protocol` | alpha | `captchaVerification/token` |
 | ALTCHA | 协议 solver | `proof_of_work` | alpha | base64 payload / Authorization header |
 | FriendlyCaptcha | 协议 solver | `proof_of_work` | alpha | `frc-captcha-solution` payload |
+| Cap / @cap.js | 协议 solver | `proof_of_work` | alpha | `/redeem` body / Cap token |
 | GeeTest v4 | 真实 solver | `slider` | alpha | `pass_token/lot_number` |
 | NetEase Yidun | 真实 solver | `jigsaw` | alpha | `validate/token/zoneId` |
 | Turnstile | 流程/Token 观察采集 | `token_widget` | observer | widget token / artifacts |
@@ -726,7 +728,76 @@ async with AntibotClient() as client:
 
 ---
 
-### 11. GeeTest v4 / 极验
+### 11. Cap / @cap.js PoW
+
+Cap 是 self-hosted CAPTCHA 方向里比较适合 SDK 化的一类：核心是 SHA-256 proof-of-work。SDK 当前只做协议层可验证的部分，不启动浏览器。
+
+支持两种主流形态：
+
+- v1 seeded challenge：服务端返回 `token` 和 `challenge: {c, s, d}`，SDK 按 Cap PRNG 生成每个 `salt/target` 并搜索 nonce。
+- format-2 `sha256-pow`：服务端直接返回 `challenges: [{protocol:"sha256-pow", payload:{salt,target}}]`，SDK 逐个求解并输出 `{nonce}`。
+
+输出有两种：
+
+- 不 redeem：`ticket` 是可直接 POST 给业务 `/redeem` 的 JSON body：`{"token":"...","solutions":[...]}`。
+- 设置 `--api-endpoint` 或 `--redeem`：自动 POST `/redeem`，`ticket` 返回最终 Cap token。
+
+命令示例：
+
+```bash
+antibot solve cap \
+  --api-endpoint 'https://target.example/cap/'
+```
+
+只解 seeded token，不请求网络：
+
+```bash
+antibot solve cap \
+  --token 'challenge token' \
+  --c 50 \
+  --s 32 \
+  --d 4
+```
+
+直接传 challenge JSON：
+
+```bash
+antibot solve cap \
+  --challenge-json '{"token":"...","challenge":{"c":50,"s":32,"d":4}}'
+```
+
+压测：
+
+```bash
+antibot stress cap \
+  --api-endpoint 'https://target.example/cap/' \
+  --runs 50 \
+  --concurrency 5 \
+  --timeout 60
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_cap(
+        api_endpoint="https://target.example/cap/",
+        timeout_sec=60,
+    )
+    print(ret.ok, ret.ticket, ret.verify_code)
+```
+
+当前定位：
+
+- 支持 Cap v1 seeded SHA-256 PoW 与 format-2 `sha256-pow`。
+- format-2 的 `rsw`、`instrumentation` 不伪装成已解决；遇到时会明确返回 unsupported diagnostics。
+- 默认单 worker，适合 VPS；高 `d` 或高 `c` 时再显式调 `--workers` 和 `--timeout`。
+
+---
+
+### 12. GeeTest v4 / 极验
 
 GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：能在官方 v4 slide demo 上完成图片定位、轨迹拖动和成功载荷提取。但这个能力还不是稳定通杀，真实站点仍会受风险策略、设备指纹、轨迹质量和出口 IP 影响。
 
@@ -823,7 +894,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 12. 网易易盾 / Yidun 滑动拼图
+### 13. 网易易盾 / Yidun 滑动拼图
 
 Yidun 现在保留 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
 
@@ -894,7 +965,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 13. 自动分发模式
+### 14. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
@@ -902,6 +973,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - AJ-Captcha / Anji / `/captcha/get` 相关 URL -> `ajcaptcha`
 - ALTCHA 相关 URL -> `altcha`
 - FriendlyCaptcha / `frc-captcha` 相关 URL -> `friendlycaptcha`
+- Cap / trycap / cap-widget 相关 URL -> `cap`
 - Tencent / TCaptcha 相关 URL -> `tencent`
 - GeeTest / gcaptcha4 相关 URL -> `geetest`
 - Yidun / NetEase Dun / necaptcha / dun.163.com 相关 URL -> `yidun`
@@ -919,7 +991,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 14. 代理格式
+### 15. 代理格式
 
 支持以下格式：
 
@@ -1005,6 +1077,12 @@ async def main():
             output_dir="/tmp/recaptcha-run",
         )
         print(recaptcha.ok, recaptcha.ticket, recaptcha.diagnostics.get("action"))
+
+        cap = await client.solve_cap(
+            api_endpoint="https://target.example/cap/",
+            timeout_sec=60,
+        )
+        print(cap.ok, cap.ticket, cap.verify_code)
 
         yidun = await client.solve_yidun(
             target_url="https://dun.163.com/trial/jigsaw",
@@ -1093,6 +1171,11 @@ antibot stress altcha --challenge-url 'https://target.example/altcha/challenge' 
 antibot solve friendlycaptcha --puzzle-url 'https://api.friendlycaptcha.com/api/v1/puzzle' --sitekey 'FCxxxxx'
 antibot stress friendlycaptcha --puzzle-url 'https://api.friendlycaptcha.com/api/v1/puzzle' --sitekey 'FCxxxxx' --runs 20
 
+# Cap / @cap.js
+antibot solve cap --api-endpoint 'https://target.example/cap/'
+antibot solve cap --token 'challenge token' --c 50 --s 32 --d 4
+antibot stress cap --api-endpoint 'https://target.example/cap/' --runs 50 --concurrency 5
+
 # Submit verification，证明 token 是否真过页面流程
 antibot verify recaptcha --url 'https://target.example/form' --captcha-json /tmp/recaptcha-run/recaptcha_run.json --submit '#submit' --success '.ok' --failure '.captcha-error'
 antibot verify hcaptcha --url 'https://target.example/form' --token 'P1_xxx' --submit '#submit' --success '.ok'
@@ -1125,7 +1208,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / FriendlyCaptcha / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / FriendlyCaptcha / Cap / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -1134,6 +1217,7 @@ turnstile_page.html / hcaptcha_page.html / recaptcha_page.html / geetest_page.ht
 ajcaptcha_run.json / ajcaptcha_original.png / ajcaptcha_jigsaw.png
 altcha_run.json
 friendlycaptcha_run.json
+cap_run.json
 geetest_slide_bg_N.png / geetest_slide_slice_N.png
 yidun_run.json / yidun_page.png / yidun_page.html
 yidun_slide_bg_N.jpg / yidun_slide_front_N.png
@@ -1184,6 +1268,7 @@ src/antibot_sdk/
     ajcaptcha.py            # AJ-Captcha blockPuzzle protocol solver
     altcha.py               # ALTCHA PoW protocol solver
     friendlycaptcha.py      # FriendlyCaptcha classic PoW protocol solver
+    cap.py                  # Cap/@cap.js SHA-256 PoW protocol solver
     geetest.py              # GeeTest v4 hook + slide solver alpha
     hcaptcha.py             # hCaptcha hook/observer provider
     recaptcha.py            # reCAPTCHA/Enterprise hook/observer provider
@@ -1201,6 +1286,7 @@ tests/
   test_ajcaptcha.py
   test_altcha.py
   test_friendlycaptcha.py
+  test_cap.py
   test_yidun_slide.py
 ```
 
@@ -1211,7 +1297,7 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 16 passed
+pytest: 38 passed
 node -c bridge.js/site_profiles.js/runner.js: passed
 uv build: success
 watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON
@@ -1288,6 +1374,18 @@ friendly-pow 官方 easy fixture：成功命中 nonce bytes 00 00 00 00 9a 00 00
 诊断字段按官方 DataView 默认 big-endian 生成。
 ```
 
+Cap / @cap.js：
+
+```text
+Cap PRNG/FNV 与 upstream core/src/prng.js 交叉校验。
+官方 core generateChallenge/validateChallenge v1：Python solve body 被 validateChallenge 接受。
+官方 core format-2 sha256-pow：Python solutions=[{nonce:...}] 被 validateChallenge 接受。
+本地 v1 seeded challenge + /redeem：ok=true，成功返回 Cap token。
+本地 format-2 sha256-pow + /redeem：ok=true，成功返回 Cap token。
+本地 Cap stress 30 轮/concurrency=5：30/30，avg≈54.1ms，p95≈81ms。
+unsupported 协议回归：format-2 rsw 明确返回 unsupported_protocols。
+```
+
 Turnstile：
 
 ```text
@@ -1317,6 +1415,7 @@ stress recaptcha mock 2 轮：2/2。
 - AJ-Captcha 的主要误差来自白色描边过弱、服务端自定义模板/尺寸、以及干扰图与真实模板相似；优先调 `--min-score`、保存 `ajcaptcha_original.png / ajcaptcha_jigsaw.png` 复盘。
 - ALTCHA 是 PoW，不是识图；耗时主要由 `maxnumber`、命中位置和 `workers` 决定。VPS 上默认单 worker，避免把 CPU 打满。
 - FriendlyCaptcha classic 也是 PoW；耗时主要由 difficulty、solution count、命中位置和 worker 数决定。默认 `10,000,000` 次/段 solution 上限，真实站点不够时调 `--max-attempts-per-solution`。
+- Cap PoW 耗时主要由 `c/s/d`、format-2 target 长度、命中位置和 worker 数决定；遇到 `rsw/instrumentation` 时不要硬解，当前版本会按 unsupported 返回。
 - Yidun 的误差主要来自三类：浅色缺口的 `color_template` / 暗色缺口的 `shadow_*` 分支选择、front 图片相对 slider 的视觉偏移、以及轨迹/IP/设备指纹。
 - 代理池能明显降低部分 F001，但仍会出现 `NONE`、`gap not found`、`candidate rejected` 等临时状态。
 - 当前最佳基线是：**Qoder + proxy + 快 session 策略**。

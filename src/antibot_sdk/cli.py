@@ -131,6 +131,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "aliyun",
             "tencent",
             "friendlycaptcha",
+            "cap",
             "geetest",
             "yidun",
             "hcaptcha",
@@ -235,6 +236,26 @@ async def amain(argv: list[str] | None = None) -> int:
     frc.add_argument("--output-dir")
     frc.add_argument("--frc-client", default="js-0.9.19")
     frc.add_argument("--raw", action="store_true")
+
+    cap = solve_sub.add_parser("cap")
+    cap_source = cap.add_mutually_exclusive_group(required=True)
+    cap_source.add_argument("--token", help="Cap seeded challenge token")
+    cap_source.add_argument("--challenge-json", help="inline JSON object/list, or @/path/to/challenge.json")
+    cap_source.add_argument("--challenge-file")
+    cap_source.add_argument("--challenge-url")
+    cap_source.add_argument("--api-endpoint", help="Cap API endpoint prefix; infers /challenge and /redeem")
+    cap.add_argument("--c", type=int, default=50, help="seeded challenge count")
+    cap.add_argument("--s", type=int, default=32, help="seeded salt size")
+    cap.add_argument("--d", type=int, default=4, help="seeded difficulty hex-prefix length")
+    cap.add_argument("--start", type=int, default=0)
+    cap.add_argument("--max-attempts-per-challenge", type=int, default=10_000_000)
+    cap.add_argument("--workers", type=int, default=1)
+    cap.add_argument("--timeout", type=int, default=60)
+    cap.add_argument("--proxy")
+    cap.add_argument("--output-dir")
+    cap.add_argument("--redeem-url")
+    cap.add_argument("--redeem", action="store_true", help="POST solved body to /redeem and return final Cap token")
+    cap.add_argument("--raw", action="store_true")
 
     gt = solve_sub.add_parser("geetest")
     gt.add_argument("--url", dest="target_url", required=True)
@@ -402,6 +423,22 @@ async def amain(argv: list[str] | None = None) -> int:
     sfrc.add_argument("--output-json")
     sfrc.add_argument("--full", action="store_true")
 
+    scap = stress_sub.add_parser("cap")
+    scap_source = scap.add_mutually_exclusive_group(required=True)
+    scap_source.add_argument("--challenge-url")
+    scap_source.add_argument("--api-endpoint", help="Cap API endpoint prefix; infers /challenge and /redeem")
+    scap.add_argument("--runs", type=int, default=10)
+    scap.add_argument("--concurrency", type=int, default=2)
+    scap.add_argument("--timeout", type=int, default=60)
+    scap.add_argument("--max-attempts-per-challenge", type=int, default=10_000_000)
+    scap.add_argument("--workers", type=int, default=1)
+    scap.add_argument("--proxy")
+    scap.add_argument("--redeem-url")
+    scap.add_argument("--redeem", action="store_true")
+    scap.add_argument("--output-dir")
+    scap.add_argument("--output-json")
+    scap.add_argument("--full", action="store_true")
+
     sg = stress_sub.add_parser("geetest")
     sg.add_argument("--url", dest="target_url", required=True)
     sg.add_argument("--runs", type=int, default=3)
@@ -541,7 +578,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "proxy_server": args.proxy,
             "headless": headless,
         }
-        if provider in (None, "aliyun", "geetest", "yidun", "hcaptcha", "recaptcha", "turnstile"):
+        if provider in (None, "aliyun", "geetest", "yidun", "hcaptcha", "recaptcha", "turnstile", "cap"):
             common.update({
                 "site_profile": args.site_profile,
                 "output_dir": args.output_dir,
@@ -668,6 +705,27 @@ async def amain(argv: list[str] | None = None) -> int:
             proxy_server=args.proxy,
             output_dir=args.output_dir,
             frc_client=args.frc_client,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "cap":
+        ret = await client.solve_cap(
+            token=args.token,
+            c=args.c,
+            s=args.s,
+            d=args.d,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            api_endpoint=args.api_endpoint,
+            redeem_url=args.redeem_url,
+            redeem=args.redeem,
+            start=args.start,
+            max_attempts_per_challenge=args.max_attempts_per_challenge,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -909,6 +967,28 @@ async def amain(argv: list[str] | None = None) -> int:
                 puzzle_url=args.puzzle_url,
                 sitekey=args.sitekey,
                 max_attempts_per_solution=args.max_attempts_per_solution,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "cap":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="cap",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_cap(
+                challenge_url=args.challenge_url,
+                api_endpoint=args.api_endpoint,
+                redeem_url=args.redeem_url,
+                redeem=args.redeem,
+                max_attempts_per_challenge=args.max_attempts_per_challenge,
                 workers=args.workers,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,

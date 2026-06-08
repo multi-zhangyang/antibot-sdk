@@ -50,6 +50,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "frc-captcha-solution payload",
         "scope": "FriendlyCaptcha classic PoW：获取 puzzle，按 friendly-pow/blake2b 求解多段 nonce，输出隐藏表单字段 payload；不启动浏览器。",
     },
+    "cap": {
+        "provider": "cap",
+        "name": "Cap / @cap.js",
+        "category": "solver",
+        "captcha_type": "proof_of_work",
+        "status": "alpha",
+        "output": "redeem body / Cap token",
+        "scope": "Cap v1 seeded PoW 与 format-2 sha256-pow：本地 SHA-256 nonce 搜索，可输出 /redeem body 或直接 redeem token；不启动浏览器。",
+    },
     "geetest": {
         "provider": "geetest",
         "name": "GeeTest v4",
