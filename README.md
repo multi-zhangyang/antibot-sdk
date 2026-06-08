@@ -11,7 +11,7 @@
 - Submit Verification：把 `token_collected / server_verified / flow_passed` 拆开，用真实页面提交和 success/failure oracle 验证“token 采集 ≠ 真过验证”。
 - Tencent Captcha：封装腾讯滑块的页面触发、浏览器池、缺口识别、轨迹拖拽、ticket/randstr 输出。
 - Aliyun Captcha：封装阿里云滑块的 Node/Puppeteer runner、站点 profile、attempt/session retry、错误归一、artifact 保留。
-- GeeTest v4：新增浏览器 hook/observer provider，采集 `initGeetest4` 配置、实例方法、运行事件、`getValidate()` 成功载荷和网络现场。
+- GeeTest v4：从 observer 升级出滑动 solver alpha，抓取 bg/slice、CV 匹配缺口、生成拖动轨迹，并提取 `lot_number/captcha_output/pass_token/gen_time`。
 - Policy Engine：把 `F001/F015/NONE/gap/candidate/watchdog timeout` 等失败归类，决定是否换 session，并输出下一步调参建议。
 - Stress Harness：统一压测入口，输出 summary、records、attempt code 分布、失败现场。
 
@@ -459,7 +459,7 @@ antibot stress aliyun \
 
 ### 8. GeeTest v4 / 极验
 
-第一版 GeeTest provider 先做 **可探测、可触发、可采集、可压测**，为后续轨迹/图像/行为模型接入打底。
+GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：能在官方 v4 slide demo 上完成图片定位、轨迹拖动和成功载荷提取。但这个能力还不是稳定通杀，真实站点仍会受风险策略、设备指纹、轨迹质量和出口 IP 影响。
 
 能力：
 
@@ -467,6 +467,12 @@ antibot stress aliyun \
 - 记录 GeeTest v4 config，例如 `captchaId/captcha_id`、`product`。
 - wrap CAPTCHA 实例的 `appendTo / bindForm / showCaptcha / verify / onReady / onSuccess / getValidate` 等方法。
 - 自动尝试调用 `showCaptcha()`，并点击页面中的 GeeTest 相关元素。
+- 对滑动验证自动抽取：
+  - `.geetest_bg` 背景图
+  - `.geetest_slice_bg` 滑块图
+  - `.geetest_btn` / track DOM 坐标
+- 使用 OpenCV 模板匹配估算缺口距离，保存 `geetest_slide_bg_N.png` 和 `geetest_slide_slice_N.png`。
+- 生成带缓动、抖动和 hold 的浏览器 mouse trace 进行拖拽。
 - 当页面触发 `onSuccess` 时，自动读取 v4 成功载荷：
 
 ```json
@@ -486,7 +492,8 @@ antibot stress aliyun \
 ```bash
 antibot solve geetest \
   --url 'https://target.example/path-with-geetest' \
-  --output-dir /tmp/geetest-run
+  --output-dir /tmp/geetest-run \
+  --slide-attempts 3
 ```
 
 指定触发按钮：
@@ -495,7 +502,16 @@ antibot solve geetest \
 antibot solve geetest \
   --url 'https://target.example/path-with-geetest' \
   --trigger '.login-submit' \
-  --trigger '.geetest_btn'
+  --trigger '.geetest_btn' \
+  --slide-attempts 3
+```
+
+只做 observer，不拖动：
+
+```bash
+antibot solve geetest \
+  --url 'https://target.example/path-with-geetest' \
+  --no-slide-solve
 ```
 
 压测：
@@ -526,7 +542,9 @@ async with AntibotClient() as client:
 当前定位：
 
 - 已能处理无感/低风险直接成功、页面自身成功回调、以及本地/测试页面的 GeeTest v4 成功链路。
-- 如果遇到真实图片/滑块挑战，当前版本会先完整保留现场；下一步再接入识别、轨迹和按站点 profile 的行为策略。
+- 官方 `slide-popup-zh.html` 已出现单轮成功：返回 `pass_token/lot_number/captcha_output/gen_time`。
+- 目前压测还不稳定，最近 3 轮官方 slide stress 出现过 `1/3` 和 `0/3`，失败多为距离误匹配或轨迹被判失败；这说明它是 solver alpha，不是稳定产品级。
+- 下一步重点是多特征缺口定位、轨迹模型分层、失败后刷新/重试策略，而不是再做 observer。
 
 ---
 
@@ -741,6 +759,7 @@ Turnstile / hCaptcha / reCAPTCHA / GeeTest 会保留：
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
 turnstile_page.png / hcaptcha_page.png / recaptcha_page.png / geetest_page.png
 turnstile_page.html / hcaptcha_page.html / recaptcha_page.html / geetest_page.html
+geetest_slide_bg_N.png / geetest_slide_slice_N.png
 ```
 
 Submit verification 会保留：
@@ -807,11 +826,13 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 14 passed
+pytest: 15 passed
 node -c bridge.js/site_profiles.js/runner.js: passed
 uv build: success
 watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON
 geetest mock: initGeetest4/onSuccess/getValidate 链路通过
+geetest official slide: 单次 solve 成功提取 pass_token/lot_number/captcha_output/gen_time
+geetest official slide stress: 当前不稳定，观测到 1/3 和 0/3，已保留失败现场用于继续优化
 turnstile mock: render/callback/input token 链路通过
 hcaptcha mock: render/callback/input token 链路通过
 recaptcha mock: render/enterprise execute/callback/input token 链路通过

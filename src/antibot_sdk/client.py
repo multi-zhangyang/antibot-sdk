@@ -70,6 +70,8 @@ class AntibotClient:
                     "timeout_sec",
                     "trigger_selectors",
                     "auto_trigger",
+                    "slide_solve",
+                    "slide_max_attempts",
                     "output_dir",
                     "browser_binary",
                     "user_agent",

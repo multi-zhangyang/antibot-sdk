@@ -189,6 +189,8 @@ async def amain(argv: list[str] | None = None) -> int:
     gt.add_argument("--output-dir")
     gt.add_argument("--trigger", action="append", default=[])
     gt.add_argument("--no-auto-trigger", action="store_true")
+    gt.add_argument("--no-slide-solve", action="store_true")
+    gt.add_argument("--slide-attempts", type=int, default=3)
     gt.add_argument("--browser-binary")
     gt.add_argument("--user-agent")
     gt.add_argument("--locale", default="zh-CN")
@@ -297,6 +299,8 @@ async def amain(argv: list[str] | None = None) -> int:
     sg.add_argument("--proxy")
     sg.add_argument("--trigger", action="append", default=[])
     sg.add_argument("--no-auto-trigger", action="store_true")
+    sg.add_argument("--no-slide-solve", action="store_true")
+    sg.add_argument("--slide-attempts", type=int, default=3)
     sg.add_argument("--output-dir")
     sg.add_argument("--output-json")
     sg.add_argument("--full", action="store_true")
@@ -489,11 +493,13 @@ async def amain(argv: list[str] | None = None) -> int:
             proxy_server=args.proxy,
             timeout_sec=args.timeout,
             output_dir=args.output_dir,
-            trigger_selectors=args.trigger or None,
-            auto_trigger=not args.no_auto_trigger,
-            browser_binary=args.browser_binary,
-            user_agent=args.user_agent,
-            locale=args.locale,
+                trigger_selectors=args.trigger or None,
+                auto_trigger=not args.no_auto_trigger,
+                slide_solve=not args.no_slide_solve,
+                slide_max_attempts=args.slide_attempts,
+                browser_binary=args.browser_binary,
+                user_agent=args.user_agent,
+                locale=args.locale,
             timezone_id=args.timezone,
         )
         emit(ret, include_raw=args.raw)
@@ -661,6 +667,8 @@ async def amain(argv: list[str] | None = None) -> int:
                 timeout_sec=args.timeout,
                 trigger_selectors=args.trigger or None,
                 auto_trigger=not args.no_auto_trigger,
+                slide_solve=not args.no_slide_solve,
+                slide_max_attempts=args.slide_attempts,
                 output_dir=str(root / f"run_{i}") if root else None,
             ),
         )
