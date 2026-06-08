@@ -158,6 +158,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "answer buffer / verification body",
         "scope": "pow_captcha 二进制 buffer reconstruction PoW：解析 serialized quiz、按 uncertainty ranges 做 mixed-radix 搜索，输出命中 SHA-256 的 answer；不启动浏览器。",
     },
+    "powbot": {
+        "provider": "powbot",
+        "name": "PoW Bot Deterrent",
+        "category": "solver",
+        "captcha_type": "scrypt_pow",
+        "status": "alpha",
+        "output": "nonce / validated OK",
+        "scope": "sequentialread/PoW Bot Deterrent scrypt-WASM 协议 solver：解析 base64 JSON challenge，复现 scrypt(nonce_bytes,preimage_bytes,N/r/p/klen) 尾部阈值比较，可提交 /Verify；不启动浏览器。",
+    },
     "privatecaptcha": {
         "provider": "privatecaptcha",
         "name": "PrivateCaptcha",

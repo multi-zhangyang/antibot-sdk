@@ -23,6 +23,7 @@ from .providers.mcaptcha import MCaptchaSolver
 from .providers.paulpow import PaulPowSolver
 from .providers.pcaptcha import PCaptchaSolver
 from .providers.powcaptcha import PowCaptchaSolver
+from .providers.powbot import PowBotSolver
 from .providers.privatecaptcha import PrivateCaptchaSolver
 from .providers.portcullis import PortcullisSolver
 from .providers.recaptcha import ReCaptchaSolver
@@ -54,6 +55,7 @@ class AntibotClient:
         self.paulpow = PaulPowSolver()
         self.pcaptcha = PCaptchaSolver()
         self.powcaptcha = PowCaptchaSolver()
+        self.powbot = PowBotSolver()
         self.privatecaptcha = PrivateCaptchaSolver()
         self.portcullis = PortcullisSolver()
         self.wicketkeeper = WicketkeeperSolver()
@@ -120,6 +122,9 @@ class AntibotClient:
 
     async def solve_powcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.powcaptcha.solve(**kwargs)
+
+    async def solve_powbot(self, **kwargs: Any) -> CaptchaResult:
+        return await self.powbot.solve(**kwargs)
 
     async def solve_privatecaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.privatecaptcha.solve(**kwargs)
@@ -534,6 +539,43 @@ class AntibotClient:
             }
             pow_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_powcaptcha(**pow_kwargs)
+        if provider == "powbot":
+            powbot_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "challenge",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenges_url",
+                    "verify_url",
+                    "api_token",
+                    "difficulty_level",
+                    "batch_index",
+                    "submit",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            if not powbot_kwargs.get("base_url") and not powbot_kwargs.get("challenges_url"):
+                target_lower = target_url.lower()
+                if "/getchallenges" in target_lower:
+                    powbot_kwargs["challenges_url"] = target_url
+                elif "/verify" in target_lower:
+                    powbot_kwargs["verify_url"] = target_url
+                    cut = target_lower.index("/verify")
+                    powbot_kwargs["base_url"] = target_url[:cut]
+                else:
+                    powbot_kwargs["base_url"] = target_url
+            return await self.solve_powbot(**powbot_kwargs)
         if provider == "privatecaptcha":
             pc_kwargs = {
                 k: v

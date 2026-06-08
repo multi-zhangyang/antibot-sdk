@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -31,6 +31,7 @@
 - silent-challenge：新增 motion/navigator attestation + SHA-256 balloon memory-hard PoW 协议 solver，合成高分行为/环境 payload，搜索 balloon nonce，可提交 `/challenge/:id/verify`，不启动浏览器。
 - P-Captcha：新增 QuadraticResidueProblem 协议 solver，解析 Woodall prime challenge，用模平方根直接求 answer，可提交 `{id, answer}`，不启动浏览器。
 - pow_captcha：新增二进制 buffer reconstruction PoW solver，解析 serialized quiz、按 uncertainty ranges 做 mixed-radix 搜索，输出命中 SHA-256 的 answer，不启动浏览器。
+- PoW Bot Deterrent：新增 scrypt-WASM PoW 协议 solver，解析 base64 JSON challenge，复现 `scrypt(nonce_bytes, preimage_bytes, N/r/p/klen)` 与尾部阈值比较，可提交 `/Verify`，不启动浏览器。
 - GeeTest v4：从 observer 升级出滑动 solver alpha，抓取 bg/slice、CV 匹配缺口、生成拖动轨迹，并提取 `lot_number/captcha_output/pass_token/gen_time`。
 - 网易易盾 / Yidun：滑动拼图 solver alpha，抓取 bg/front、OpenCV 定位缺口、模拟滑块轨迹，并提取 `validate/token/zoneId`。
 - Policy Engine：把 `F001/F015/NONE/gap/candidate/watchdog timeout` 等失败归类，决定是否换 session，并输出下一步调参建议。
@@ -68,6 +69,7 @@
 | silent-challenge | 协议 solver | `passive_pow` | alpha | challenge verify body / signed token |
 | P-Captcha | 协议 solver | `quadratic_residue_pow` | alpha | `answer` / `{id, answer}` |
 | pow_captcha | 协议 solver | `buffer_reconstruction_pow` | alpha | answer buffer / verify body |
+| PoW Bot Deterrent | 协议 solver | `scrypt_pow` | alpha | nonce / validated OK |
 | GeeTest v4 | 真实 solver | `slider` | alpha | `pass_token/lot_number` |
 | NetEase Yidun | 真实 solver | `jigsaw` | alpha | `validate/token/zoneId` |
 | Turnstile | 流程/Token 观察采集 | `token_widget` | observer | widget token / artifacts |
@@ -1623,6 +1625,67 @@ async with AntibotClient() as client:
 
 ---
 
+### 22.1 PoW Bot Deterrent scrypt-WASM PoW
+
+PoW Bot Deterrent 是一个 self-hosted 反机器人组件，设计上接近表单验证码：服务端批量签发 challenge，浏览器 worker 调 WASM scrypt 搜索 nonce，业务后端再把 `challenge + nonce` 提交给 `/Verify`。
+
+它比普通 SHA-256 hashcash 更值得 SDK 化的点在于：
+
+- worker 不是直接 SHA-256，而是 `scrypt`，每次尝试带 CPU/内存成本；
+- challenge 是 base64 JSON，包含完整 scrypt 参数；
+- 难度不是前导零，而是比较 scrypt 输出十六进制尾部：
+
+```text
+hash = scrypt(password=nonce_bytes, salt=preimage_bytes, N, r, p, klen)
+endOfHash = hash_hex[-len(difficulty):]
+pass = endOfHash <= difficulty
+```
+
+SDK 当前支持：
+
+- 解析 `/GetChallenges?difficultyLevel=...` 返回的 base64 challenge；
+- 复现 upstream difficulty threshold 生成逻辑；
+- 本地搜索 nonce，支持 `--workers` 分片；
+- 可选提交 `/Verify?challenge=...&nonce=...`，成功返回 `OK`；
+- 不启动浏览器，不加载 WASM，直接用 Python `hashlib.scrypt` 复现协议。
+
+只解 challenge：
+
+```bash
+antibot solve powbot \
+  --challenge 'base64-json-challenge' \
+  --timeout 60 \
+  --raw
+```
+
+完整协议闭环：
+
+```bash
+antibot solve powbot \
+  --base-url 'https://pow.example' \
+  --api-token '32hex-token' \
+  --difficulty-level 5 \
+  --submit
+```
+
+压测：
+
+```bash
+antibot stress powbot \
+  --challenge 'base64-json-challenge' \
+  --runs 20 \
+  --concurrency 4 \
+  --timeout 30
+```
+
+当前定位：
+
+- 这是 scrypt-WASM PoW 协议 solver，不做浏览器模拟。
+- 默认单 worker；真实默认 `N=4096,r=8,p=1,klen=16` 时每次尝试比 SHA-256 重很多，VPS 上不要盲目提高 `--concurrency`。
+- 如果走 `/Verify`，challenge 是一次性状态，压测应使用 `/GetChallenges` 新取 challenge，不要重复提交同一个 challenge。
+
+---
+
 ### 23. mCaptcha PoW
 
 mCaptcha 是 self-hosted PoW CAPTCHA。浏览器 widget 的流程是：`POST /api/v1/pow/config` 取 `string/difficulty_factor/salt`，本地搜索 nonce，再 `POST /api/v1/pow/verify` 换取服务端 token。SDK 当前把这条链路做成纯协议 solver。
@@ -2085,6 +2148,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - silent-challenge / silentchallenge / libcaptcha 相关 URL -> `silentchallenge`
 - P-Captcha / QuadraticResidueProblem 相关 URL -> `pcaptcha`
 - pow_captcha / powcaptcha / takeTest 相关 URL -> `powcaptcha`
+- PoW Bot Deterrent / `/GetChallenges?difficultyLevel=` 相关 URL -> `powbot`
 - Tencent / TCaptcha 相关 URL -> `tencent`
 - GeeTest / gcaptcha4 相关 URL -> `geetest`
 - Yidun / NetEase Dun / necaptcha / dun.163.com 相关 URL -> `yidun`
@@ -2425,7 +2489,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / FCaptcha / Cap / yourcaptcha / silent-challenge / P-Captcha / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / FCaptcha / Cap / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -2440,6 +2504,8 @@ cap_run.json
 yourcaptcha_run.json
 silentchallenge_run.json
 pcaptcha_run.json
+powcaptcha_run.json
+powbot_run.json
 geetest_slide_bg_N.png / geetest_slide_slice_N.png
 yidun_run.json / yidun_page.png / yidun_page.html
 yidun_slide_bg_N.jpg / yidun_slide_front_N.png
@@ -2503,6 +2569,7 @@ src/antibot_sdk/
     silentchallenge.py      # silent-challenge motion/navigator attestation + balloon PoW solver
     pcaptcha.py             # P-Captcha quadratic residue protocol solver
     powcaptcha.py           # pow_captcha buffer reconstruction PoW protocol solver
+    powbot.py               # PoW Bot Deterrent scrypt-WASM PoW protocol solver
     geetest.py              # GeeTest v4 hook + slide solver alpha
     hcaptcha.py             # hCaptcha hook/observer provider
     recaptcha.py            # reCAPTCHA/Enterprise hook/observer provider
@@ -2527,6 +2594,7 @@ tests/
   test_cap.py
   test_pcaptcha.py
   test_powcaptcha.py
+  test_powbot.py
   test_yourcaptcha.py
   test_silentchallenge.py
   test_yidun_slide.py
@@ -2539,8 +2607,9 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 95 passed
+pytest: 98 passed
 FCaptcha fixture/mock/stress: signalsHash-bound PoW、本地 /api/pow/challenge + /api/verify 验证通过
+PoW Bot Deterrent fixture/mock/stress: scrypt-WASM PoW、本地 /GetChallenges + /Verify 验证通过
 node -c bridge.js/site_profiles.js/runner.js: passed
 uv build: success
 watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON

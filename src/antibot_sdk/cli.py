@@ -143,6 +143,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "paulpow",
             "pcaptcha",
             "powcaptcha",
+            "powbot",
             "privatecaptcha",
             "portcullis",
             "wicketkeeper",
@@ -474,6 +475,26 @@ async def amain(argv: list[str] | None = None) -> int:
     powc.add_argument("--proxy")
     powc.add_argument("--output-dir")
     powc.add_argument("--raw", action="store_true")
+
+    powbot = solve_sub.add_parser("powbot")
+    powbot_source = powbot.add_mutually_exclusive_group(required=True)
+    powbot_source.add_argument("--base-url", help="PoW Bot Deterrent API root; infers /GetChallenges and /Verify")
+    powbot_source.add_argument("--challenge", help="inline base64 challenge")
+    powbot_source.add_argument("--challenge-json", help="inline challenge JSON/base64/list, or @/path")
+    powbot_source.add_argument("--challenge-file")
+    powbot_source.add_argument("--challenges-url", help="PoW Bot Deterrent /GetChallenges endpoint")
+    powbot.add_argument("--verify-url", help="PoW Bot Deterrent /Verify endpoint")
+    powbot.add_argument("--api-token", help="Bearer token for /GetChallenges and /Verify")
+    powbot.add_argument("--difficulty-level", type=int, default=5)
+    powbot.add_argument("--batch-index", type=int, default=0)
+    powbot.add_argument("--submit", action="store_true", help="POST solution to /Verify")
+    powbot.add_argument("--start", type=int, default=0)
+    powbot.add_argument("--max-attempts", type=int)
+    powbot.add_argument("--workers", type=int, default=1)
+    powbot.add_argument("--timeout", type=int, default=60)
+    powbot.add_argument("--proxy")
+    powbot.add_argument("--output-dir")
+    powbot.add_argument("--raw", action="store_true")
 
     priv = solve_sub.add_parser("privatecaptcha")
     priv_source = priv.add_mutually_exclusive_group(required=True)
@@ -972,6 +993,29 @@ async def amain(argv: list[str] | None = None) -> int:
     spow.add_argument("--output-json")
     spow.add_argument("--full", action="store_true")
 
+    spowbot = stress_sub.add_parser("powbot")
+    spowbot_source = spowbot.add_mutually_exclusive_group(required=True)
+    spowbot_source.add_argument("--base-url")
+    spowbot_source.add_argument("--challenge")
+    spowbot_source.add_argument("--challenge-json")
+    spowbot_source.add_argument("--challenge-file")
+    spowbot_source.add_argument("--challenges-url")
+    spowbot.add_argument("--verify-url")
+    spowbot.add_argument("--api-token")
+    spowbot.add_argument("--difficulty-level", type=int, default=5)
+    spowbot.add_argument("--batch-index", type=int, default=0)
+    spowbot.add_argument("--submit", action="store_true")
+    spowbot.add_argument("--runs", type=int, default=10)
+    spowbot.add_argument("--concurrency", type=int, default=2)
+    spowbot.add_argument("--timeout", type=int, default=60)
+    spowbot.add_argument("--start", type=int, default=0)
+    spowbot.add_argument("--max-attempts", type=int)
+    spowbot.add_argument("--workers", type=int, default=1)
+    spowbot.add_argument("--proxy")
+    spowbot.add_argument("--output-dir")
+    spowbot.add_argument("--output-json")
+    spowbot.add_argument("--full", action="store_true")
+
     spriv = stress_sub.add_parser("privatecaptcha")
     spriv_source = spriv.add_mutually_exclusive_group(required=True)
     spriv_source.add_argument("--puzzle")
@@ -1239,6 +1283,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "paulpow",
             "pcaptcha",
             "powcaptcha",
+            "powbot",
             "privatecaptcha",
             "portcullis",
             "wicketkeeper",
@@ -1599,6 +1644,27 @@ async def amain(argv: list[str] | None = None) -> int:
             challenge_url=args.challenge_url,
             challenge_id=args.challenge_id,
             verify_url=args.verify_url,
+            submit=args.submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "powbot":
+        ret = await client.solve_powbot(
+            base_url=args.base_url,
+            challenge=args.challenge,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenges_url=args.challenges_url,
+            verify_url=args.verify_url,
+            api_token=args.api_token,
+            difficulty_level=args.difficulty_level,
+            batch_index=args.batch_index,
             submit=args.submit,
             start=args.start,
             max_attempts=args.max_attempts,
@@ -2255,6 +2321,35 @@ async def amain(argv: list[str] | None = None) -> int:
                 challenge_id=args.challenge_id,
                 verify_url=args.verify_url,
                 submit=args.submit,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "powbot":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="powbot",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_powbot(
+                base_url=args.base_url,
+                challenge=args.challenge,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenges_url=args.challenges_url,
+                verify_url=args.verify_url,
+                api_token=args.api_token,
+                difficulty_level=args.difficulty_level,
+                batch_index=args.batch_index,
+                submit=args.submit,
+                start=args.start,
                 max_attempts=args.max_attempts,
                 workers=args.workers,
                 timeout_sec=args.timeout,

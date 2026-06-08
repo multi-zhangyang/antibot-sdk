@@ -27,6 +27,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://captcha.example/api/pow/challenge?siteKey=site-key") == "fcaptcha"
     assert detect_provider_for_url("https://auro.network/api/pow/setup") == "auro"
     assert detect_provider_for_url("https://captcha.example/powcaptcha/challenge") == "powcaptcha"
+    assert detect_provider_for_url("https://captcha.example/GetChallenges?difficultyLevel=5") == "powbot"
     assert detect_provider_for_url("https://captcha.example/chpiopow/challenge") == "chpiopow"
     assert detect_provider_for_url("https://captcha.example/impost/challenge") == "impost"
     assert detect_provider_for_url("https://captcha.example/kerberus/challenge?difficultyFactor=50") == "kerberus"
@@ -45,6 +46,7 @@ def test_generic_provider_detection():
     assert "generic_widget_enterprise" in list_profiles()["recaptcha"]
     assert "generic_widget" in list_profiles()["turnstile"]
     assert "buffer_reconstruction_pow" in list_profiles()["powcaptcha"]
+    assert "scrypt_pow" in list_profiles()["powbot"]
     assert "signals_bound_pow" in list_profiles()["fcaptcha"]
     assert "encrypted_behavior_pow" in list_profiles()["auro"]
     assert "target_match_pow" in list_profiles()["chpiopow"]
