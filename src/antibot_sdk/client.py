@@ -157,8 +157,6 @@ class AntibotClient:
                     "auto_trigger",
                     "slide_solve",
                     "slide_max_attempts",
-                    "point_solve",
-                    "point_max_attempts",
                     "output_dir",
                     "browser_binary",
                     "user_agent",

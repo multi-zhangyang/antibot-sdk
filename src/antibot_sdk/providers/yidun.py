@@ -1,20 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-import itertools
 import json
 import math
 import random
 import re
 import time
-from io import BytesIO
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import cv2
 import numpy as np
-from PIL import Image, ImageDraw, ImageEnhance, ImageOps
 
 from ..models import CaptchaResult
 from ..proxy import parse_proxy, redacted_proxy
@@ -205,27 +202,6 @@ YIDUN_HOOK_JS = r"""
   }
 })();
 """
-
-YIDUN_POINT_OCR_CONFUSIONS: dict[str, set[str]] = {
-    # RapidOCR is strong on clean Chinese crops, but these Yidun characters are
-    # rotated, blended into natural photos, and sometimes partially occluded.
-    # Keep the fallback map deliberately small: it is only used after exact
-    # matches and still has to win the global one-to-one assignment.
-    "全": {"金", "宝", "公", "叁", "参"},
-    "来": {"米"},
-    "扩": {"折", "拍", "式", "成", "区", "办", "专", "面", "护", "中"},
-    "安": {"爱", "商", "中"},
-    "类": {"美", "券", "拳", "泰", "茶", "新"},
-    "元": {"无", "完", "先"},
-    "体": {"保", "味"},
-    "库": {"医"},
-    "验": {"险", "健", "瑜", "喻", "输"},
-    "特": {"持", "诗", "待", "鑫", "转", "本"},
-}
-
-_YIDUN_POINT_DDDD: Any | None = None
-_YIDUN_POINT_RAPID: Any | None = None
-
 
 def _headless(value: bool | str | None) -> bool:
     if value is None:
@@ -454,553 +430,8 @@ def detect_yidun_slide_gap(bg_bytes: bytes, front_bytes: bytes) -> dict[str, Any
     }
 
 
-def _clean_yidun_point_text(text: str | None) -> str:
-    if not text:
-        return ""
-    # Prompt text is usually `"安" "验" "特"` or `请依次点击 "安" ...`.
-    quoted = re.findall(r'["“”]\s*([\u3400-\u9fff])\s*["“”]', text)
-    if quoted:
-        return "".join(quoted)
-    # Keep CJK only; it also normalizes API `front`.
-    return "".join(re.findall(r"[\u3400-\u9fff]", text))
-
-
-def _image_bytes_for_ocr(image: Image.Image, *, fmt: str = "JPEG") -> bytes:
-    buf = BytesIO()
-    if fmt.upper() == "JPEG":
-        image.convert("RGB").save(buf, format="JPEG", quality=94)
-    else:
-        image.save(buf, format=fmt)
-    return buf.getvalue()
-
-
-def _point_ocr_engines() -> tuple[Any, Any]:
-    global _YIDUN_POINT_DDDD, _YIDUN_POINT_RAPID
-    if _YIDUN_POINT_DDDD is None:
-        try:
-            import ddddocr  # type: ignore
-        except Exception as e:  # pragma: no cover - exercised by live env
-            raise RuntimeError(
-                "yidun picture-click needs optional OCR dependency ddddocr; "
-                "install with `pip install ddddocr rapidocr-onnxruntime`"
-            ) from e
-        _YIDUN_POINT_DDDD = ddddocr.DdddOcr(det=True, show_ad=False)
-    if _YIDUN_POINT_RAPID is None:
-        try:
-            from rapidocr_onnxruntime import RapidOCR  # type: ignore
-        except Exception as e:  # pragma: no cover - exercised by live env
-            raise RuntimeError(
-                "yidun picture-click needs optional OCR dependency rapidocr-onnxruntime; "
-                "install with `pip install ddddocr rapidocr-onnxruntime`"
-            ) from e
-        _YIDUN_POINT_RAPID = RapidOCR()
-    return _YIDUN_POINT_DDDD, _YIDUN_POINT_RAPID
-
-
-def _merge_point_box(
-    boxes: list[dict[str, Any]],
-    box: list[float],
-    *,
-    source: str,
-    label: str | None = None,
-    score: float | None = None,
-) -> None:
-    x1, y1, x2, y2 = box
-    cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
-    for item in boxes:
-        bx1, by1, bx2, by2 = item["box"]
-        bcx, bcy = (bx1 + bx2) / 2.0, (by1 + by2) / 2.0
-        if abs(cx - bcx) < 12 and abs(cy - bcy) < 12:
-            item["box"] = [min(bx1, x1), min(by1, y1), max(bx2, x2), max(by2, y2)]
-            item.setdefault("sources", []).append(source)
-            if label:
-                item.setdefault("labels", []).append({"text": label, "score": float(score or 0), "source": source})
-            return
-    item = {"box": box, "sources": [source], "labels": []}
-    if label:
-        item["labels"].append({"text": label, "score": float(score or 0), "source": source})
-    boxes.append(item)
-
-
-def _detect_yidun_point_boxes(image: Image.Image) -> list[dict[str, Any]]:
-    det, rapid = _point_ocr_engines()
-    width, height = image.size
-    boxes: list[dict[str, Any]] = []
-
-    # DdddOCR's detector is very good at CAPTCHA object boxes, but its coordinate
-    # scale can vary with generated PNG bytes. Feeding a 3x JPEG and normalizing
-    # gives stable boxes in source-image coordinates.
-    scaled = image.resize((width * 3, height * 3), Image.Resampling.LANCZOS)
-    # Besides normal/color-enhanced passes, grayscale and inverse-grayscale are
-    # important for dark glyphs blended into photo backgrounds. A hard sample
-    # like `安验特` has a black `特` over boats/masts: the normal detector misses
-    # it, but inverse/gray passes recover the box without doing a full sliding
-    # OCR scan.
-    gray_scaled = ImageOps.grayscale(scaled).convert("RGB")
-    variants = (
-        ("dddd:orig", scaled),
-        ("dddd:contrast", ImageEnhance.Contrast(scaled).enhance(2.0)),
-        (
-            "dddd:sat",
-            ImageEnhance.Contrast(ImageEnhance.Color(scaled).enhance(1.8)).enhance(1.7),
-        ),
-        ("dddd:inv", ImageOps.invert(scaled)),
-        ("dddd:gray0", gray_scaled),
-        ("dddd:invgray0", ImageOps.invert(gray_scaled)),
-        ("dddd:gray", ImageEnhance.Contrast(gray_scaled).enhance(2.2)),
-        ("dddd:invgray", ImageEnhance.Contrast(ImageOps.invert(gray_scaled)).enhance(2.0)),
-        (
-            "dddd:sharp",
-            ImageEnhance.Sharpness(ImageEnhance.Contrast(scaled).enhance(2.0)).enhance(3.0),
-        ),
-    )
-    for name, variant in variants:
-        try:
-            raw_boxes = det.detection(_image_bytes_for_ocr(variant))
-        except Exception:
-            raw_boxes = []
-        for raw_box in raw_boxes or []:
-            x1, y1, x2, y2 = [float(v) / 3.0 for v in raw_box]
-            bw, bh = x2 - x1, y2 - y1
-            if bw < 14 or bh < 14 or bw > 95 or bh > 90:
-                continue
-            if x1 < 2 and bw < 12:
-                continue
-            _merge_point_box(
-                boxes,
-                [max(0.0, x1), max(0.0, y1), min(float(width), x2), min(float(height), y2)],
-                source=name,
-            )
-
-    # RapidOCR full-image passes add boxes/labels that DdddOCR occasionally
-    # misses. These labels are also useful for quick exact matches.
-    rapid_variants = (
-        ("rapid:orig", image),
-        ("rapid:contrast", ImageEnhance.Contrast(image).enhance(1.8)),
-        (
-            "rapid:sat",
-            ImageEnhance.Contrast(ImageEnhance.Color(image).enhance(1.6)).enhance(1.6),
-        ),
-    )
-    for source, variant in rapid_variants:
-        try:
-            result, _elapsed = rapid(np.array(variant))
-        except Exception:
-            result = None
-        for item in result or []:
-            if len(item) < 3:
-                continue
-            poly, text, conf = item[0], str(item[1] or ""), float(item[2] or 0)
-            try:
-                xs = [float(p[0]) for p in poly]
-                ys = [float(p[1]) for p in poly]
-            except Exception:
-                continue
-            x1, y1, x2, y2 = min(xs), min(ys), max(xs), max(ys)
-            bw, bh = x2 - x1, y2 - y1
-            if bw < 14 or bh < 14 or bw > 100 or bh > 95:
-                continue
-            _merge_point_box(
-                boxes,
-                [max(0.0, x1), max(0.0, y1), min(float(width), x2), min(float(height), y2)],
-                source=source,
-                label=text,
-                score=conf,
-            )
-
-    return boxes
-
-
-def _score_point_label_for_target(label: str, confidence: float, target_char: str) -> float:
-    if not label:
-        return 0.0
-    if target_char in label:
-        return max(0.0, confidence)
-    confusions = YIDUN_POINT_OCR_CONFUSIONS.get(target_char, set())
-    if any(ch in confusions for ch in label):
-        # Exact OCR gets priority. Confusion scores are capped so they only fill
-        # gaps when the exact character is not found. Do not floor the value:
-        # very-low-confidence confusions should not steal an assignment from a
-        # distractor box that happens to look vaguely similar.
-        return min(0.62, max(0.0, confidence * 0.55))
-    return 0.0
-
-
-def _point_click_xy_for_box(image: Image.Image, box: list[float]) -> tuple[float, float]:
-    """Return a stroke-biased click point for a detected glyph box."""
-
-    width, height = image.size
-    x1, y1, x2, y2 = [float(v) for v in box]
-    x1i, y1i = max(0, int(math.floor(x1))), max(0, int(math.floor(y1)))
-    x2i, y2i = min(width, int(math.ceil(x2))), min(height, int(math.ceil(y2)))
-    if x2i - x1i < 4 or y2i - y1i < 4:
-        return (x1 + x2) / 2.0, (y1 + y2) / 2.0
-    crop = np.array(image.crop((x1i, y1i, x2i, y2i)).convert("RGB"))
-    bgr = cv2.cvtColor(crop, cv2.COLOR_RGB2BGR)
-    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-    _h, sat, val = cv2.split(hsv)
-    blur = cv2.GaussianBlur(gray, (0, 0), 3)
-    diff = cv2.absdiff(gray, blur)
-    mask = (
-        ((sat > 65) & (diff > 5) & (val > 25))
-        | ((gray < 110) & (diff > 5))
-        | (diff > 32)
-    )
-    mask_u8 = (mask.astype(np.uint8)) * 255
-    mask_u8 = cv2.medianBlur(mask_u8, 3)
-    ys, xs = np.where(mask_u8 > 0)
-    if len(xs) == 0:
-        return (x1 + x2) / 2.0, (y1 + y2) / 2.0
-    cx, cy = (x2i - x1i) / 2.0, (y2i - y1i) / 2.0
-    dist = (xs.astype(np.float32) - cx) ** 2 + (ys.astype(np.float32) - cy) ** 2
-    idx = int(np.argmin(dist))
-    return float(x1i + xs[idx]), float(y1i + ys[idx])
-
-
-def _recognize_yidun_point_box(
-    image: Image.Image,
-    box: list[float],
-    target_chars: list[str],
-    *,
-    thorough: bool = False,
-    preferred_chars: set[str] | None = None,
-) -> tuple[dict[str, float], list[dict[str, Any]]]:
-    _det, rapid = _point_ocr_engines()
-    width, height = image.size
-    x1, y1, x2, y2 = box
-    bw, bh = max(1.0, x2 - x1), max(1.0, y2 - y1)
-    # Tight boxes work best; add a second, larger crop for small boxes where the
-    # detector may only cover the high-contrast strokes.
-    pads = [0.14, 0.28] if bw < 34 or bh < 34 else [0.14]
-    if thorough:
-        pads = sorted({0.04, 0.14, *(pads or [])})
-    # Most Yidun point glyphs are rotated around ±30 degrees. Keep the default
-    # pass short; expand only when global assignment is missing/weak.
-    angles = (-35, 0, 35)
-    if thorough:
-        angles = (0, -30, 30, 40, -40, -20, 20, -10, 10, -50, 50)
-    scores: dict[str, float] = {}
-    labels: list[dict[str, Any]] = []
-    stop_chars = set(preferred_chars or target_chars)
-
-    for pad in pads:
-        xx1 = max(0, int(round(x1 - bw * pad)))
-        yy1 = max(0, int(round(y1 - bh * pad)))
-        xx2 = min(width, int(round(x2 + bw * pad)))
-        yy2 = min(height, int(round(y2 + bh * pad)))
-        if xx2 - xx1 < 8 or yy2 - yy1 < 8:
-            continue
-        base_crop = image.crop((xx1, yy1, xx2, yy2)).convert("RGB")
-        contrast_crop = ImageEnhance.Contrast(ImageEnhance.Color(base_crop).enhance(1.7)).enhance(
-            1.8
-        )
-        crop_variants: list[tuple[str, Image.Image]] = [("contrast", contrast_crop)]
-        if thorough:
-            crop_variants = [
-                ("orig", base_crop),
-                ("inv", ImageOps.invert(base_crop)),
-                ("contrast", contrast_crop),
-            ]
-        for variant_name, crop in crop_variants:
-            for angle in angles:
-                rotated = crop.rotate(angle, expand=True, fillcolor=(255, 255, 255))
-                scale = 4 if thorough else 3
-                rotated = rotated.resize(
-                    (max(1, rotated.width * scale), max(1, rotated.height * scale)),
-                    Image.Resampling.LANCZOS,
-                )
-                try:
-                    result, _elapsed = rapid(
-                        np.array(rotated),
-                        use_det=False,
-                        use_cls=True,
-                        use_rec=True,
-                    )
-                except Exception:
-                    continue
-                if not result:
-                    continue
-                text = str(result[0][0] or "")
-                confidence = float(result[0][1] or 0)
-                if not text:
-                    continue
-                labels.append(
-                    {
-                        "text": text,
-                        "score": confidence,
-                        "angle": angle,
-                        "crop": [xx1, yy1, xx2, yy2],
-                        "source": f"rapid:crop:{variant_name}",
-                    }
-                )
-                for ch in set(target_chars):
-                    score = _score_point_label_for_target(text, confidence, ch)
-                    if score > scores.get(ch, 0.0):
-                        scores[ch] = score
-                exact_target = any(ch in text and confidence >= 0.30 for ch in stop_chars)
-                stop_score = max((scores.get(ch, 0.0) for ch in stop_chars), default=0.0)
-                if thorough and (stop_score >= 0.45 or exact_target):
-                    labels.sort(key=lambda x: float(x.get("score") or 0.0), reverse=True)
-                    return scores, labels[:8]
-
-    labels.sort(key=lambda x: float(x.get("score") or 0.0), reverse=True)
-    return scores, labels[:8]
-
-
-def _assign_yidun_point_candidates(
-    candidates: list[dict[str, Any]],
-    target_chars: list[str],
-    *,
-    min_char_score: float,
-) -> tuple[tuple[int, ...] | None, float]:
-    best_score = -1.0
-    best_perm: tuple[int, ...] | None = None
-    if len(candidates) >= len(target_chars):
-        for perm in itertools.permutations(range(len(candidates)), len(target_chars)):
-            total = 0.0
-            ok = True
-            for ch, idx in zip(target_chars, perm):
-                score = float((candidates[idx].get("scores") or {}).get(ch) or 0.0)
-                if score < min_char_score:
-                    ok = False
-                    break
-                total += score
-            if ok and total > best_score:
-                best_score = total
-                best_perm = perm
-    return best_perm, best_score
-
-
-def _cjk_chars(text: str) -> set[str]:
-    return set(re.findall(r"[\u3400-\u9fff]", text or ""))
-
-
-def _point_candidate_needs_thorough(
-    cand: dict[str, Any],
-    *,
-    missing_chars: set[str],
-    target_chars: set[str],
-) -> bool:
-    """Return whether a candidate is worth expensive fallback OCR.
-
-    When one target char is missing, blindly running expanded OCR on every box is
-    slow. Most boxes can be skipped because they already have a strong label for
-    another target/distractor, or are obvious non-CJK edge noise.
-    """
-
-    if not missing_chars:
-        return True
-    scores = cand.get("scores") or {}
-    if any(float(scores.get(ch) or 0.0) >= 0.85 for ch in target_chars - missing_chars):
-        return False
-    labels = list(cand.get("labels") or [])
-    if not labels:
-        return True
-    try:
-        x1, y1, x2, y2 = [float(v) for v in cand.get("box") or []]
-    except Exception:
-        x1 = y1 = 0.0
-        x2 = y2 = 99.0
-    if (x1 <= 1.0 or y1 <= 1.0) and (x2 - x1 < 28 or y2 - y1 < 28):
-        return False
-    top = max(labels, key=lambda x: float(x.get("score") or 0.0))
-    top_text = str(top.get("text") or "")
-    top_score = float(top.get("score") or 0.0)
-    chars = _cjk_chars(top_text)
-    if not chars and top_score >= 0.45:
-        return False
-    if top_score >= 0.85:
-        if not chars:
-            return False
-        if chars.isdisjoint(missing_chars):
-            return False
-    return True
-
-
-def _write_yidun_point_debug_image(bg_bytes: bytes, detection: dict[str, Any], path: Path) -> None:
-    """Draw candidate boxes and final click points for postmortem debugging."""
-
-    image = Image.open(BytesIO(bg_bytes)).convert("RGB")
-    draw = ImageDraw.Draw(image)
-    for idx, cand in enumerate(detection.get("candidates") or []):
-        try:
-            x1, y1, x2, y2 = [float(v) for v in cand.get("box") or []]
-        except Exception:
-            continue
-        scores = cand.get("scores") or {}
-        score_text = ",".join(f"{k}:{float(v):.2f}" for k, v in scores.items()) or "?"
-        draw.rectangle([x1, y1, x2, y2], outline=(255, 220, 0), width=2)
-        draw.text((x1, max(0, y1 - 12)), f"{idx} {score_text}", fill=(255, 220, 0))
-    for point in detection.get("points") or []:
-        x, y = float(point.get("x") or 0), float(point.get("y") or 0)
-        char = str(point.get("char") or "")
-        draw.ellipse([x - 5, y - 5, x + 5, y + 5], outline=(255, 0, 0), width=3)
-        draw.text((x + 6, y - 8), char, fill=(255, 0, 0))
-    image.save(path)
-
-
-def detect_yidun_point_targets(
-    bg_bytes: bytes,
-    target_text: str,
-    *,
-    min_char_score: float = 0.08,
-) -> dict[str, Any]:
-    """Detect NetEase Yidun picture-click target centers.
-
-    The API exposes the target sequence (`front`) but not coordinates. The
-    detector therefore combines:
-    1) DdddOCR object detection for CAPTCHA glyph boxes;
-    2) RapidOCR full-image and rotated-crop recognition;
-    3) a conservative confusion map for heavily distorted glyphs;
-    4) a global one-to-one assignment in the requested click order.
-    """
-
-    target = _clean_yidun_point_text(target_text)
-    if not target:
-        raise ValueError("empty yidun point target text")
-    image = Image.open(BytesIO(bg_bytes)).convert("RGB")
-    width, height = image.size
-    boxes = _detect_yidun_point_boxes(image)
-
-    candidates: list[dict[str, Any]] = []
-    target_chars = list(target)
-    for item in boxes:
-        box = [float(x) for x in item["box"]]
-        scores: dict[str, float] = {}
-        labels = list(item.get("labels") or [])
-        high_exact = False
-        for label in labels:
-            text = str(label.get("text") or "")
-            confidence = float(label.get("score") or 0.0)
-            for ch in set(target_chars):
-                if ch in text and confidence >= 0.88:
-                    high_exact = True
-                score = _score_point_label_for_target(text, confidence, ch)
-                if score > scores.get(ch, 0.0):
-                    scores[ch] = score
-
-        if not high_exact:
-            crop_scores, crop_labels = _recognize_yidun_point_box(image, box, target_chars)
-            for ch, score in crop_scores.items():
-                if score > scores.get(ch, 0.0):
-                    scores[ch] = score
-            labels.extend(crop_labels)
-
-        x1, y1, x2, y2 = box
-        candidates.append(
-            {
-                "box": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
-                "center": {"x": round((x1 + x2) / 2.0, 2), "y": round((y1 + y2) / 2.0, 2)},
-                "scores": {k: round(float(v), 4) for k, v in sorted(scores.items())},
-                "labels": labels[:8],
-                "sources": item.get("sources") or [],
-            }
-        )
-
-    best_perm, best_score = _assign_yidun_point_candidates(
-        candidates,
-        target_chars,
-        min_char_score=min_char_score,
-    )
-
-    # If the first pass is incomplete or only barely clears the threshold, run a
-    # second, OCR-heavier pass over the existing detector boxes. This is the
-    # difference between "works on easy colorful glyphs" and handling the harder
-    # picture-click frames where one dark/rotated character is partially hidden
-    # in the photo background.
-    weakest_score = 0.0
-    if best_perm is not None:
-        weakest_score = min(
-            float((candidates[idx].get("scores") or {}).get(ch) or 0.0)
-            for ch, idx in zip(target_chars, best_perm)
-        )
-    thorough_indices: set[int] = set()
-    preferred_by_idx: dict[int, set[str]] = {}
-    if candidates and best_perm is None:
-        missing_chars = {
-            ch
-            for ch in set(target_chars)
-            if max(float((c.get("scores") or {}).get(ch) or 0.0) for c in candidates) < min_char_score
-        }
-        target_set = set(target_chars)
-        thorough_indices = {
-            idx
-            for idx, cand in enumerate(candidates)
-            if _point_candidate_needs_thorough(
-                cand,
-                missing_chars=missing_chars,
-                target_chars=target_set,
-            )
-        }
-        if not thorough_indices:
-            thorough_indices = set(range(len(candidates)))
-        for idx in thorough_indices:
-            preferred_by_idx[idx] = set(missing_chars or target_chars)
-    elif candidates and best_perm is not None and weakest_score < 0.18:
-        for ch, idx in zip(target_chars, best_perm):
-            score = float((candidates[idx].get("scores") or {}).get(ch) or 0.0)
-            if score < 0.22:
-                thorough_indices.add(idx)
-                preferred_by_idx.setdefault(idx, set()).add(ch)
-
-    if thorough_indices:
-        for idx in sorted(thorough_indices):
-            cand = candidates[idx]
-            box = [float(x) for x in cand["box"]]
-            crop_scores, crop_labels = _recognize_yidun_point_box(
-                image,
-                box,
-                target_chars,
-                thorough=True,
-                preferred_chars=preferred_by_idx.get(idx),
-            )
-            scores = cand.setdefault("scores", {})
-            for ch, score in crop_scores.items():
-                if float(score) > float(scores.get(ch) or 0.0):
-                    scores[ch] = round(float(score), 4)
-            labels = list(cand.get("labels") or [])
-            labels.extend(crop_labels)
-            labels.sort(key=lambda x: float(x.get("score") or 0.0), reverse=True)
-            cand["labels"] = labels[:8]
-        best_perm, best_score = _assign_yidun_point_candidates(
-            candidates,
-            target_chars,
-            min_char_score=min_char_score,
-        )
-
-    points: list[dict[str, Any]] = []
-    if best_perm is not None:
-        for order, (ch, idx) in enumerate(zip(target_chars, best_perm), start=1):
-            cand = candidates[idx]
-            click_x, click_y = _point_click_xy_for_box(image, [float(v) for v in cand["box"]])
-            points.append(
-                {
-                    "order": order,
-                    "char": ch,
-                    "x": round(click_x, 2),
-                    "y": round(click_y, 2),
-                    "center": cand["center"],
-                    "score": float((cand.get("scores") or {}).get(ch) or 0.0),
-                    "box": cand["box"],
-                    "candidateIndex": idx,
-                }
-            )
-
-    return {
-        "ok": len(points) == len(target_chars),
-        "target": target,
-        "points": points,
-        "score": round(best_score, 4) if best_perm is not None else 0.0,
-        "candidates": candidates,
-        "image_size": {"width": width, "height": height},
-        "method": "ddddocr+rapidocr+assignment",
-        "min_char_score": min_char_score,
-    }
-
-
 class YidunCaptchaSolver:
-    """NetEase Yidun browser solver alpha: jigsaw + picture-click."""
+    """NetEase Yidun browser solver alpha: jigsaw only."""
 
     async def solve(
         self,
@@ -1014,8 +445,6 @@ class YidunCaptchaSolver:
         auto_trigger: bool = True,
         slide_solve: bool = True,
         slide_max_attempts: int = 3,
-        point_solve: bool = True,
-        point_max_attempts: int = 6,
         output_dir: str | None = None,
         screenshot: bool = True,
         save_html: bool = True,
@@ -1037,7 +466,6 @@ class YidunCaptchaSolver:
             "getResponses": [],
             "triggerSelectors": list(trigger_selectors or DEFAULT_TRIGGER_SELECTORS),
             "slideAttempts": [],
-            "pointAttempts": [],
         }
         overall_deadline = time.monotonic() + max(1, timeout_sec)
         browser = None
@@ -1143,15 +571,14 @@ class YidunCaptchaSolver:
 
             raw["challengeKind"] = await self._wait_challenge_kind(page, raw)
             remaining_sec = int(overall_deadline - time.monotonic())
-            if raw["challengeKind"] == "point" and point_solve:
-                raw["pointAttempts"] = await self._solve_point_challenge(
-                    page,
-                    raw=raw,
-                    output_root=output_root,
-                    max_attempts=max(1, point_max_attempts),
-                    total_timeout_sec=max(3, remaining_sec),
-                )
-            elif slide_solve:
+            if raw["challengeKind"] != "jigsaw":
+                raw["unsupported"] = {
+                    "kind": raw["challengeKind"],
+                    "message": "unsupported yidun challenge type",
+                }
+            elif not slide_solve:
+                raw["unsupported"] = {"kind": "jigsaw", "message": "yidun slide solve disabled"}
+            else:
                 raw["slideAttempts"] = await self._solve_slide_challenge(
                     page,
                     output_root=output_root,
@@ -1166,7 +593,7 @@ class YidunCaptchaSolver:
                 success = latest_yidun_success(raw, state)
                 if success:
                     break
-                if raw.get("slideAttempts") or raw.get("pointAttempts"):
+                if raw.get("slideAttempts") or raw.get("unsupported"):
                     break
                 await page.wait_for_timeout(500)
 
@@ -1235,34 +662,11 @@ class YidunCaptchaSolver:
                 className: cls,
                 sliderVisible: visible(document.querySelector('.yidun_slider')),
                 bgVisible: visible(document.querySelector('.yidun_bg-img')),
-                pointPrompt: (document.querySelector('.yidun_tips__point')
-                  || document.querySelector('.yidun_tips__answer')
-                  || document.querySelector('.yidun_control'))?.textContent || '',
-                stateCaptchaType: (() => {
-                  try {
-                    const configs = window.__ANTIBOT_YIDUN?.snapshot?.().configs || [];
-                    const cfg = configs.length ? configs[configs.length - 1].config || {} : {};
-                    return cfg.captchaType || cfg.captcha_type || '';
-                  } catch { return ''; }
-                })(),
               };
             }"""
         )
         if dom.get("sliderVisible"):
             return "jigsaw"
-        if str(dom.get("stateCaptchaType") or "").upper() == "POINT":
-            return "point"
-        cls = str(dom.get("className") or "")
-        if "yidun--point" in cls:
-            return "point"
-        if raw:
-            for item in reversed(raw.get("getResponses") or []):
-                parsed = item.get("parsed") if isinstance(item, dict) else None
-                data = parsed.get("data") if isinstance(parsed, dict) else None
-                if isinstance(data, dict) and int(data.get("type") or 0) == 3:
-                    return "point"
-        if dom.get("bgVisible") and _clean_yidun_point_text(dom.get("pointPrompt")):
-            return "point"
         return "unknown"
 
     async def _wait_challenge_kind(
@@ -1331,275 +735,6 @@ class YidunCaptchaSolver:
             }""",
             selectors,
         )
-
-    async def _solve_point_challenge(
-        self,
-        page: Any,
-        *,
-        raw: dict[str, Any],
-        output_root: Path,
-        max_attempts: int,
-        total_timeout_sec: int,
-    ) -> list[dict[str, Any]]:
-        attempts: list[dict[str, Any]] = []
-        deadline = time.monotonic() + total_timeout_sec
-        for attempt_no in range(1, max_attempts + 1):
-            if time.monotonic() >= deadline:
-                break
-            attempt: dict[str, Any] = {"attempt": attempt_no, "mode": "point"}
-            try:
-                info = await self._ensure_point_visible(page)
-                attempt["dom"] = info
-                bg_url = info.get("bgSrc") or ""
-                target_text = (
-                    _clean_yidun_point_text(info.get("targetText"))
-                    or self._latest_point_front_from_get(raw)
-                )
-                attempt["bgUrl"] = bg_url
-                attempt["target"] = target_text
-                if not bg_url:
-                    attempt["ok"] = False
-                    attempt["error"] = "missing yidun point bg url"
-                    attempts.append(attempt)
-                    break
-                if not target_text:
-                    attempt["ok"] = False
-                    attempt["error"] = "missing yidun point target text"
-                    attempts.append(attempt)
-                    if attempt_no < max_attempts:
-                        await self._refresh_point(page)
-                    continue
-
-                bg_bytes = await self._fetch_bytes(page, bg_url)
-                bg_path = output_root / f"yidun_point_bg_{attempt_no}.jpg"
-                bg_path.write_bytes(bg_bytes)
-                attempt["artifacts"] = {"bg": str(bg_path)}
-
-                detection = detect_yidun_point_targets(bg_bytes, target_text)
-                attempt["detection"] = detection
-                debug_path = output_root / f"yidun_point_detect_{attempt_no}.png"
-                try:
-                    _write_yidun_point_debug_image(bg_bytes, detection, debug_path)
-                    attempt["artifacts"]["debug"] = str(debug_path)
-                except Exception as e:
-                    attempt["debugImageError"] = str(e)
-                if not detection.get("ok"):
-                    attempt["ok"] = False
-                    attempt["error"] = "point target detection incomplete"
-                    attempts.append(attempt)
-                    if attempt_no < max_attempts:
-                        await self._refresh_point(page)
-                    continue
-
-                click_result = await self._click_yidun_points(page, detection)
-                attempt["click"] = click_result
-                await page.wait_for_timeout(2400)
-                outcome = await self._point_outcome(page)
-                attempt["outcome"] = outcome
-                attempt["ok"] = bool(outcome.get("success"))
-                attempts.append(attempt)
-                if attempt["ok"]:
-                    break
-                if attempt_no < max_attempts:
-                    await self._refresh_point(page)
-            except Exception as e:
-                attempt["ok"] = False
-                attempt["error"] = str(e)
-                attempt["errorType"] = type(e).__name__
-                attempts.append(attempt)
-                if attempt_no < max_attempts:
-                    try:
-                        await self._refresh_point(page)
-                    except Exception:
-                        pass
-        return attempts
-
-    def _latest_point_front_from_get(self, raw: dict[str, Any] | None) -> str:
-        if not raw:
-            return ""
-        for item in reversed(raw.get("getResponses") or []):
-            parsed = item.get("parsed") if isinstance(item, dict) else None
-            data = parsed.get("data") if isinstance(parsed, dict) else None
-            if isinstance(data, dict) and int(data.get("type") or 0) == 3:
-                return _clean_yidun_point_text(str(data.get("front") or ""))
-        return ""
-
-    async def _ensure_point_visible(self, page: Any) -> dict[str, Any]:
-        for _ in range(28):
-            info = await self._point_dom_info(page)
-            bg_rect = info.get("bgRect") or {}
-            target = _clean_yidun_point_text(info.get("targetText"))
-            root_class = str(info.get("rootClass") or "")
-            loading = "yidun--loading" in root_class or "加载中" in str(info.get("targetText") or "")
-            if (
-                info.get("bgSrc")
-                and float(bg_rect.get("width") or 0) > 20
-                and float(bg_rect.get("height") or 0) > 20
-                and target
-                and not loading
-            ):
-                try:
-                    await page.locator(".yidun_bg-img").first.scroll_into_view_if_needed(timeout=3000)
-                except Exception:
-                    pass
-                return await self._point_dom_info(page)
-            try:
-                await page.evaluate(
-                    r"""async () => {
-                      const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-                      try {
-                        if (window.__ANTIBOT_YIDUN?.popAll) window.__ANTIBOT_YIDUN.popAll();
-                      } catch {}
-                      const el = document.querySelector('.yidun_control') || document.querySelector('.yidun');
-                      if (el) {
-                        try { el.scrollIntoView({ block: 'center' }); } catch {}
-                        const r = el.getBoundingClientRect();
-                        for (const type of ['mouseover', 'mouseenter', 'mousemove', 'mousedown', 'mouseup', 'click']) {
-                          el.dispatchEvent(new MouseEvent(type, {
-                            bubbles: true, cancelable: true, view: window,
-                            clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
-                          }));
-                          await sleep(50);
-                        }
-                      }
-                    }"""
-                )
-            except Exception:
-                pass
-            await page.wait_for_timeout(500)
-        return await self._point_dom_info(page)
-
-    async def _point_dom_info(self, page: Any) -> dict[str, Any]:
-        return await page.evaluate(
-            r"""() => {
-              const rect = (el) => {
-                if (!el) return null;
-                const r = el.getBoundingClientRect();
-                const cs = getComputedStyle(el);
-                return {
-                  x: r.x, y: r.y, width: r.width, height: r.height,
-                  display: cs.display, visibility: cs.visibility,
-                };
-              };
-              const bg = document.querySelector('.yidun_bg-img');
-              const panel = document.querySelector('.yidun_panel');
-              const control = document.querySelector('.yidun_control');
-              const root = document.querySelector('.yidun');
-              const answer = document.querySelector('.yidun_tips__point')
-                || document.querySelector('.yidun_tips__answer')
-                || document.querySelector('.yidun_tips__content')
-                || control;
-              return {
-                bgSrc: bg ? bg.src : '',
-                bgRect: rect(bg),
-                panelRect: rect(panel),
-                controlRect: rect(control),
-                rootClass: root ? String(root.className || '') : '',
-                targetText: answer ? (answer.textContent || '') : '',
-                controlText: control ? (control.textContent || '') : '',
-              };
-            }"""
-        )
-
-    async def _click_yidun_points(self, page: Any, detection: dict[str, Any]) -> dict[str, Any]:
-        info = await self._point_dom_info(page)
-        bg_rect = info.get("bgRect") or {}
-        image_size = detection.get("image_size") or {}
-        image_width = max(1.0, float(image_size.get("width") or 1))
-        image_height = max(1.0, float(image_size.get("height") or 1))
-        rect_x = float(bg_rect.get("x") or 0)
-        rect_y = float(bg_rect.get("y") or 0)
-        rect_w = float(bg_rect.get("width") or image_width)
-        rect_h = float(bg_rect.get("height") or image_height)
-        clicked: list[dict[str, Any]] = []
-        # Let the challenge collect a small amount of pre-click motion.
-        await page.mouse.move(
-            rect_x + random.uniform(20, max(21, rect_w - 20)),
-            rect_y + random.uniform(20, max(21, rect_h - 20)),
-            steps=random.randint(8, 16),
-        )
-        await page.wait_for_timeout(random.randint(450, 900))
-        last_x = rect_x + rect_w * random.uniform(0.25, 0.75)
-        last_y = rect_y + rect_h * random.uniform(0.25, 0.75)
-        for point in detection.get("points") or []:
-            px = rect_x + float(point["x"]) * rect_w / image_width
-            py = rect_y + float(point["y"]) * rect_h / image_height
-            # Small human jitter, kept inside the target box center.
-            px += random.uniform(-1.2, 1.2)
-            py += random.uniform(-1.2, 1.2)
-            steps = random.randint(14, 26)
-            ctrl_x = (last_x + px) / 2 + random.uniform(-18, 18)
-            ctrl_y = (last_y + py) / 2 + random.uniform(-12, 12)
-            for i in range(1, steps + 1):
-                t = i / steps
-                # Quadratic Bezier with small tremor.
-                bx = (1 - t) * (1 - t) * last_x + 2 * (1 - t) * t * ctrl_x + t * t * px
-                by = (1 - t) * (1 - t) * last_y + 2 * (1 - t) * t * ctrl_y + t * t * py
-                await page.mouse.move(
-                    bx + random.uniform(-0.45, 0.45),
-                    by + random.uniform(-0.45, 0.45),
-                )
-                await page.wait_for_timeout(random.randint(10, 28))
-            await page.wait_for_timeout(random.randint(180, 420))
-            await page.mouse.down()
-            await page.wait_for_timeout(random.randint(65, 180))
-            await page.mouse.up()
-            last_x, last_y = px, py
-            clicked.append(
-                {
-                    "char": point.get("char"),
-                    "page": {"x": round(px, 2), "y": round(py, 2)},
-                    "image": {"x": point.get("x"), "y": point.get("y")},
-                    "score": point.get("score"),
-                }
-            )
-            for _ in range(random.randint(1, 3)):
-                await page.mouse.move(
-                    px + random.uniform(-3, 3),
-                    py + random.uniform(-3, 3),
-                    steps=random.randint(1, 3),
-                )
-                await page.wait_for_timeout(random.randint(45, 140))
-            await page.wait_for_timeout(random.randint(650, 1250))
-        return {"ok": True, "clicked": clicked, "bgRect": bg_rect}
-
-    async def _point_outcome(self, page: Any) -> dict[str, Any]:
-        return await page.evaluate(
-            r"""() => {
-              const text = (document.body && document.body.innerText || '').replace(/\s+/g, ' ').trim();
-              const root = document.querySelector('.yidun');
-              const cls = root ? String(root.className || '') : '';
-              const tips = document.querySelector('.yidun_tips__text')
-                || document.querySelector('.yidun_control');
-              const tip = tips ? tips.textContent : '';
-              const fail = /失败|重试|error|fail/i.test(tip) || /yidun--error/.test(cls);
-              const successText = /验证成功|验证通过|success/i.test(text) || /yidun--success/.test(cls);
-              const validates = window.__ANTIBOT_YIDUN && window.__ANTIBOT_YIDUN.validates || [];
-              const latest = validates.length ? validates[validates.length - 1].value : null;
-              const payloadOk = JSON.stringify(latest || {}).indexOf('validate') >= 0;
-              return { success: Boolean(successText || payloadOk), fail, tip, className: cls, latestValidate: latest || null };
-            }"""
-        )
-
-    async def _refresh_point(self, page: Any) -> None:
-        await page.wait_for_timeout(600)
-        try:
-            await page.evaluate(
-                """() => {
-                  const btn = document.querySelector('.yidun_refresh');
-                  if (btn) { try { btn.click(); return 'click'; } catch {} }
-                  try {
-                    if (window.__ANTIBOT_YIDUN?.refreshAll) {
-                      window.__ANTIBOT_YIDUN.refreshAll();
-                      return 'instance';
-                    }
-                  } catch {}
-                  return '';
-                }"""
-            )
-        except Exception:
-            pass
-        await page.wait_for_timeout(1500)
 
     async def _solve_slide_challenge(
         self,
@@ -1878,8 +1013,7 @@ class YidunCaptchaSolver:
                 "validates": len(state.get("validates") or []) if isinstance(state, dict) else 0,
                 "slide_attempts": len(raw.get("slideAttempts") or []),
                 "slide_solved": any((a or {}).get("ok") for a in raw.get("slideAttempts") or []),
-                "point_attempts": len(raw.get("pointAttempts") or []),
-                "point_solved": any((a or {}).get("ok") for a in raw.get("pointAttempts") or []),
+                "unsupported": raw.get("unsupported"),
                 "check_responses": len(raw.get("checkResponses") or []),
                 "net_events": len(raw.get("net") or []),
                 "trigger_clicks": len(raw.get("triggerClicks") or []),

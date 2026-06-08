@@ -1,8 +1,6 @@
 from pathlib import Path
 
 from antibot_sdk.providers.yidun import (
-    _clean_yidun_point_text,
-    detect_yidun_point_targets,
     detect_yidun_slide_gap,
     latest_yidun_success,
 )
@@ -66,35 +64,3 @@ def test_latest_yidun_success_from_jsonp_parsed_check() -> None:
         "zoneId": "NANP",
         "result": True,
     }
-
-
-def test_yidun_point_target_text_cleanup() -> None:
-    assert _clean_yidun_point_text('请依次点击 "全" "来" "扩"') == "全来扩"
-    assert _clean_yidun_point_text('"全" "来" "扩"') == "全来扩"
-
-
-def test_yidun_point_detector_fixture() -> None:
-    result = detect_yidun_point_targets(
-        (FIXTURES / "point_bg_quan_lai_kuo.jpg").read_bytes(),
-        "全来扩",
-    )
-
-    assert result["ok"]
-    assert [p["char"] for p in result["points"]] == ["全", "来", "扩"]
-    assert abs(result["points"][0]["x"] - 167) <= 4
-    assert abs(result["points"][1]["x"] - 254) <= 6
-    assert abs(result["points"][2]["x"] - 95) <= 8
-
-
-def test_yidun_point_detector_hard_dark_glyph_fixture() -> None:
-    result = detect_yidun_point_targets(
-        (FIXTURES / "point_bg_an_yan_te.jpg").read_bytes(),
-        "安验特",
-    )
-
-    assert result["ok"]
-    assert [p["char"] for p in result["points"]] == ["安", "验", "特"]
-    assert result["points"][0]["score"] >= 0.5
-    assert result["points"][1]["score"] >= 0.4
-    # The black `特` is intentionally hard: it is blended into a dark marina area.
-    assert result["points"][2]["score"] >= 0.1

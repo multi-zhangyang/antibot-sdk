@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / GeeTest v4 / 网易易盾滑动拼图与文字点选** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -12,7 +12,7 @@
 - Tencent Captcha：封装腾讯滑块的页面触发、浏览器池、缺口识别、轨迹拖拽、ticket/randstr 输出。
 - Aliyun Captcha：封装阿里云滑块的 Node/Puppeteer runner、站点 profile、attempt/session retry、错误归一、artifact 保留。
 - GeeTest v4：从 observer 升级出滑动 solver alpha，抓取 bg/slice、CV 匹配缺口、生成拖动轨迹，并提取 `lot_number/captcha_output/pass_token/gen_time`。
-- 网易易盾 / Yidun：新增滑动拼图 solver alpha + picture-click 文字点选原型。滑动抓取 bg/front、CV 定位缺口；文字点选抓取 `front` 目标字序列、用 DdddOCR 检测候选字框、RapidOCR 旋转识别和混淆表做一对一分配，最后点击并提取 `validate/token/zoneId`。
+- 网易易盾 / Yidun：滑动拼图 solver alpha，抓取 bg/front、OpenCV 定位缺口、模拟滑块轨迹，并提取 `validate/token/zoneId`。
 - Policy Engine：把 `F001/F015/NONE/gap/candidate/watchdog timeout` 等失败归类，决定是否换 session，并输出下一步调参建议。
 - Stress Harness：统一压测入口，输出 summary、records、attempt code 分布、失败现场。
 
@@ -555,9 +555,9 @@ async with AntibotClient() as client:
 
 ---
 
-### 9. 网易易盾 / Yidun 滑动拼图 + 文字点选
+### 9. 网易易盾 / Yidun 滑动拼图
 
-Yidun 现在加入 **jigsaw solver alpha** 和 **picture-click 文字点选原型**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。`trial/picture-click` 也已接入端到端流程：抓目标字、识别图中坐标、按序点击、读取 check 结果。
+Yidun 现在保留 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
 
 关键实现点：
 
@@ -594,28 +594,6 @@ antibot solve yidun \
   --slide-attempts 3
 ```
 
-文字点选命令：
-
-```bash
-# picture-click 对 headless 更敏感，建议用 headed；服务器环境可包一层 xvfb-run。
-xvfb-run -a antibot solve yidun \
-  --url 'https://dun.163.com/trial/picture-click' \
-  --headed \
-  --output-dir /tmp/yidun-point-run \
-  --timeout 120 \
-  --point-attempts 4
-```
-
-文字点选实现点：
-
-- 从 `api/v3/get` 和 DOM tips 提取 `front`，例如 `全来扩`。
-- 背景图保存为 `yidun_point_bg_N.jpg`，识别 overlay 保存为 `yidun_point_detect_N.png`。
-- DdddOCR 负责候选字框检测；除常规图外还会跑 gray / invert / sharp 变体，用来捞出黑色字混进照片暗部的难样本。
-- RapidOCR 对候选框做旋转 crop 识别；第一轮走快路径，分配缺失或低分时再对局部候选框做扩展角度 OCR。
-- 对 `全/来/扩/类/安/体/库/验/特` 等易混 OCR 字做低权重混淆映射，并用全局一对一 assignment 避免重复点同一候选框。
-- 已加入 `安验特` 这类暗色/旋转字符 fixture，防止只对简单彩色字有效。
-- Headed/Xvfb 实测官方 `trial/picture-click` 可以拿到 `validate/token/zoneId`；headless 下更容易被行为/环境侧拒绝。
-
 压测：
 
 ```bash
@@ -644,8 +622,7 @@ async with AntibotClient() as client:
 当前定位：
 
 - 已验证官方 `trial/jigsaw` 单次 solve 成功，能拿到 `validate/token/zoneId`。
-- 已验证官方 `trial/picture-click` 在 headed/Xvfb 下单次 solve 成功，能拿到 `validate/token/zoneId`。
-- 这条线仍是 alpha：复杂业务站点可能叠加设备指纹、IP reputation、业务态绑定；后续要继续扩大样本、优化轨迹、补齐更多 Yidun 类型。
+- 这条线仍是 alpha：复杂业务站点可能叠加设备指纹、IP reputation、业务态绑定；后续重点只放在滑块几何类场景。
 
 ---
 
@@ -844,7 +821,6 @@ antibot stress geetest --url 'https://target.example/path-with-geetest' --runs 1
 
 # Yidun
 antibot solve yidun --url 'https://dun.163.com/trial/jigsaw'
-xvfb-run -a antibot solve yidun --url 'https://dun.163.com/trial/picture-click' --headed --point-attempts 4
 antibot stress yidun --url 'https://dun.163.com/trial/jigsaw' --runs 10 --concurrency 1
 
 # Aliyun
@@ -923,7 +899,7 @@ src/antibot_sdk/
     hcaptcha.py             # hCaptcha hook/observer provider
     recaptcha.py            # reCAPTCHA/Enterprise hook/observer provider
     turnstile.py            # Cloudflare Turnstile hook/observer provider
-    yidun.py                # 网易易盾 hook + jigsaw/picture-click solver alpha
+    yidun.py                # 网易易盾 hook + jigsaw solver alpha
   vendor/
     tencent/                # Tencent solver + upstream snapshot
     aliyun/                 # Aliyun Node bridge/runner/site profiles
