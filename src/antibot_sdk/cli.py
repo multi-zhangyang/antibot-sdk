@@ -137,6 +137,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "gunslol",
             "hashguard",
             "trustcaptcha",
+            "stravcaptcha",
             "cap",
             "cryptopuzzle",
             "captxa",
@@ -576,6 +577,28 @@ async def amain(argv: list[str] | None = None) -> int:
     tc.add_argument("--output-dir")
     tc.add_argument("--user-agent")
     tc.add_argument("--raw", action="store_true")
+
+    sc = solve_sub.add_parser("stravcaptcha")
+    sc_source = sc.add_mutually_exclusive_group(required=True)
+    sc_source.add_argument("--token", help="@strav/captcha signed token")
+    sc_source.add_argument("--challenge-json", help="inline {token,props} JSON, or @/path")
+    sc_source.add_argument("--challenge-file")
+    sc_source.add_argument("--challenge-html", help="view helper HTML containing _captcha input")
+    sc_source.add_argument("--challenge-url", help="GET /__captcha/pow endpoint")
+    sc.add_argument("--submit-url")
+    sc.add_argument("--submit", action="store_true")
+    sc.add_argument("--secret", help="optional server secret for local token signature verification")
+    sc.add_argument("--start", type=int, default=0)
+    sc.add_argument("--max-attempts", type=int, default=100_000_000)
+    sc.add_argument("--workers", type=int, default=1)
+    sc.add_argument("--timeout", type=int, default=60)
+    sc.add_argument("--token-field", default="_captcha")
+    sc.add_argument("--response-field", default="_captcha_answer")
+    sc.add_argument("--honeypot-field", default="website")
+    sc.add_argument("--proxy")
+    sc.add_argument("--output-dir")
+    sc.add_argument("--user-agent")
+    sc.add_argument("--raw", action="store_true")
 
     pc = solve_sub.add_parser("pcaptcha")
     pc_source = pc.add_mutually_exclusive_group(required=True)
@@ -1340,6 +1363,31 @@ async def amain(argv: list[str] | None = None) -> int:
     stc.add_argument("--user-agent")
     stc.add_argument("--full", action="store_true")
 
+    sscap = stress_sub.add_parser("stravcaptcha")
+    sscap_source = sscap.add_mutually_exclusive_group(required=True)
+    sscap_source.add_argument("--token")
+    sscap_source.add_argument("--challenge-json")
+    sscap_source.add_argument("--challenge-file")
+    sscap_source.add_argument("--challenge-html")
+    sscap_source.add_argument("--challenge-url")
+    sscap.add_argument("--submit-url")
+    sscap.add_argument("--submit", action="store_true")
+    sscap.add_argument("--secret")
+    sscap.add_argument("--runs", type=int, default=10)
+    sscap.add_argument("--concurrency", type=int, default=2)
+    sscap.add_argument("--timeout", type=int, default=60)
+    sscap.add_argument("--start", type=int, default=0)
+    sscap.add_argument("--max-attempts", type=int, default=100_000_000)
+    sscap.add_argument("--workers", type=int, default=1)
+    sscap.add_argument("--token-field", default="_captcha")
+    sscap.add_argument("--response-field", default="_captcha_answer")
+    sscap.add_argument("--honeypot-field", default="website")
+    sscap.add_argument("--proxy")
+    sscap.add_argument("--output-dir")
+    sscap.add_argument("--output-json")
+    sscap.add_argument("--user-agent")
+    sscap.add_argument("--full", action="store_true")
+
     spc = stress_sub.add_parser("pcaptcha")
     spc.add_argument("--challenge-url", required=True)
     spc.add_argument("--validate-url")
@@ -1781,6 +1829,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "gunslol",
             "hashguard",
             "trustcaptcha",
+            "stravcaptcha",
             "impost",
             "kerberus",
             "mcaptcha",
@@ -2250,6 +2299,29 @@ async def amain(argv: list[str] | None = None) -> int:
             framework=args.framework,
             language=args.language,
             theme=args.theme,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "stravcaptcha":
+        ret = await client.solve_stravcaptcha(
+            token=args.token,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_html=args.challenge_html,
+            challenge_url=args.challenge_url,
+            submit_url=args.submit_url,
+            submit=args.submit,
+            secret=args.secret,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            token_field=args.token_field,
+            response_field=args.response_field,
+            honeypot_field=args.honeypot_field,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
             user_agent=args.user_agent,
@@ -3195,6 +3267,37 @@ async def amain(argv: list[str] | None = None) -> int:
                 framework=args.framework,
                 language=args.language,
                 theme=args.theme,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "stravcaptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="stravcaptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_stravcaptcha(
+                token=args.token,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_html=args.challenge_html,
+                challenge_url=args.challenge_url,
+                submit_url=args.submit_url,
+                submit=args.submit,
+                secret=args.secret,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                token_field=args.token_field,
+                response_field=args.response_field,
+                honeypot_field=args.honeypot_field,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
                 user_agent=args.user_agent,

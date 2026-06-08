@@ -35,6 +35,7 @@ from .providers.portcullis import PortcullisSolver
 from .providers.powreaction import PowReactionSolver
 from .providers.recaptcha import ReCaptchaSolver
 from .providers.silentchallenge import SilentChallengeSolver
+from .providers.stravcaptcha import StravCaptchaSolver
 from .providers.swetrix import SwetrixSolver
 from .providers.tencent import TencentCaptchaSolver
 from .providers.tollbooth import TollboothSolver
@@ -78,6 +79,7 @@ class AntibotClient:
         self.wicketkeeper = WicketkeeperSolver()
         self.yourcaptcha = YourCaptchaSolver()
         self.silentchallenge = SilentChallengeSolver()
+        self.stravcaptcha = StravCaptchaSolver()
         self.tencent = TencentCaptchaSolver()
         self.tollbooth = TollboothSolver()
         self.trustcaptcha = TrustcaptchaSolver()
@@ -214,6 +216,9 @@ class AntibotClient:
 
     async def solve_silentchallenge(self, **kwargs: Any) -> CaptchaResult:
         return await self.silentchallenge.solve(**kwargs)
+
+    async def solve_stravcaptcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.stravcaptcha.solve(**kwargs)
 
     async def solve_auto(self, target_url: str, **kwargs: Any) -> BrowserResult | CaptchaResult:
         provider = kwargs.pop("provider", None) or detect_provider_for_url(target_url)
@@ -487,6 +492,36 @@ class AntibotClient:
                 else:
                     tc_kwargs["api_url"] = target_url
             return await self.solve_trustcaptcha(**tc_kwargs)
+        if provider == "stravcaptcha":
+            sc_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "token",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_html",
+                    "challenge_url",
+                    "submit_url",
+                    "submit",
+                    "secret",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "token_field",
+                    "response_field",
+                    "honeypot_field",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            sc_kwargs.setdefault("challenge_url", target_url)
+            return await self.solve_stravcaptcha(**sc_kwargs)
         if provider == "cap":
             cap_kwargs = {
                 k: v

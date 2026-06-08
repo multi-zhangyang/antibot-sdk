@@ -104,6 +104,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "tc-verification-token / submit body",
         "scope": "TrustCaptcha v3：合成 widget/browserInformation/fingerprints/integrityHash，复现 worker 中 SHA256(input||'tcn'+counter) 多任务 PoW，提交 /v2/verifications/{id}/challenges 换 verificationToken；不启动浏览器。",
     },
+    "stravcaptcha": {
+        "provider": "stravcaptcha",
+        "name": "@strav/captcha",
+        "category": "solver",
+        "captcha_type": "stateless_hmac_pow",
+        "status": "alpha",
+        "output": "_captcha/_captcha_answer submit body",
+        "scope": "@strav/captcha stateless PoW：解析 HMAC-SHA256 签名 token 的公开 payload，提取 salt/difficulty，复现 SHA256(salt+':'+nonce) leading-zero PoW，生成 middleware 可验提交字段；不启动浏览器。",
+    },
     "cap": {
         "provider": "cap",
         "name": "Cap / @cap.js",

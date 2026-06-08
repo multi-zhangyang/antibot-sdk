@@ -124,6 +124,8 @@ def detect_provider_for_url(url: str | None) -> str:
         for x in ("trustcaptcha", "trustcomponent", "tc-verification-token", "/v2/verifications")
     ):
         return "trustcaptcha"
+    if any(x in u or x in host for x in ("@strav/captcha", "stravcaptcha", "/__captcha/pow", "_captcha_answer")):
+        return "stravcaptcha"
     if any(x in u or x in host for x in ("friendlycaptcha", "friendlycaptcha.com", "frc-captcha")):
         return "friendlycaptcha"
     if any(x in u or x in host for x in ("fcaptcha", "/api/pow/challenge")):
@@ -268,6 +270,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "fingerprint-integrity-plus-multi-task-sha256-pow-solver",
                 "successFields": ["tc-verification-token", "finished.verificationToken"],
                 "endpoints": ["/v2/verifications", "/v2/verifications/{id}/challenges"],
+            }
+        },
+        "stravcaptcha": {
+            "stateless_hmac_pow": {
+                "patterns": ["@strav/captcha", "stravcaptcha", "/__captcha/pow", "_captcha_answer"],
+                "mode": "stateless-hmac-token-hashcash-pow-solver",
+                "successFields": ["_captcha", "_captcha_answer"],
+                "endpoints": ["/__captcha/pow"],
             }
         },
         "gunslol": {
