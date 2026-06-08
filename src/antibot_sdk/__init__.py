@@ -279,6 +279,17 @@ from .providers.swetrix import (
     swetrix_hash_hex,
     verify_swetrix_solution,
 )
+from .providers.tollbooth import (
+    TollboothChallenge,
+    TollboothSolution,
+    count_leading_zero_bits as tollbooth_count_leading_zero_bits,
+    generate_tollbooth_navigator_signals,
+    parse_tollbooth_challenge,
+    solve_tollbooth_challenge,
+    tollbooth_balloon_hash_hex,
+    tollbooth_sha256_hash_hex,
+    verify_tollbooth_solution,
+)
 from .stress import run_stress
 from .verification import FailureClassifier, SubmitFlow, SuccessOracle, VerificationResult, verify_submit_flow
 
@@ -349,6 +360,8 @@ __all__ = [
     "SilentChallengeSolution",
     "SwetrixChallenge",
     "SwetrixSolution",
+    "TollboothChallenge",
+    "TollboothSolution",
     "aliyun_policy_decision",
     "detect_provider_for_url",
     "detect_geetest_slide_gap",
@@ -406,6 +419,7 @@ __all__ = [
     "parse_yourcaptcha_challenge",
     "parse_silentchallenge_challenge",
     "parse_swetrix_challenge",
+    "parse_tollbooth_challenge",
     "extract_gunslol_gs_sets",
     "parse_gunslol_2xa",
     "parse_gunslol_challenge",
@@ -508,14 +522,18 @@ __all__ = [
     "solve_yourcaptcha_challenge",
     "solve_silentchallenge_pow",
     "solve_swetrix_challenge",
+    "solve_tollbooth_challenge",
     "UNSUPPORTED_CAPABILITIES",
     "verify_wicketkeeper_work",
     "verify_fcaptcha_solution",
     "verify_yourcaptcha_solution",
     "verify_silentchallenge_pow",
     "verify_swetrix_solution",
+    "verify_tollbooth_solution",
     "count_leading_zero_nibbles",
     "swetrix_hash_hex",
+    "tollbooth_balloon_hash_hex",
+    "tollbooth_sha256_hash_hex",
     "decode_powchallenge_base64",
     "encode_powchallenge_base64",
     "powreaction_count_leading_zero_bits",
@@ -530,4 +548,6 @@ __all__ = [
     "count_leading_zero_bits_bytes",
     "count_leading_zero_bits",
     "procaptcha_count_leading_zero_nibbles",
+    "tollbooth_count_leading_zero_bits",
+    "generate_tollbooth_navigator_signals",
 ]

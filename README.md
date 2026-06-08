@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -37,6 +37,7 @@
 - POWChallenge / powchallenge-server：新增 Argon2id memory-hard PoW 协议 solver，解析 `GET /challenge` 的 `req_id/challenge/difficulty`，复现 `t=1,m=19456KiB,p=1` 前导零 bit 校验，可提交 `/verify`，不启动浏览器。
 - pow-reaction：新增 JWT 签名多轮 PoW 协议 solver，解析 HS256 challenge、clientId/context 绑定和 rounds，复现 `SHA256(round+"."+nonce)` 前导零 bit，可提交 reactions endpoint，不启动浏览器。
 - Prosopo Procaptcha PoW：新增纯协议 PoW solver，复现 `@prosopo/util` 的 `SHA256(nonce+challenge)` 前导十六进制零搜索，可构造 signed timestamp submit body 并提交 provider endpoint，不启动浏览器。
+- Tollbooth / libcaptcha：新增 SHA-256 与 SHA256-Balloon memory-hard PoW solver，同时支持 navigator-attestation 的 HTTP poll 稀疏 signals token flow，输出 verify form / clearance token，不启动浏览器。
 - GeeTest v4：从 observer 升级出滑动 solver alpha，抓取 bg/slice、CV 匹配缺口、生成拖动轨迹，并提取 `lot_number/captcha_output/pass_token/gen_time`。
 - 网易易盾 / Yidun：滑动拼图 solver alpha，抓取 bg/front、OpenCV 定位缺口、模拟滑块轨迹，并提取 `validate/token/zoneId`。
 - Policy Engine：把 `F001/F015/NONE/gap/candidate/watchdog timeout` 等失败归类，决定是否换 session，并输出下一步调参建议。
@@ -80,6 +81,7 @@
 | POWChallenge / powchallenge-server | 协议 solver | `argon2id_memory_pow` | alpha | verify body / validated message |
 | pow-reaction | 协议 solver | `signed_multi_round_pow` | alpha | `{challenge, solutions, reaction}` / success |
 | Prosopo Procaptcha PoW | 协议 solver | `prosopo_pow` | alpha | submit body / `verified=true` |
+| Tollbooth / libcaptcha | 协议 solver | `tollbooth_protocol` | alpha | verify form / clearance token |
 | GeeTest v4 | 真实 solver | `slider` | alpha | `pass_token/lot_number` |
 | NetEase Yidun | 真实 solver | `jigsaw` | alpha | `validate/token/zoneId` |
 | Turnstile | 流程/Token 观察采集 | `token_widget` | observer | widget token / artifacts |
@@ -2013,6 +2015,77 @@ antibot solve procaptcha \
 
 ---
 
+### 22.5 Tollbooth / libcaptcha SHA256-Balloon + Navigator Attestation
+
+Tollbooth 是 libcaptcha 在 2026 发布的 Python bot-challenge middleware。它比普通 hashcash 更有意思：默认 challenge handler 是 `SHA256Balloon`，用 memory-hard balloon hashing 搜索 nonce；另一个 `NavigatorAttestation` handler 走多轮 HTTP poll/WebSocket，服务端给每轮 nonce 和 checks，客户端提交 browser signals，最后服务端签发 token。
+
+PoW 核心链路：
+
+```text
+GET protected resource
+-> HTML 或 JSON {challenge:{id,data,difficulty,spaceCost,timeCost,delta,verifyPath,csrfToken}}
+
+result = SHA256Balloon(data + str(nonce), spaceCost, timeCost, delta)
+pass = leading_zero_bits(result) >= difficulty
+
+POST /.tollbooth/verify form {id, nonce, redirect, csrf_token?}
+-> clearance JWT/cookie 或 JSON token
+```
+
+Navigator attestation 核心链路：
+
+```text
+POST /.tollbooth/verify JSON {id, init:true}
+-> {type:"challenge", round, nonce, checks[]}
+POST /.tollbooth/verify JSON {id, nonce, round, signals}
+-> ... next round ... -> {type:"result", token}
+POST /.tollbooth/verify form {id, nonce:token, csrf_token?}
+```
+
+SDK 当前支持：
+
+- 解析 Tollbooth JSON challenge 和 HTML 里的 `JSON.parse(CHALLENGE_DATA)`；
+- 复现 `sha256` 与 `sha256-balloon` 两种 handler；
+- 支持 `spaceCost/timeCost/delta` 自定义参数，默认单 worker，避免 VPS 被 memory-hard hash 打满；
+- 支持 `navigator-attestation` HTTP poll：不启浏览器，提交稀疏 signals 走服务端 token flow；
+- 支持 form submit 到 `/.tollbooth/verify`，读取 JSON token 或 302 `Set-Cookie`；
+- 不做图像/audio/cup 等语义验证码。
+
+只解本地 fixture：
+
+```bash
+antibot solve tollbooth \
+  --challenge-json '{"id":"tb-fixture","data":"tollbooth-fixture","difficulty":8,"spaceCost":8,"timeCost":1,"delta":1,"verifyPath":"/.tollbooth/verify","redirect":"/protected","csrfToken":"csrf"}' \
+  --timeout 5 \
+  --raw
+```
+
+完整 protected resource 闭环：
+
+```bash
+antibot solve tollbooth \
+  --challenge-url 'https://target.example/protected' \
+  --submit \
+  --timeout 60
+```
+
+Navigator attestation：
+
+```bash
+antibot solve tollbooth \
+  --challenge-url 'https://target.example/protected-json' \
+  --navigator-strategy empty \
+  --submit
+```
+
+当前定位：
+
+- 这是 Tollbooth 协议 solver，不是通用浏览器隐身；
+- `navigator-attestation` 当前利用其 0.3.9.x scoring 对“缺失 category 不扣分”的协议特性，提交稀疏 signals 让服务端自行签 token；
+- 真实站点如果自定义 handler、强制完整 signal schema、提高 difficulty 或绑定额外 headers，需要按现场字段继续补环境。
+
+---
+
 ### 23. mCaptcha PoW
 
 mCaptcha 是 self-hosted PoW CAPTCHA。浏览器 widget 的流程是：`POST /api/v1/pow/config` 取 `string/difficulty_factor/salt`，本地搜索 nonce，再 `POST /api/v1/pow/verify` 换取服务端 token。SDK 当前把这条链路做成纯协议 solver。
@@ -2481,6 +2554,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - POWChallenge / powchallenge-server 相关 URL -> `powchallenge`
 - pow-reaction / `/reactions/challenge` 相关 URL -> `powreaction`
 - Prosopo / Procaptcha / `/v1/prosopo/provider/client/captcha/pow` 相关 URL -> `procaptcha`
+- Tollbooth / libcaptcha / `/.tollbooth/verify` / `sha256-balloon` 相关 URL -> `tollbooth`
 - Tencent / TCaptcha 相关 URL -> `tencent`
 - GeeTest / gcaptcha4 相关 URL -> `geetest`
 - Yidun / NetEase Dun / necaptcha / dun.163.com 相关 URL -> `yidun`
@@ -2804,6 +2878,11 @@ antibot solve procaptcha --challenge-json '{"challenge":"prosopo-fixture","diffi
 antibot solve procaptcha --provider-url 'https://provider.example' --user '5F...' --dapp '5F...' --user-timestamp-signature '0x...' --submit
 antibot stress procaptcha --challenge-json '{"challenge":"prosopo-fixture","difficulty":3,"timestamp":"1780955164000","signature":{"provider":{"challenge":"0x..."}}}' --runs 20 --concurrency 4
 
+# Tollbooth / libcaptcha
+antibot solve tollbooth --challenge-url 'https://target.example/protected' --submit --timeout 60
+antibot solve tollbooth --challenge-json '{"id":"tb-fixture","data":"tollbooth-fixture","difficulty":8,"spaceCost":8,"timeCost":1,"delta":1}' --timeout 5
+antibot stress tollbooth --challenge-url 'https://target.example/protected' --submit --runs 10 --concurrency 2
+
 # Submit verification，证明 token 是否真过页面流程
 antibot verify recaptcha --url 'https://target.example/form' --captcha-json /tmp/recaptcha-run/recaptcha_run.json --submit '#submit' --success '.ok' --failure '.captcha-error'
 antibot verify hcaptcha --url 'https://target.example/form' --token 'P1_xxx' --submit '#submit' --success '.ok'
@@ -2858,6 +2937,7 @@ powbot_run.json
 powchallenge_run.json
 powreaction_run.json
 procaptcha_run.json
+tollbooth_run.json
 geetest_slide_bg_N.png / geetest_slide_slice_N.png
 yidun_run.json / yidun_page.png / yidun_page.html
 yidun_slide_bg_N.jpg / yidun_slide_front_N.png
@@ -2927,6 +3007,7 @@ src/antibot_sdk/
     powchallenge.py         # POWChallenge Argon2id memory-hard PoW protocol solver
     powreaction.py          # pow-reaction HS256 JWT multi-round SHA-256 PoW solver
     procaptcha.py           # Prosopo Procaptcha SHA-256 hex-prefix PoW solver
+    tollbooth.py            # Tollbooth SHA256-Balloon + navigator-attestation protocol solver
     geetest.py              # GeeTest v4 hook + slide solver alpha
     hcaptcha.py             # hCaptcha hook/observer provider
     recaptcha.py            # reCAPTCHA/Enterprise hook/observer provider
@@ -2957,6 +3038,7 @@ tests/
   test_powchallenge.py
   test_powreaction.py
   test_procaptcha.py
+  test_tollbooth.py
   test_yourcaptcha.py
   test_silentchallenge.py
   test_yidun_slide.py

@@ -34,6 +34,7 @@ from .providers.recaptcha import ReCaptchaSolver
 from .providers.silentchallenge import SilentChallengeSolver
 from .providers.swetrix import SwetrixSolver
 from .providers.tencent import TencentCaptchaSolver
+from .providers.tollbooth import TollboothSolver
 from .providers.turnstile import TurnstileSolver
 from .providers.yourcaptcha import YourCaptchaSolver
 from .providers.yidun import YidunCaptchaSolver
@@ -72,6 +73,7 @@ class AntibotClient:
         self.yourcaptcha = YourCaptchaSolver()
         self.silentchallenge = SilentChallengeSolver()
         self.tencent = TencentCaptchaSolver()
+        self.tollbooth = TollboothSolver()
         self.aliyun = AliyunCaptchaSolver()
         self.geetest = GeeTestCaptchaSolver()
         self.turnstile = TurnstileSolver()
@@ -162,6 +164,9 @@ class AntibotClient:
 
     async def solve_geetest(self, **kwargs: Any) -> CaptchaResult:
         return await self.geetest.solve(**kwargs)
+
+    async def solve_tollbooth(self, **kwargs: Any) -> CaptchaResult:
+        return await self.tollbooth.solve(**kwargs)
 
     async def solve_turnstile(self, **kwargs: Any) -> CaptchaResult:
         return await self.turnstile.solve(**kwargs)
@@ -757,6 +762,38 @@ class AntibotClient:
                 else:
                     proc_kwargs["provider_url"] = target_url
             return await self.solve_procaptcha(**proc_kwargs)
+        if provider == "tollbooth":
+            tb_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "submit",
+                    "navigator_strategy",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not tb_kwargs.get("base_url") and not tb_kwargs.get("challenge_url"):
+                if target_lower.rstrip("/").endswith("/.tollbooth/verify"):
+                    tb_kwargs["verify_url"] = target_url
+                    tb_kwargs["base_url"] = target_url[: target_lower.rindex("/.tollbooth/verify")]
+                else:
+                    tb_kwargs["challenge_url"] = target_url
+            return await self.solve_tollbooth(**tb_kwargs)
         if provider == "privatecaptcha":
             pc_kwargs = {
                 k: v

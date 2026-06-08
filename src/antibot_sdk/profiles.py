@@ -153,6 +153,8 @@ def detect_provider_for_url(url: str | None) -> str:
         for x in ("prosopo", "procaptcha", "/v1/prosopo/provider/client/captcha/pow", "/v1/prosopo/provider/client/pow/solution")
     ):
         return "procaptcha"
+    if any(x in u or x in host for x in ("tollbooth", "libcaptcha", "/.tollbooth/verify", "sha256-balloon")):
+        return "tollbooth"
     if any(x in u or x in host for x in ("privatecaptcha", "private-captcha", "api.privatecaptcha.com", "/privatecaptcha/")):
         return "privatecaptcha"
     if any(x in u or x in host for x in ("portcullis", "pow-captcha", "/api/v1/challenge", "/api/v1/verify")):
@@ -359,6 +361,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "prosopo-sha256-hex-prefix-pow-solver",
                 "successFields": ["{challenge, difficulty, nonce}", "verified=true"],
                 "endpoints": ["POST /v1/prosopo/provider/client/captcha/pow", "POST /v1/prosopo/provider/client/pow/solution"],
+            }
+        },
+        "tollbooth": {
+            "tollbooth_protocol": {
+                "patterns": ["tollbooth", "libcaptcha", "/.tollbooth/verify", "sha256-balloon"],
+                "mode": "sha256-balloon-and-navigator-attestation-protocol-solver",
+                "successFields": ["nonce/token", "clearance token/cookie"],
+                "endpoints": ["GET protected resource", "POST /.tollbooth/verify"],
             }
         },
         "privatecaptcha": {

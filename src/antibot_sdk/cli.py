@@ -148,6 +148,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "powchallenge",
             "powreaction",
             "procaptcha",
+            "tollbooth",
             "privatecaptcha",
             "portcullis",
             "swetrix",
@@ -592,6 +593,24 @@ async def amain(argv: list[str] | None = None) -> int:
     proc.add_argument("--output-dir")
     proc.add_argument("--user-agent")
     proc.add_argument("--raw", action="store_true")
+
+    tb = solve_sub.add_parser("tollbooth")
+    tb_source = tb.add_mutually_exclusive_group(required=True)
+    tb_source.add_argument("--base-url", help="protected resource URL; alias for --challenge-url")
+    tb_source.add_argument("--challenge-json", help="inline JSON/HTML challenge, or @/path")
+    tb_source.add_argument("--challenge-file")
+    tb_source.add_argument("--challenge-url", help="protected resource returning Tollbooth HTML/JSON challenge")
+    tb.add_argument("--verify-url", help="Tollbooth verify endpoint, usually /.tollbooth/verify")
+    tb.add_argument("--submit", action="store_true")
+    tb.add_argument("--navigator-strategy", choices=["empty", "minimal"], default="empty")
+    tb.add_argument("--start", type=int, default=0)
+    tb.add_argument("--max-attempts", type=int, default=1_000_000)
+    tb.add_argument("--workers", type=int, default=1)
+    tb.add_argument("--timeout", type=int, default=60)
+    tb.add_argument("--proxy")
+    tb.add_argument("--output-dir")
+    tb.add_argument("--user-agent")
+    tb.add_argument("--raw", action="store_true")
 
     priv = solve_sub.add_parser("privatecaptcha")
     priv_source = priv.add_mutually_exclusive_group(required=True)
@@ -1236,6 +1255,27 @@ async def amain(argv: list[str] | None = None) -> int:
     sproc.add_argument("--user-agent")
     sproc.add_argument("--full", action="store_true")
 
+    stb = stress_sub.add_parser("tollbooth")
+    stb_source = stb.add_mutually_exclusive_group(required=True)
+    stb_source.add_argument("--base-url")
+    stb_source.add_argument("--challenge-json")
+    stb_source.add_argument("--challenge-file")
+    stb_source.add_argument("--challenge-url")
+    stb.add_argument("--verify-url")
+    stb.add_argument("--submit", action="store_true")
+    stb.add_argument("--navigator-strategy", choices=["empty", "minimal"], default="empty")
+    stb.add_argument("--runs", type=int, default=10)
+    stb.add_argument("--concurrency", type=int, default=2)
+    stb.add_argument("--timeout", type=int, default=60)
+    stb.add_argument("--start", type=int, default=0)
+    stb.add_argument("--max-attempts", type=int, default=1_000_000)
+    stb.add_argument("--workers", type=int, default=1)
+    stb.add_argument("--proxy")
+    stb.add_argument("--output-dir")
+    stb.add_argument("--output-json")
+    stb.add_argument("--user-agent")
+    stb.add_argument("--full", action="store_true")
+
     spriv = stress_sub.add_parser("privatecaptcha")
     spriv_source = spriv.add_mutually_exclusive_group(required=True)
     spriv_source.add_argument("--puzzle")
@@ -1529,6 +1569,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "powchallenge",
             "powreaction",
             "procaptcha",
+            "tollbooth",
             "privatecaptcha",
             "portcullis",
             "swetrix",
@@ -2007,6 +2048,25 @@ async def amain(argv: list[str] | None = None) -> int:
             client_meta_json=args.client_meta_json,
             client_meta_file=args.client_meta_file,
             include_timestamp=args.include_timestamp,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "tollbooth":
+        ret = await client.solve_tollbooth(
+            base_url=args.base_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            submit=args.submit,
+            navigator_strategy=args.navigator_strategy,
             start=args.start,
             max_attempts=args.max_attempts,
             workers=args.workers,
@@ -2839,6 +2899,33 @@ async def amain(argv: list[str] | None = None) -> int:
                 client_meta_json=args.client_meta_json,
                 client_meta_file=args.client_meta_file,
                 include_timestamp=args.include_timestamp,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "tollbooth":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="tollbooth",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_tollbooth(
+                base_url=args.base_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                submit=args.submit,
+                navigator_strategy=args.navigator_strategy,
                 start=args.start,
                 max_attempts=args.max_attempts,
                 workers=args.workers,

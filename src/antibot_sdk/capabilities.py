@@ -203,6 +203,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "pow solution body / verified response",
         "scope": "Prosopo Procaptcha PoW：复现 @prosopo/util 的 SHA256(nonce+challenge) 前导十六进制零搜索，支持 provider challenge 拉取与 signed timestamp submit body；不启动浏览器。",
     },
+    "tollbooth": {
+        "provider": "tollbooth",
+        "name": "Tollbooth / libcaptcha",
+        "category": "solver",
+        "captcha_type": "tollbooth_protocol",
+        "status": "alpha",
+        "output": "verify form / clearance token",
+        "scope": "Tollbooth 协议 solver：解析 JSON/HTML challenge，复现 SHA-256 与 SHA256-Balloon memory-hard PoW，并支持 navigator-attestation HTTP poll 的稀疏 signals token flow；不启动浏览器。",
+    },
     "privatecaptcha": {
         "provider": "privatecaptcha",
         "name": "PrivateCaptcha",
