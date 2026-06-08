@@ -107,6 +107,8 @@ def detect_provider_for_url(url: str | None) -> str:
     host = (urlparse(url).hostname or "").lower()
     if aliyun_profile_for_url(url, "auto") or "aliyun" in u or "alibaba" in u:
         return "aliyun"
+    if any(x in u or x in host for x in ("ajcaptcha", "anji-plus", "/captcha/get", "/captcha/check")):
+        return "ajcaptcha"
     if any(x in u or x in host for x in ("geetest", "gcaptcha4", "gt4.geetest")):
         return "geetest"
     if any(x in u or x in host for x in ("yidun", "necaptcha", "dun.163.com", "c.dun.163.com")):
@@ -142,6 +144,14 @@ def list_profiles() -> dict[str, Any]:
                 "patterns": ["geetest", "gcaptcha4"],
                 "mode": "browser-hook-slide-solver-alpha",
                 "successFields": ["lot_number", "captcha_output", "pass_token", "gen_time"],
+            }
+        },
+        "ajcaptcha": {
+            "generic_block_puzzle": {
+                "patterns": ["ajcaptcha", "anji-plus", "/captcha/get", "/captcha/check"],
+                "mode": "http-protocol-solver",
+                "successFields": ["captchaVerification", "token"],
+                "endpoints": ["/captcha/get", "/captcha/check"],
             }
         },
         "yidun": {

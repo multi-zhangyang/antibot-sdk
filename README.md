@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -11,6 +11,7 @@
 - Submit Verification：把 `token_collected / server_verified / flow_passed` 拆开，用真实页面提交和 success/failure oracle 验证“token 采集 ≠ 真过验证”。
 - Tencent Captcha：封装腾讯滑块的页面触发、浏览器池、缺口识别、轨迹拖拽、ticket/randstr 输出。
 - Aliyun Captcha：封装阿里云滑块的 Node/Puppeteer runner、站点 profile、attempt/session retry、错误归一、artifact 保留。
+- AJ-Captcha / Anji：新增纯 HTTP 协议 solver，走 `/captcha/get` 图像缺口定位、AES `pointJson`、`/captcha/check`，输出二次校验用的 `captchaVerification`，不启动浏览器。
 - GeeTest v4：从 observer 升级出滑动 solver alpha，抓取 bg/slice、CV 匹配缺口、生成拖动轨迹，并提取 `lot_number/captcha_output/pass_token/gen_time`。
 - 网易易盾 / Yidun：滑动拼图 solver alpha，抓取 bg/front、OpenCV 定位缺口、模拟滑块轨迹，并提取 `validate/token/zoneId`。
 - Policy Engine：把 `F001/F015/NONE/gap/candidate/watchdog timeout` 等失败归类，决定是否换 session，并输出下一步调参建议。
@@ -28,6 +29,7 @@
 | :--- | :--- | :--- | :--- | :--- |
 | Tencent Captcha | 真实 solver | `slider` | primary | `ticket/randstr` |
 | Aliyun Captcha | 真实 solver | `slider` | primary | `VerifyCode` / artifacts |
+| AJ-Captcha / Anji | 协议 solver | `slider_protocol` | alpha | `captchaVerification/token` |
 | GeeTest v4 | 真实 solver | `slider` | alpha | `pass_token/lot_number` |
 | NetEase Yidun | 真实 solver | `jigsaw` | alpha | `validate/token/zoneId` |
 | Turnstile | 流程/Token 观察采集 | `token_widget` | observer | widget token / artifacts |
@@ -503,7 +505,79 @@ antibot stress aliyun \
 
 ---
 
-### 8. GeeTest v4 / 极验
+### 8. AJ-Captcha / Anji 协议滑块
+
+AJ-Captcha 的 `blockPuzzle` 是当前更适合 SDK 化的一类：接口、坐标、AES 和二次校验链路都在协议层闭合，不需要打开 Chromium，也不需要模拟拖动。
+
+能力：
+
+- 纯 HTTP 调用 `/captcha/get` 获取 `originalImageBase64 / jigsawImageBase64 / token / secretKey`。
+- 使用 jigsaw alpha mask 在背景图中定位真实缺口：
+  - `white_alpha_edge`
+  - `edge_alpha_edge`
+  - `edge_dilate*_alpha_edge`
+  - `color_template` fallback
+- 按前端逻辑生成紧凑坐标：`{"x":123,"y":5}`。
+- 按官方 Java/CryptoJS 逻辑生成：
+  - `pointJson = AES/ECB/PKCS7(point_json, secretKey)`
+  - `captchaVerification = AES/ECB/PKCS7(token + "---" + point_json, secretKey)`
+- POST `/captcha/check` 完成一次校验，返回业务侧二次校验要用的 `captchaVerification`。
+- 支持 API prefix，例如 `http://host` 或 `http://host/captcha-api`。
+- 默认最多 2 次 fresh token attempt；遇到一次性 token 失效、坐标误判或服务端并发抖动时自动重新 `/captcha/get`。
+- 支持 artifact：`ajcaptcha_run.json / ajcaptcha_original.png / ajcaptcha_jigsaw.png`。
+- 支持 stress 压测，且不消耗浏览器内存。
+
+命令示例：
+
+```bash
+antibot solve ajcaptcha \
+  --base-url 'http://127.0.0.1:18080' \
+  --output-dir /tmp/ajcaptcha-run
+```
+
+带 API 前缀：
+
+```bash
+antibot solve ajcaptcha \
+  --base-url 'https://target.example/captcha-api' \
+  --get-path /captcha/get \
+  --check-path /captcha/check
+```
+
+压测：
+
+```bash
+antibot stress ajcaptcha \
+  --base-url 'http://127.0.0.1:18080' \
+  --runs 50 \
+  --concurrency 5 \
+  --timeout 20 \
+  --max-attempts 2 \
+  --output-json /tmp/ajcaptcha-stress.json
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_ajcaptcha(
+        base_url="http://127.0.0.1:18080",
+        output_dir="/tmp/ajcaptcha-run",
+    )
+    print(ret.ok, ret.ticket, ret.randstr)
+```
+
+当前定位：
+
+- 这是协议 solver，不是浏览器滑动 solver；在 VPS/headless 环境更稳、更省内存。
+- 默认只支持 `blockPuzzle`，不把 AJ-Captcha 的 `clickWord` 文字点选纳入主能力。
+- 若目标服务端直接返回 `point`，SDK 会优先走返回点位；默认部署不返回时走 CV 缺口定位。
+
+---
+
+### 9. GeeTest v4 / 极验
 
 GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：能在官方 v4 slide demo 上完成图片定位、轨迹拖动和成功载荷提取。但这个能力还不是稳定通杀，真实站点仍会受风险策略、设备指纹、轨迹质量和出口 IP 影响。
 
@@ -600,7 +674,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 9. 网易易盾 / Yidun 滑动拼图
+### 10. 网易易盾 / Yidun 滑动拼图
 
 Yidun 现在保留 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
 
@@ -671,11 +745,12 @@ async with AntibotClient() as client:
 
 ---
 
-### 10. 自动分发模式
+### 11. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
 - Qoder / Aliyun 相关 URL -> `aliyun`
+- AJ-Captcha / Anji / `/captcha/get` 相关 URL -> `ajcaptcha`
 - Tencent / TCaptcha 相关 URL -> `tencent`
 - GeeTest / gcaptcha4 相关 URL -> `geetest`
 - Yidun / NetEase Dun / necaptcha / dun.163.com 相关 URL -> `yidun`
@@ -693,7 +768,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 11. 代理格式
+### 12. 代理格式
 
 支持以下格式：
 
@@ -855,6 +930,10 @@ antibot stress hcaptcha --url 'https://target.example/path-with-hcaptcha' --runs
 antibot solve recaptcha --url 'https://target.example/path-with-recaptcha'
 antibot stress recaptcha --url 'https://target.example/path-with-recaptcha' --runs 10
 
+# AJ-Captcha
+antibot solve ajcaptcha --base-url 'http://127.0.0.1:18080'
+antibot stress ajcaptcha --base-url 'http://127.0.0.1:18080' --runs 50 --concurrency 5
+
 # Submit verification，证明 token 是否真过页面流程
 antibot verify recaptcha --url 'https://target.example/form' --captcha-json /tmp/recaptcha-run/recaptcha_run.json --submit '#submit' --success '.ok' --failure '.captcha-error'
 antibot verify hcaptcha --url 'https://target.example/form' --token 'P1_xxx' --submit '#submit' --success '.ok'
@@ -887,12 +966,13 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
 turnstile_page.png / hcaptcha_page.png / recaptcha_page.png / geetest_page.png
 turnstile_page.html / hcaptcha_page.html / recaptcha_page.html / geetest_page.html
+ajcaptcha_run.json / ajcaptcha_original.png / ajcaptcha_jigsaw.png
 geetest_slide_bg_N.png / geetest_slide_slice_N.png
 yidun_run.json / yidun_page.png / yidun_page.html
 yidun_slide_bg_N.jpg / yidun_slide_front_N.png
@@ -940,6 +1020,7 @@ src/antibot_sdk/
     cloudflare.py           # Pydoll runner
     tencent.py              # Tencent provider adapter
     aliyun.py               # Aliyun provider adapter
+    ajcaptcha.py            # AJ-Captcha blockPuzzle protocol solver
     geetest.py              # GeeTest v4 hook + slide solver alpha
     hcaptcha.py             # hCaptcha hook/observer provider
     recaptcha.py            # reCAPTCHA/Enterprise hook/observer provider
@@ -954,6 +1035,7 @@ tests/
   test_proxy.py
   test_stress.py
   test_verification.py
+  test_ajcaptcha.py
   test_yidun_slide.py
 ```
 
@@ -1016,6 +1098,15 @@ Yidun：
 关键修复：initNECaptcha hook 改为 Proxy，保留 .use() 静态方法；拖动距离加入 front/slider 视觉偏移补偿。
 ```
 
+AJ-Captcha：
+
+```text
+本地协议 mock：ok=true，成功生成 AES pointJson 与 captchaVerification。
+合成干扰图样本：alpha-edge 缺口定位误差 <= 2px。
+官方 Go 实现串行压测 20 轮：20/20，avg≈126.8ms，p95≈194ms。
+官方 Go 实现并发压测 20 轮/concurrency=4/max-attempts=3：19/20；失败集中在 demo 服务自身共享状态/内存缓存并发抖动。
+```
+
 Turnstile：
 
 ```text
@@ -1042,6 +1133,7 @@ stress recaptcha mock 2 轮：2/2。
 ## 已知调优点
 
 - Qoder/Aliyun 的 `F001` 常和出口 IP / session reputation / 当前页面状态有关。
+- AJ-Captcha 的主要误差来自白色描边过弱、服务端自定义模板/尺寸、以及干扰图与真实模板相似；优先调 `--min-score`、保存 `ajcaptcha_original.png / ajcaptcha_jigsaw.png` 复盘。
 - Yidun 的误差主要来自三类：浅色缺口的 `color_template` / 暗色缺口的 `shadow_*` 分支选择、front 图片相对 slider 的视觉偏移、以及轨迹/IP/设备指纹。
 - 代理池能明显降低部分 F001，但仍会出现 `NONE`、`gap not found`、`candidate rejected` 等临时状态。
 - 当前最佳基线是：**Qoder + proxy + 快 session 策略**。

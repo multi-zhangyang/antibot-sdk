@@ -23,6 +23,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "verify_code/session artifacts",
         "scope": "阿里云滑块：站点 profile + CV 缺口 + 轨迹拖拽 + attempt/session retry。",
     },
+    "ajcaptcha": {
+        "provider": "ajcaptcha",
+        "name": "AJ-Captcha / Anji",
+        "category": "solver",
+        "captcha_type": "slider_protocol",
+        "status": "alpha",
+        "output": "captchaVerification/token",
+        "scope": "AJ-Captcha blockPuzzle：/captcha/get 图像缺口定位 + AES pointJson + /captcha/check 协议提交；不启动浏览器。",
+    },
     "geetest": {
         "provider": "geetest",
         "name": "GeeTest v4",

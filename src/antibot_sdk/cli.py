@@ -126,6 +126,7 @@ async def amain(argv: list[str] | None = None) -> int:
         "--provider",
         choices=[
             "auto",
+            "ajcaptcha",
             "aliyun",
             "tencent",
             "geetest",
@@ -182,6 +183,25 @@ async def amain(argv: list[str] | None = None) -> int:
     ali.add_argument("--session-retry-delay", type=float)
     ali.add_argument("--session-retry-max-attempts", type=int)
     ali.add_argument("--raw", action="store_true")
+
+    aj = solve_sub.add_parser("ajcaptcha")
+    aj.add_argument("--base-url", required=True, help="AJ-Captcha API prefix, e.g. http://host")
+    aj.add_argument("--get-path", default="/captcha/get")
+    aj.add_argument("--check-path", default="/captcha/check")
+    aj.add_argument("--verify-path")
+    aj.add_argument("--captcha-type", default="blockPuzzle")
+    aj.add_argument("--client-uid")
+    aj.add_argument("--canonical-width", type=int, default=310)
+    aj.add_argument("--point-y", type=int, default=5)
+    aj.add_argument("--timeout", type=int, default=20)
+    aj.add_argument("--max-attempts", type=int, default=2)
+    aj.add_argument("--proxy")
+    aj.add_argument("--output-dir")
+    aj.add_argument("--no-save-images", action="store_true")
+    aj.add_argument("--min-score", type=float, default=0.15)
+    aj.add_argument("--no-returned-point", action="store_true")
+    aj.add_argument("--verify-after-check", action="store_true")
+    aj.add_argument("--raw", action="store_true")
 
     gt = solve_sub.add_parser("geetest")
     gt.add_argument("--url", dest="target_url", required=True)
@@ -308,6 +328,21 @@ async def amain(argv: list[str] | None = None) -> int:
     sa.add_argument("--output-dir")
     sa.add_argument("--output-json")
     sa.add_argument("--full", action="store_true")
+
+    saj = stress_sub.add_parser("ajcaptcha")
+    saj.add_argument("--base-url", required=True)
+    saj.add_argument("--get-path", default="/captcha/get")
+    saj.add_argument("--check-path", default="/captcha/check")
+    saj.add_argument("--captcha-type", default="blockPuzzle")
+    saj.add_argument("--runs", type=int, default=10)
+    saj.add_argument("--concurrency", type=int, default=2)
+    saj.add_argument("--timeout", type=int, default=20)
+    saj.add_argument("--max-attempts", type=int, default=2)
+    saj.add_argument("--proxy")
+    saj.add_argument("--output-dir")
+    saj.add_argument("--min-score", type=float, default=0.15)
+    saj.add_argument("--output-json")
+    saj.add_argument("--full", action="store_true")
 
     sg = stress_sub.add_parser("geetest")
     sg.add_argument("--url", dest="target_url", required=True)
@@ -524,6 +559,27 @@ async def amain(argv: list[str] | None = None) -> int:
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "ajcaptcha":
+        ret = await client.solve_ajcaptcha(
+            base_url=args.base_url,
+            get_path=args.get_path,
+            check_path=args.check_path,
+            verify_path=args.verify_path,
+            captcha_type=args.captcha_type,
+            client_uid=args.client_uid,
+            canonical_width=args.canonical_width,
+            point_y=args.point_y,
+            timeout_sec=args.timeout,
+            max_attempts=args.max_attempts,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            save_images=not args.no_save_images,
+            min_score=args.min_score,
+            use_returned_point=not args.no_returned_point,
+            verify_after_check=args.verify_after_check,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
     if args.cmd == "solve" and args.provider == "geetest":
         headless = False if args.headed else _headless(args.headless)
         ret = await client.solve_geetest(
@@ -705,6 +761,28 @@ async def amain(argv: list[str] | None = None) -> int:
                 session_retry_max_attempts=args.session_retry_max_attempts,
                 output_dir=str(root / f"run_{i}") if root else None,
                 timeout_sec=args.timeout,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "ajcaptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="ajcaptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_ajcaptcha(
+                base_url=args.base_url,
+                get_path=args.get_path,
+                check_path=args.check_path,
+                captcha_type=args.captcha_type,
+                timeout_sec=args.timeout,
+                max_attempts=args.max_attempts,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                min_score=args.min_score,
             ),
         )
         emit_stress(ret, full=args.full)

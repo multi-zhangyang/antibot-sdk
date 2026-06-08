@@ -5,6 +5,7 @@ from typing import Any
 from .models import BrowserResult, CaptchaResult
 from .profiles import detect_provider_for_url
 from .providers.aliyun import AliyunCaptchaSolver
+from .providers.ajcaptcha import AJCaptchaSolver
 from .providers.browser import BrowserAutomation
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.hcaptcha import HCaptchaSolver
@@ -21,6 +22,7 @@ class AntibotClient:
         self.profile = profile
         self.browser_binary = browser_binary
         self.browser = BrowserAutomation()
+        self.ajcaptcha = AJCaptchaSolver()
         self.tencent = TencentCaptchaSolver()
         self.aliyun = AliyunCaptchaSolver()
         self.geetest = GeeTestCaptchaSolver()
@@ -45,6 +47,9 @@ class AntibotClient:
     async def solve_aliyun(self, **kwargs: Any) -> CaptchaResult:
         return await self.aliyun.solve(**kwargs)
 
+    async def solve_ajcaptcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.ajcaptcha.solve(**kwargs)
+
     async def solve_geetest(self, **kwargs: Any) -> CaptchaResult:
         return await self.geetest.solve(**kwargs)
 
@@ -62,6 +67,34 @@ class AntibotClient:
 
     async def solve_auto(self, target_url: str, **kwargs: Any) -> BrowserResult | CaptchaResult:
         provider = kwargs.pop("provider", None) or detect_provider_for_url(target_url)
+        if provider == "ajcaptcha":
+            aj_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "get_path",
+                    "check_path",
+                    "verify_path",
+                    "captcha_type",
+                    "client_uid",
+                    "canonical_width",
+                    "point_y",
+                    "timeout_sec",
+                    "max_attempts",
+                    "proxy_server",
+                    "output_dir",
+                    "save_images",
+                    "min_score",
+                    "use_returned_point",
+                    "verify_after_check",
+                    "headers",
+                }
+                and v is not None
+            }
+            aj_kwargs.setdefault("base_url", target_url)
+            return await self.solve_ajcaptcha(**aj_kwargs)
         if provider == "aliyun":
             return await self.solve_aliyun(target_url=target_url, **kwargs)
         if provider == "recaptcha":

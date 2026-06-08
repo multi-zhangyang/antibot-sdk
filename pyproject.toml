@@ -19,6 +19,7 @@ dependencies = [
   "crack-tcaptcha>=0.0.8",
   "opencv-python>=4.8",
   "numpy>=1.26",
+  "pycryptodome>=3.20",
 ]
 
 [project.optional-dependencies]

@@ -4,6 +4,12 @@ from .models import BrowserResult, CaptchaResult
 from .policy import AliyunPolicyEngine, PolicyDecision, aliyun_policy_decision
 from .profiles import detect_provider_for_url, list_profiles
 from .providers.geetest import detect_geetest_slide_gap, is_geetest_success_payload, latest_geetest_success
+from .providers.ajcaptcha import (
+    build_ajcaptcha_point_json,
+    decrypt_ajcaptcha_text,
+    detect_ajcaptcha_block_gap,
+    encrypt_ajcaptcha_text,
+)
 from .providers.hcaptcha import is_hcaptcha_token, latest_hcaptcha_token
 from .providers.recaptcha import is_recaptcha_token, latest_recaptcha_token
 from .providers.turnstile import is_turnstile_token, latest_turnstile_token
@@ -25,7 +31,11 @@ __all__ = [
     "aliyun_policy_decision",
     "detect_provider_for_url",
     "detect_geetest_slide_gap",
+    "detect_ajcaptcha_block_gap",
     "detect_yidun_slide_gap",
+    "build_ajcaptcha_point_json",
+    "decrypt_ajcaptcha_text",
+    "encrypt_ajcaptcha_text",
     "is_geetest_success_payload",
     "is_hcaptcha_token",
     "is_recaptcha_token",

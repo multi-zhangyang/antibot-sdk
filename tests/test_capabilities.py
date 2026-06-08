@@ -10,8 +10,9 @@ def test_capability_matrix_product_boundary() -> None:
     observers = {item["provider"]: item for item in caps["flow_observers"]}
     unsupported = {item["captcha_type"] for item in caps["unsupported"]}
 
-    assert set(solvers) == {"tencent", "aliyun", "geetest", "yidun"}
+    assert set(solvers) == {"tencent", "aliyun", "ajcaptcha", "geetest", "yidun"}
     assert solvers["tencent"]["captcha_type"] == "slider"
+    assert solvers["ajcaptcha"]["captcha_type"] == "slider_protocol"
     assert solvers["yidun"]["captcha_type"] == "jigsaw"
     assert set(observers) == {"turnstile", "hcaptcha", "recaptcha"}
     assert all(item["captcha_type"] == "token_widget" for item in observers.values())
