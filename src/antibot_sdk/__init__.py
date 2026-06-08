@@ -1,4 +1,5 @@
 from .client import AntibotClient
+from .capabilities import CAPABILITY_MATRIX, UNSUPPORTED_CAPABILITIES, list_capabilities
 from .models import BrowserResult, CaptchaResult
 from .policy import AliyunPolicyEngine, PolicyDecision, aliyun_policy_decision
 from .profiles import detect_provider_for_url, list_profiles
@@ -14,6 +15,7 @@ __all__ = [
     "AliyunPolicyEngine",
     "AntibotClient",
     "BrowserResult",
+    "CAPABILITY_MATRIX",
     "CaptchaResult",
     "FailureClassifier",
     "PolicyDecision",
@@ -33,7 +35,9 @@ __all__ = [
     "latest_recaptcha_token",
     "latest_turnstile_token",
     "latest_yidun_success",
+    "list_capabilities",
     "list_profiles",
     "run_stress",
+    "UNSUPPORTED_CAPABILITIES",
     "verify_submit_flow",
 ]

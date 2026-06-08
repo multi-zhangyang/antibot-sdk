@@ -67,6 +67,8 @@ class TencentCaptchaSolver:
             return CaptchaResult(
                 provider="tencent",
                 ok=False,
+                captcha_type="slider",
+                capability="solver",
                 elapsed_ms=elapsed_ms,
                 diagnostics={
                     "profile": getattr(prof, "name", None) or profile,
@@ -88,6 +90,8 @@ class TencentCaptchaSolver:
         return CaptchaResult(
             provider="tencent",
             ok=ok,
+            captcha_type="slider",
+            capability="solver",
             ticket=raw.get("ticket"),
             randstr=raw.get("randstr"),
             verify_code=str(raw.get("error_code") or "") or None,

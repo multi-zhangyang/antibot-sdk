@@ -842,6 +842,8 @@ class GeeTestCaptchaSolver:
         return CaptchaResult(
             provider="geetest",
             ok=ok,
+            captcha_type="slider",
+            capability="solver",
             ticket=success.get("pass_token") if success else None,
             randstr=success.get("lot_number") if success else None,
             verify_code="success" if ok else "pending",

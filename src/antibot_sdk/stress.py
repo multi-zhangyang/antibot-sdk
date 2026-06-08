@@ -75,6 +75,9 @@ async def run_stress(
                 return {
                     "run": i,
                     "ok": bool(data.get("ok")),
+                    "provider": data.get("provider"),
+                    "captcha_type": data.get("captcha_type"),
+                    "capability": data.get("capability"),
                     "elapsed_ms": elapsed_ms,
                     "verify_code": data.get("verify_code"),
                     "errors": data.get("errors") or [],

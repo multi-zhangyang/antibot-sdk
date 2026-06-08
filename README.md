@@ -20,6 +20,51 @@
 
 ## 现在这个 SDK 可以干什么
 
+### 能力矩阵 / 产品边界
+
+当前版本明确收缩到“几何可解 + 流程可观测”两条线，不把文字点选、语义选图、复杂拖拽包装成主能力。
+
+| Provider | 定位 | `captcha_type` | 状态 | 输出 |
+| :--- | :--- | :--- | :--- | :--- |
+| Tencent Captcha | 真实 solver | `slider` | primary | `ticket/randstr` |
+| Aliyun Captcha | 真实 solver | `slider` | primary | `VerifyCode` / artifacts |
+| GeeTest v4 | 真实 solver | `slider` | alpha | `pass_token/lot_number` |
+| NetEase Yidun | 真实 solver | `jigsaw` | alpha | `validate/token/zoneId` |
+| Turnstile | 流程/Token 观察采集 | `token_widget` | observer | widget token / artifacts |
+| hCaptcha | 流程/Token 观察采集 | `token_widget` | observer | widget token / artifacts |
+| reCAPTCHA / Enterprise | 流程/Token 观察采集 | `token_widget` | observer | widget/execute token / artifacts |
+
+不作为 SDK 主能力：
+
+- 文字点选：需要模型训练和样本闭环，OCR/混淆表 demo 不上线。
+- 语义选图：需要通用视觉语义模型和真实站点样本，不承诺。
+- 复杂拖拽/排序：规则和行为链路不稳定，只保留几何明确的滑块/拼图类。
+
+CLI 可直接查看当前能力边界：
+
+```bash
+antibot capabilities
+```
+
+统一 `CaptchaResult` 输出字段：
+
+```json
+{
+  "provider": "tencent",
+  "ok": true,
+  "captcha_type": "slider",
+  "capability": "solver",
+  "ticket": "...",
+  "randstr": "...",
+  "verify_code": "success",
+  "elapsed_ms": 1234,
+  "artifacts": {},
+  "diagnostics": {},
+  "raw": {},
+  "errors": []
+}
+```
+
 ### 1. 普通页面 / Cloudflare 类页面自动化
 
 - 使用 Pydoll + Chromium 打开页面。
@@ -182,7 +227,7 @@ async with AntibotClient() as client:
 当前定位：
 
 - 对无感/低风险直接出 token、页面自身 callback、测试页/集成页的 hCaptcha token 链路有效。
-- 遇到真实图片/多轮 challenge 时，当前版本会先保留完整现场；下一步再接图片识别、任务分类和 Enterprise 风控策略。
+- 遇到真实图片/多轮 challenge 时，当前版本只保留完整现场，不把图片挑战求解作为 SDK 主能力。
 
 ---
 
@@ -248,7 +293,7 @@ async with AntibotClient() as client:
 当前定位：
 
 - 对 v3/Enterprise 低风险直接出 token、页面自身 callback/execute、测试页/集成页 token 链路有效。
-- 遇到 v2 图片/checkbox 交互挑战时，当前版本先保留完整现场；下一步再接图片识别、anchor/reload 流分析和 Enterprise assessment 结果归一。
+- 遇到 v2 图片/checkbox 交互挑战时，当前版本先保留完整现场，不把图片挑战求解作为 SDK 主能力。
 
 ---
 

@@ -995,6 +995,8 @@ class YidunCaptchaSolver:
         return CaptchaResult(
             provider="yidun",
             ok=ok,
+            captcha_type="jigsaw",
+            capability="solver",
             ticket=success.get("validate") if success else None,
             randstr=success.get("token") if success else None,
             verify_code="success" if ok else "pending",

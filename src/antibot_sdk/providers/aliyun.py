@@ -238,6 +238,8 @@ class AliyunCaptchaSolver:
             return CaptchaResult(
                 provider="aliyun",
                 ok=is_ok,
+                captcha_type="slider",
+                capability="solver",
                 verify_code=verify.get("VerifyCode") or raw.get("verifyFailureCode"),
                 elapsed_ms=raw.get("elapsedMs"),
                 artifacts=artifacts,

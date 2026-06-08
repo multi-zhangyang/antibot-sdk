@@ -6,6 +6,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
+from .capabilities import list_capabilities
 from .client import AntibotClient
 from .profiles import list_profiles
 from .providers.aliyun import AliyunCaptchaSolver
@@ -99,6 +100,7 @@ async def amain(argv: list[str] | None = None) -> int:
     d.add_argument("--browser-binary")
 
     sub.add_parser("profiles")
+    sub.add_parser("capabilities")
 
     run = sub.add_parser("run")
     run.add_argument("url")
@@ -414,6 +416,9 @@ async def amain(argv: list[str] | None = None) -> int:
         return 0
     if args.cmd == "profiles":
         emit(list_profiles())
+        return 0
+    if args.cmd == "capabilities":
+        emit(list_capabilities())
         return 0
     if args.cmd == "install-js-deps":
         AliyunCaptchaSolver.install_js_deps()

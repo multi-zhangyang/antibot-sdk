@@ -22,6 +22,8 @@ class BrowserResult:
 class CaptchaResult:
     provider: str
     ok: bool
+    captcha_type: str | None = None
+    capability: str | None = None
     ticket: str | None = None
     randstr: str | None = None
     verify_code: str | None = None

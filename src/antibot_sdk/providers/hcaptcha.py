@@ -538,6 +538,8 @@ class HCaptchaSolver:
         return CaptchaResult(
             provider="hcaptcha",
             ok=ok,
+            captcha_type="token_widget",
+            capability="flow_observer",
             ticket=token,
             verify_code="success" if ok else "pending",
             elapsed_ms=raw.get("elapsedMs"),
