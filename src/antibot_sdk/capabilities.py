@@ -194,6 +194,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "{challenge, solutions, reaction} / success",
         "scope": "pow-reaction JWT 签名多轮 PoW：解析 HS256 JWT challenge，按 rounds 复现 SHA256(round+'.'+nonce) 前导零 bit，可提交 reactions endpoint，支持 clientId/context 绑定与 redeem 防重放链路；不启动浏览器。",
     },
+    "procaptcha": {
+        "provider": "procaptcha",
+        "name": "Prosopo Procaptcha PoW",
+        "category": "solver",
+        "captcha_type": "prosopo_pow",
+        "status": "alpha",
+        "output": "pow solution body / verified response",
+        "scope": "Prosopo Procaptcha PoW：复现 @prosopo/util 的 SHA256(nonce+challenge) 前导十六进制零搜索，支持 provider challenge 拉取与 signed timestamp submit body；不启动浏览器。",
+    },
     "privatecaptcha": {
         "provider": "privatecaptcha",
         "name": "PrivateCaptcha",

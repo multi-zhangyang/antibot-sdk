@@ -147,6 +147,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "powbot",
             "powchallenge",
             "powreaction",
+            "procaptcha",
             "privatecaptcha",
             "portcullis",
             "swetrix",
@@ -561,6 +562,36 @@ async def amain(argv: list[str] | None = None) -> int:
     powr.add_argument("--output-dir")
     powr.add_argument("--user-agent")
     powr.add_argument("--raw", action="store_true")
+
+    proc = solve_sub.add_parser("procaptcha")
+    proc_source = proc.add_mutually_exclusive_group(required=True)
+    proc_source.add_argument("--provider-url", help="Prosopo provider root; infers /v1/prosopo/provider/client/captcha/pow and /pow/solution")
+    proc_source.add_argument("--challenge-json", help="inline {challenge,difficulty,timestamp,signature} JSON, or @/path")
+    proc_source.add_argument("--challenge-file")
+    proc_source.add_argument("--challenge-url", help="POST endpoint returning Procaptcha PoW challenge")
+    proc.add_argument("--submit-url", help="POST endpoint accepting Procaptcha PoW solution body")
+    proc.add_argument("--site-key", help="Prosopo-Site-Key header; defaults to --dapp")
+    proc.add_argument("--user", help="Prosopo user account")
+    proc.add_argument("--dapp", help="Prosopo dapp/site account")
+    proc.add_argument("--session-id")
+    proc.add_argument("--submit", action="store_true")
+    proc.add_argument("--user-timestamp-signature", help="signature over challenge timestamp from the user signer")
+    proc.add_argument("--verified-timeout", type=int, default=120_000)
+    proc.add_argument("--provider-challenge-signature", help="override signature.provider.challenge")
+    proc.add_argument("--behavioral-data")
+    proc.add_argument("--salt")
+    proc.add_argument("--simd-readings")
+    proc.add_argument("--client-meta-json", help="inline clientMetaData JSON, or @/path")
+    proc.add_argument("--client-meta-file")
+    proc.add_argument("--include-timestamp", action="store_true", help="include raw timestamp in submit body for legacy fixtures")
+    proc.add_argument("--start", type=int, default=0)
+    proc.add_argument("--max-attempts", type=int, default=100_000_000)
+    proc.add_argument("--workers", type=int, default=1)
+    proc.add_argument("--timeout", type=int, default=60)
+    proc.add_argument("--proxy")
+    proc.add_argument("--output-dir")
+    proc.add_argument("--user-agent")
+    proc.add_argument("--raw", action="store_true")
 
     priv = solve_sub.add_parser("privatecaptcha")
     priv_source = priv.add_mutually_exclusive_group(required=True)
@@ -1172,6 +1203,39 @@ async def amain(argv: list[str] | None = None) -> int:
     spowr.add_argument("--user-agent")
     spowr.add_argument("--full", action="store_true")
 
+    sproc = stress_sub.add_parser("procaptcha")
+    sproc_source = sproc.add_mutually_exclusive_group(required=True)
+    sproc_source.add_argument("--provider-url")
+    sproc_source.add_argument("--challenge-json")
+    sproc_source.add_argument("--challenge-file")
+    sproc_source.add_argument("--challenge-url")
+    sproc.add_argument("--submit-url")
+    sproc.add_argument("--site-key")
+    sproc.add_argument("--user")
+    sproc.add_argument("--dapp")
+    sproc.add_argument("--session-id")
+    sproc.add_argument("--submit", action="store_true")
+    sproc.add_argument("--user-timestamp-signature")
+    sproc.add_argument("--verified-timeout", type=int, default=120_000)
+    sproc.add_argument("--provider-challenge-signature")
+    sproc.add_argument("--behavioral-data")
+    sproc.add_argument("--salt")
+    sproc.add_argument("--simd-readings")
+    sproc.add_argument("--client-meta-json")
+    sproc.add_argument("--client-meta-file")
+    sproc.add_argument("--include-timestamp", action="store_true")
+    sproc.add_argument("--runs", type=int, default=10)
+    sproc.add_argument("--concurrency", type=int, default=2)
+    sproc.add_argument("--timeout", type=int, default=60)
+    sproc.add_argument("--start", type=int, default=0)
+    sproc.add_argument("--max-attempts", type=int, default=100_000_000)
+    sproc.add_argument("--workers", type=int, default=1)
+    sproc.add_argument("--proxy")
+    sproc.add_argument("--output-dir")
+    sproc.add_argument("--output-json")
+    sproc.add_argument("--user-agent")
+    sproc.add_argument("--full", action="store_true")
+
     spriv = stress_sub.add_parser("privatecaptcha")
     spriv_source = spriv.add_mutually_exclusive_group(required=True)
     spriv_source.add_argument("--puzzle")
@@ -1464,6 +1528,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "powbot",
             "powchallenge",
             "powreaction",
+            "procaptcha",
             "privatecaptcha",
             "portcullis",
             "swetrix",
@@ -1913,6 +1978,37 @@ async def amain(argv: list[str] | None = None) -> int:
             submit=args.submit,
             secret=args.secret,
             max_attempts_per_round=args.max_attempts_per_round,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "procaptcha":
+        ret = await client.solve_procaptcha(
+            provider_url=args.provider_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            submit_url=args.submit_url,
+            site_key=args.site_key,
+            user=args.user,
+            dapp=args.dapp,
+            session_id=args.session_id,
+            submit=args.submit,
+            user_timestamp_signature=args.user_timestamp_signature,
+            verified_timeout=args.verified_timeout,
+            provider_challenge_signature=args.provider_challenge_signature,
+            behavioral_data=args.behavioral_data,
+            salt=args.salt,
+            simd_readings=args.simd_readings,
+            client_meta_json=args.client_meta_json,
+            client_meta_file=args.client_meta_file,
+            include_timestamp=args.include_timestamp,
+            start=args.start,
+            max_attempts=args.max_attempts,
             workers=args.workers,
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
@@ -2706,6 +2802,45 @@ async def amain(argv: list[str] | None = None) -> int:
                 submit=args.submit,
                 secret=args.secret,
                 max_attempts_per_round=args.max_attempts_per_round,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "procaptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="procaptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_procaptcha(
+                provider_url=args.provider_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                submit_url=args.submit_url,
+                site_key=args.site_key,
+                user=args.user,
+                dapp=args.dapp,
+                session_id=args.session_id,
+                submit=args.submit,
+                user_timestamp_signature=args.user_timestamp_signature,
+                verified_timeout=args.verified_timeout,
+                provider_challenge_signature=args.provider_challenge_signature,
+                behavioral_data=args.behavioral_data,
+                salt=args.salt,
+                simd_readings=args.simd_readings,
+                client_meta_json=args.client_meta_json,
+                client_meta_file=args.client_meta_file,
+                include_timestamp=args.include_timestamp,
+                start=args.start,
+                max_attempts=args.max_attempts,
                 workers=args.workers,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,

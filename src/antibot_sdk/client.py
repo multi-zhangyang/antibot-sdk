@@ -26,6 +26,7 @@ from .providers.pcaptcha import PCaptchaSolver
 from .providers.powcaptcha import PowCaptchaSolver
 from .providers.powbot import PowBotSolver
 from .providers.powchallenge import PowChallengeSolver
+from .providers.procaptcha import ProcaptchaSolver
 from .providers.privatecaptcha import PrivateCaptchaSolver
 from .providers.portcullis import PortcullisSolver
 from .providers.powreaction import PowReactionSolver
@@ -63,6 +64,7 @@ class AntibotClient:
         self.powbot = PowBotSolver()
         self.powchallenge = PowChallengeSolver()
         self.powreaction = PowReactionSolver()
+        self.procaptcha = ProcaptchaSolver()
         self.privatecaptcha = PrivateCaptchaSolver()
         self.portcullis = PortcullisSolver()
         self.swetrix = SwetrixSolver()
@@ -142,6 +144,9 @@ class AntibotClient:
 
     async def solve_powreaction(self, **kwargs: Any) -> CaptchaResult:
         return await self.powreaction.solve(**kwargs)
+
+    async def solve_procaptcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.procaptcha.solve(**kwargs)
 
     async def solve_privatecaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.privatecaptcha.solve(**kwargs)
@@ -705,6 +710,53 @@ class AntibotClient:
                 else:
                     pr_kwargs["base_url"] = target_url
             return await self.solve_powreaction(**pr_kwargs)
+        if provider == "procaptcha":
+            proc_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "provider_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "submit_url",
+                    "site_key",
+                    "user",
+                    "dapp",
+                    "session_id",
+                    "submit",
+                    "user_timestamp_signature",
+                    "verified_timeout",
+                    "provider_challenge_signature",
+                    "behavioral_data",
+                    "salt",
+                    "simd_readings",
+                    "client_meta_json",
+                    "client_meta_file",
+                    "include_timestamp",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not proc_kwargs.get("provider_url") and not proc_kwargs.get("challenge_url"):
+                if target_lower.rstrip("/").endswith("/captcha/pow"):
+                    proc_kwargs["challenge_url"] = target_url
+                    proc_kwargs["provider_url"] = target_url[: target_lower.rindex("/v1/prosopo/provider/client/captcha/pow")]
+                elif target_lower.rstrip("/").endswith("/pow/solution"):
+                    proc_kwargs["submit_url"] = target_url
+                    proc_kwargs["provider_url"] = target_url[: target_lower.rindex("/v1/prosopo/provider/client/pow/solution")]
+                else:
+                    proc_kwargs["provider_url"] = target_url
+            return await self.solve_procaptcha(**proc_kwargs)
         if provider == "privatecaptcha":
             pc_kwargs = {
                 k: v

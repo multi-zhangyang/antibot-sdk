@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -36,6 +36,7 @@
 - PoW Bot Deterrent：新增 scrypt-WASM PoW 协议 solver，解析 base64 JSON challenge，复现 `scrypt(nonce_bytes, preimage_bytes, N/r/p/klen)` 与尾部阈值比较，可提交 `/Verify`，不启动浏览器。
 - POWChallenge / powchallenge-server：新增 Argon2id memory-hard PoW 协议 solver，解析 `GET /challenge` 的 `req_id/challenge/difficulty`，复现 `t=1,m=19456KiB,p=1` 前导零 bit 校验，可提交 `/verify`，不启动浏览器。
 - pow-reaction：新增 JWT 签名多轮 PoW 协议 solver，解析 HS256 challenge、clientId/context 绑定和 rounds，复现 `SHA256(round+"."+nonce)` 前导零 bit，可提交 reactions endpoint，不启动浏览器。
+- Prosopo Procaptcha PoW：新增纯协议 PoW solver，复现 `@prosopo/util` 的 `SHA256(nonce+challenge)` 前导十六进制零搜索，可构造 signed timestamp submit body 并提交 provider endpoint，不启动浏览器。
 - GeeTest v4：从 observer 升级出滑动 solver alpha，抓取 bg/slice、CV 匹配缺口、生成拖动轨迹，并提取 `lot_number/captcha_output/pass_token/gen_time`。
 - 网易易盾 / Yidun：滑动拼图 solver alpha，抓取 bg/front、OpenCV 定位缺口、模拟滑块轨迹，并提取 `validate/token/zoneId`。
 - Policy Engine：把 `F001/F015/NONE/gap/candidate/watchdog timeout` 等失败归类，决定是否换 session，并输出下一步调参建议。
@@ -78,6 +79,7 @@
 | PoW Bot Deterrent | 协议 solver | `scrypt_pow` | alpha | nonce / validated OK |
 | POWChallenge / powchallenge-server | 协议 solver | `argon2id_memory_pow` | alpha | verify body / validated message |
 | pow-reaction | 协议 solver | `signed_multi_round_pow` | alpha | `{challenge, solutions, reaction}` / success |
+| Prosopo Procaptcha PoW | 协议 solver | `prosopo_pow` | alpha | submit body / `verified=true` |
 | GeeTest v4 | 真实 solver | `slider` | alpha | `pass_token/lot_number` |
 | NetEase Yidun | 真实 solver | `jigsaw` | alpha | `validate/token/zoneId` |
 | Turnstile | 流程/Token 观察采集 | `token_widget` | observer | widget token / artifacts |
@@ -1957,6 +1959,60 @@ antibot solve powreaction \
 
 ---
 
+### 22.4 Prosopo Procaptcha PoW
+
+Prosopo Procaptcha 的 PoW 模式不是图片识别，核心在 provider 签发 challenge、用户对 timestamp 签名、客户端搜索 nonce 后提交。当前 SDK 复现公开 npm 包里的 PoW 算法和 HTTP body 结构：
+
+```text
+POST /v1/prosopo/provider/client/captcha/pow {user, dapp, sessionId?, simdReadings?}
+-> {challenge, difficulty, timestamp, signature:{provider:{challenge}}}
+
+hash = SHA256(str(nonce) + challenge)
+pass = hex(hash).startswith("0" * difficulty)
+
+POST /v1/prosopo/provider/client/pow/solution
+{challenge, difficulty, signature:{provider,user}, user, dapp, nonce, verifiedTimeout?, ...}
+-> {verified:true} 或 escalation
+```
+
+SDK 当前支持：
+
+- 读取本地 fixture，或按 provider URL 拉取 challenge；
+- 复现 `@prosopo/util` 的 `solvePoW(data, difficulty)`：十进制 nonce 字符串拼接 challenge 后 SHA-256；
+- difficulty 按 hex 前缀零数量处理，不是 bit 数；
+- 构造 submit body，保留 `signature.provider.challenge` 和用户 timestamp 签名；
+- 支持 `behavioralData/salt/simdReadings/clientMetaData` 这些可选字段透传；
+- 不启动浏览器。
+
+只解本地 challenge：
+
+```bash
+antibot solve procaptcha \
+  --challenge-json '{"challenge":"prosopo-fixture","difficulty":3,"timestamp":"1780955164000","signature":{"provider":{"challenge":"0x..."}}}' \
+  --timeout 10 \
+  --raw
+```
+
+完整协议提交：
+
+```bash
+antibot solve procaptcha \
+  --provider-url 'https://provider.example' \
+  --user '5F...' \
+  --dapp '5F...' \
+  --user-timestamp-signature '0x...' \
+  --submit \
+  --timeout 60
+```
+
+当前定位：
+
+- 这是协议 PoW solver，不解决 Procaptcha image/puzzle escalation；
+- 真实提交要求用户账户 timestamp 签名，SDK 不伪造钱包/扩展 signer，只接收外部签名值；
+- 如果 provider 返回 escalation，说明 PoW 被接受或进入下一层风控，但后续 image/puzzle 不纳入当前 SDK 主能力。
+
+---
+
 ### 23. mCaptcha PoW
 
 mCaptcha 是 self-hosted PoW CAPTCHA。浏览器 widget 的流程是：`POST /api/v1/pow/config` 取 `string/difficulty_factor/salt`，本地搜索 nonce，再 `POST /api/v1/pow/verify` 换取服务端 token。SDK 当前把这条链路做成纯协议 solver。
@@ -2424,6 +2480,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - PoW Bot Deterrent / `/GetChallenges?difficultyLevel=` 相关 URL -> `powbot`
 - POWChallenge / powchallenge-server 相关 URL -> `powchallenge`
 - pow-reaction / `/reactions/challenge` 相关 URL -> `powreaction`
+- Prosopo / Procaptcha / `/v1/prosopo/provider/client/captcha/pow` 相关 URL -> `procaptcha`
 - Tencent / TCaptcha 相关 URL -> `tencent`
 - GeeTest / gcaptcha4 相关 URL -> `geetest`
 - Yidun / NetEase Dun / necaptcha / dun.163.com 相关 URL -> `yidun`
@@ -2742,6 +2799,11 @@ antibot solve powreaction --base-url 'https://pow-reaction.pages.dev/demo/reacti
 antibot solve powreaction --challenge-json '{"challenge":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}' --timeout 30
 antibot stress powreaction --challenge-json '{"challenge":"eyJ..."}' --runs 20 --concurrency 4
 
+# Prosopo Procaptcha PoW
+antibot solve procaptcha --challenge-json '{"challenge":"prosopo-fixture","difficulty":3,"timestamp":"1780955164000","signature":{"provider":{"challenge":"0x..."}}}' --timeout 10
+antibot solve procaptcha --provider-url 'https://provider.example' --user '5F...' --dapp '5F...' --user-timestamp-signature '0x...' --submit
+antibot stress procaptcha --challenge-json '{"challenge":"prosopo-fixture","difficulty":3,"timestamp":"1780955164000","signature":{"provider":{"challenge":"0x..."}}}' --runs 20 --concurrency 4
+
 # Submit verification，证明 token 是否真过页面流程
 antibot verify recaptcha --url 'https://target.example/form' --captcha-json /tmp/recaptcha-run/recaptcha_run.json --submit '#submit' --success '.ok' --failure '.captcha-error'
 antibot verify hcaptcha --url 'https://target.example/form' --token 'P1_xxx' --submit '#submit' --success '.ok'
@@ -2795,6 +2857,7 @@ powcaptcha_run.json
 powbot_run.json
 powchallenge_run.json
 powreaction_run.json
+procaptcha_run.json
 geetest_slide_bg_N.png / geetest_slide_slice_N.png
 yidun_run.json / yidun_page.png / yidun_page.html
 yidun_slide_bg_N.jpg / yidun_slide_front_N.png
@@ -2863,6 +2926,7 @@ src/antibot_sdk/
     powbot.py               # PoW Bot Deterrent scrypt-WASM PoW protocol solver
     powchallenge.py         # POWChallenge Argon2id memory-hard PoW protocol solver
     powreaction.py          # pow-reaction HS256 JWT multi-round SHA-256 PoW solver
+    procaptcha.py           # Prosopo Procaptcha SHA-256 hex-prefix PoW solver
     geetest.py              # GeeTest v4 hook + slide solver alpha
     hcaptcha.py             # hCaptcha hook/observer provider
     recaptcha.py            # reCAPTCHA/Enterprise hook/observer provider
@@ -2892,6 +2956,7 @@ tests/
   test_powbot.py
   test_powchallenge.py
   test_powreaction.py
+  test_procaptcha.py
   test_yourcaptcha.py
   test_silentchallenge.py
   test_yidun_slide.py

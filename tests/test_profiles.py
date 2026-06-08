@@ -31,6 +31,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://captcha.example/GetChallenges?difficultyLevel=5") == "powbot"
     assert detect_provider_for_url("https://captcha.example/powchallenge-server/challenge") == "powchallenge"
     assert detect_provider_for_url("https://pow-reaction.pages.dev/demo/reactions/challenge") == "powreaction"
+    assert detect_provider_for_url("https://provider.example/v1/prosopo/provider/client/captcha/pow") == "procaptcha"
     assert detect_provider_for_url("https://captcha.example/chpiopow/challenge") == "chpiopow"
     assert detect_provider_for_url("https://captcha.example/impost/challenge") == "impost"
     assert detect_provider_for_url("https://captcha.example/kerberus/challenge?difficultyFactor=50") == "kerberus"
@@ -53,6 +54,7 @@ def test_generic_provider_detection():
     assert "scrypt_pow" in list_profiles()["powbot"]
     assert "argon2id_memory_pow" in list_profiles()["powchallenge"]
     assert "signed_multi_round_pow" in list_profiles()["powreaction"]
+    assert "prosopo_pow" in list_profiles()["procaptcha"]
     assert "signals_bound_pow" in list_profiles()["fcaptcha"]
     assert "encrypted_behavior_pow" in list_profiles()["auro"]
     assert "target_match_pow" in list_profiles()["chpiopow"]

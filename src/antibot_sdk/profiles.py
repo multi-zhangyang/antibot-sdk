@@ -148,6 +148,11 @@ def detect_provider_for_url(url: str | None) -> str:
         return "powchallenge"
     if any(x in u or x in host for x in ("pow-reaction", "powreaction", "/reactions/challenge")):
         return "powreaction"
+    if any(
+        x in u or x in host
+        for x in ("prosopo", "procaptcha", "/v1/prosopo/provider/client/captcha/pow", "/v1/prosopo/provider/client/pow/solution")
+    ):
+        return "procaptcha"
     if any(x in u or x in host for x in ("privatecaptcha", "private-captcha", "api.privatecaptcha.com", "/privatecaptcha/")):
         return "privatecaptcha"
     if any(x in u or x in host for x in ("portcullis", "pow-captcha", "/api/v1/challenge", "/api/v1/verify")):
@@ -346,6 +351,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "jwt-signed-multi-round-sha256-pow-solver",
                 "successFields": ["{challenge, solutions, reaction}", "success=true"],
                 "endpoints": ["POST /reactions/challenge", "POST /reactions"],
+            }
+        },
+        "procaptcha": {
+            "prosopo_pow": {
+                "patterns": ["prosopo", "procaptcha", "/v1/prosopo/provider/client/captcha/pow"],
+                "mode": "prosopo-sha256-hex-prefix-pow-solver",
+                "successFields": ["{challenge, difficulty, nonce}", "verified=true"],
+                "endpoints": ["POST /v1/prosopo/provider/client/captcha/pow", "POST /v1/prosopo/provider/client/pow/solution"],
             }
         },
         "privatecaptcha": {
