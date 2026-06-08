@@ -8,6 +8,7 @@
 - Turnstile：新增浏览器 hook/observer provider，采集 `turnstile.render()` 配置、callback token、`cf-turnstile-response`、widget DOM 和网络现场。
 - hCaptcha：新增浏览器 hook/observer provider，采集 `hcaptcha.render()`、callback token、`h-captcha-response/g-recaptcha-response`、Enterprise `rqdata`、widget DOM 和网络现场。
 - reCAPTCHA / reCAPTCHA Enterprise：新增浏览器 hook/observer provider，采集 `grecaptcha.render()`、`grecaptcha.enterprise.execute()`、action、callback/execute token、`g-recaptcha-response` 和网络现场。
+- Submit Verification：把 `token_collected / server_verified / flow_passed` 拆开，用真实页面提交和 success/failure oracle 验证“token 采集 ≠ 真过验证”。
 - Tencent Captcha：封装腾讯滑块的页面触发、浏览器池、缺口识别、轨迹拖拽、ticket/randstr 输出。
 - Aliyun Captcha：封装阿里云滑块的 Node/Puppeteer runner、站点 profile、attempt/session retry、错误归一、artifact 保留。
 - GeeTest v4：新增浏览器 hook/observer provider，采集 `initGeetest4` 配置、实例方法、运行事件、`getValidate()` 成功载荷和网络现场。
@@ -250,7 +251,84 @@ async with AntibotClient() as client:
 
 ---
 
-### 5. 腾讯滑块验证码
+### 5. 真过闭环验证层（Submit Verification）
+
+这一层是当前版本最重要的底层改动：明确把 **采集 token** 和 **真过页面验证** 分开，避免把 observer 拿到 token 误判成已经过站点。
+
+状态字段拆成三层：
+
+```text
+token_collected   # 是否有 token/ticket/pass_token
+server_verified   # 页面提交后 success oracle 是否匹配；不是官方 siteverify API 调用
+flow_passed       # 真实表单/页面流程是否通过
+```
+
+能力：
+
+- 支持 reCAPTCHA / hCaptcha / Turnstile 的 token 注入与表单提交。
+- 自动写入默认字段：
+  - reCAPTCHA -> `g-recaptcha-response`
+  - hCaptcha -> `h-captcha-response`
+  - Turnstile -> `cf-turnstile-response`
+- 支持自定义 token selector、submit selector、成功/失败 selector、期望 URL。
+- 支持提交前预填表单和点击步骤。
+- 失败分类会归一成：`token_missing`、`token_rejected`、`action_mismatch`、`hostname_mismatch`、`low_score`、`session_binding_failed`、`image_challenge_required`、`form_flow_failed`、`navigation_failed`、`timeout`、`unknown`。
+- 输出 `verification_run.json`、`verification_page.png`、`verification_page.html`，便于复盘为什么没过。
+
+命令示例：
+
+```bash
+antibot verify recaptcha \
+  --url 'https://target.example/form' \
+  --captcha-json /tmp/recaptcha-run/recaptcha_run.json \
+  --submit '#submit' \
+  --success '.login-ok' \
+  --failure '.captcha-error' \
+  --output-dir /tmp/verify-recaptcha
+```
+
+直接传 token：
+
+```bash
+antibot verify hcaptcha \
+  --url 'https://target.example/form' \
+  --token 'P1_xxx' \
+  --token-field 'h-captcha-response' \
+  --submit 'button[type=submit]' \
+  --expected-url-contains '/dashboard'
+```
+
+Python 示例：
+
+```python
+import asyncio
+from antibot_sdk import SubmitFlow, verify_submit_flow
+
+async def main():
+    ret = await verify_submit_flow(
+        SubmitFlow(
+            provider="turnstile",
+            url="https://target.example/form",
+            token="0.xxx",
+            submit_selector="button[type=submit]",
+            success_selector=".success",
+            failure_selector=".captcha-error",
+            output_dir="/tmp/verify-turnstile",
+        )
+    )
+    print(ret.ok, ret.state, ret.failure_class, ret.reason)
+
+asyncio.run(main())
+```
+
+当前定位：
+
+- observer provider 负责 **采集现场和 token**。
+- verification 层负责 **把 token 放回真实页面提交，并用 oracle 判断是否真过**。
+- `server_verified=true` 在当前实现里表示“页面提交后的 success oracle 命中”，不是直接调用 Google/hCaptcha/Cloudflare 官方 verify API。
+- 如果失败，会尽量把原因归到 action/hostname/score/session/图片挑战/流程错误等类别，方便下一轮策略调参。
+
+### 6. 腾讯滑块验证码
 
 能力：
 
@@ -301,7 +379,7 @@ antibot stress tencent \
 
 ---
 
-### 6. 阿里云滑块验证码
+### 7. 阿里云滑块验证码
 
 能力：
 
@@ -379,7 +457,7 @@ antibot stress aliyun \
 
 ---
 
-### 7. GeeTest v4 / 极验
+### 8. GeeTest v4 / 极验
 
 第一版 GeeTest provider 先做 **可探测、可触发、可采集、可压测**，为后续轨迹/图像/行为模型接入打底。
 
@@ -452,7 +530,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 8. 自动分发模式
+### 9. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
@@ -473,7 +551,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 9. 代理格式
+### 10. 代理格式
 
 支持以下格式：
 
@@ -560,6 +638,22 @@ async def main():
         )
         print(recaptcha.ok, recaptcha.ticket, recaptcha.diagnostics.get("action"))
 
+        # token 采集后，再做真实提交闭环验证
+        from antibot_sdk import SubmitFlow, verify_submit_flow
+
+        verified = await verify_submit_flow(
+            SubmitFlow(
+                provider="recaptcha",
+                url="https://target.example/form",
+                token=recaptcha.ticket,
+                submit_selector="button[type=submit]",
+                success_selector=".login-ok",
+                failure_selector=".captcha-error",
+                output_dir="/tmp/verify-recaptcha",
+            )
+        )
+        print(verified.ok, verified.state, verified.failure_class, verified.reason)
+
         aliyun = await client.solve_aliyun(
             target_url="https://qoder.com/users/sign-up",
             site_profile="qoder_signup",
@@ -613,6 +707,11 @@ antibot stress hcaptcha --url 'https://target.example/path-with-hcaptcha' --runs
 antibot solve recaptcha --url 'https://target.example/path-with-recaptcha'
 antibot stress recaptcha --url 'https://target.example/path-with-recaptcha' --runs 10
 
+# Submit verification，证明 token 是否真过页面流程
+antibot verify recaptcha --url 'https://target.example/form' --captcha-json /tmp/recaptcha-run/recaptcha_run.json --submit '#submit' --success '.ok' --failure '.captcha-error'
+antibot verify hcaptcha --url 'https://target.example/form' --token 'P1_xxx' --submit '#submit' --success '.ok'
+antibot verify turnstile --url 'https://target.example/form' --token '0.xxx' --submit '#submit' --expected-url-contains '/dashboard'
+
 # GeeTest
 antibot solve geetest --url 'https://target.example/path-with-geetest'
 antibot stress geetest --url 'https://target.example/path-with-geetest' --runs 10
@@ -644,6 +743,14 @@ turnstile_page.png / hcaptcha_page.png / recaptcha_page.png / geetest_page.png
 turnstile_page.html / hcaptcha_page.html / recaptcha_page.html / geetest_page.html
 ```
 
+Submit verification 会保留：
+
+```text
+verification_run.json
+verification_page.png
+verification_page.html
+```
+
 Stress 输出 JSON 结构：
 
 ```text
@@ -672,6 +779,7 @@ src/antibot_sdk/
   profiles.py               # Aliyun site profile / URL provider detect
   proxy.py                  # 通用代理解析与脱敏
   stress.py                 # 统一压测框架
+  verification.py           # token 提交闭环 / success oracle / failure classifier
   providers/
     browser.py              # Pydoll/CDP provider
     cloudflare.py           # Pydoll runner
@@ -689,6 +797,7 @@ tests/
   test_profiles.py
   test_proxy.py
   test_stress.py
+  test_verification.py
 ```
 
 ---
@@ -698,7 +807,7 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 12 passed
+pytest: 14 passed
 node -c bridge.js/site_profiles.js/runner.js: passed
 uv build: success
 watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON
@@ -706,6 +815,8 @@ geetest mock: initGeetest4/onSuccess/getValidate 链路通过
 turnstile mock: render/callback/input token 链路通过
 hcaptcha mock: render/callback/input token 链路通过
 recaptcha mock: render/enterprise execute/callback/input token 链路通过
+verify mock: success oracle 命中时 state=passed/server_verified=true/flow_passed=true
+verify mock: invalid-input-response 会归类为 token_rejected
 ```
 
 腾讯：

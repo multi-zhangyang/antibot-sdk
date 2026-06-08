@@ -11,6 +11,7 @@ from .profiles import list_profiles
 from .providers.aliyun import AliyunCaptchaSolver
 from .providers.browser import BrowserAutomation
 from .stress import run_stress
+from .verification import SubmitFlow, verify_submit_flow
 
 
 def _selector(items: list[str]) -> dict[str, str]:
@@ -31,6 +32,21 @@ def _kv(items: list[str]) -> dict[str, str]:
         k, v = item.split("=", 1)
         out[k] = v
     return out
+
+
+def _load_token(path: str | None) -> str | None:
+    if not path:
+        return None
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(data, dict):
+        return (
+            data.get("token")
+            or data.get("ticket")
+            or data.get("randstr")
+            or (data.get("raw") or {}).get("token")
+            or ((data.get("success") or {}).get("pass_token") if isinstance(data.get("success"), dict) else None)
+        )
+    return None
 
 
 def _headless(value: str):
@@ -327,6 +343,33 @@ async def amain(argv: list[str] | None = None) -> int:
     src.add_argument("--output-json")
     src.add_argument("--full", action="store_true")
 
+    verify = sub.add_parser("verify")
+    verify_sub = verify.add_subparsers(dest="provider", required=True)
+    for provider_name in ("recaptcha", "hcaptcha", "turnstile"):
+        vf = verify_sub.add_parser(provider_name)
+        vf.add_argument("--url", required=True)
+        vf.add_argument("--token")
+        vf.add_argument("--captcha-json", help="read token from a previous solve artifact/result JSON")
+        vf.add_argument("--token-field")
+        vf.add_argument("--token-selector")
+        vf.add_argument("--submit", dest="submit_selector")
+        vf.add_argument("--success", dest="success_selector")
+        vf.add_argument("--failure", dest="failure_selector")
+        vf.add_argument("--expected-url-contains")
+        vf.add_argument("--prefill", action="append", default=[], help="CSS_SELECTOR=VALUE before submit")
+        vf.add_argument("--click", action="append", default=[], help="CSS selector to click before token injection")
+        vf.add_argument("--wait-after-submit-ms", type=int, default=2000)
+        vf.add_argument("--timeout", type=int, default=60)
+        vf.add_argument("--output-dir")
+        vf.add_argument("--headless", default="auto", choices=["auto", "true", "false"])
+        vf.add_argument("--headed", action="store_true")
+        vf.add_argument("--proxy")
+        vf.add_argument("--browser-binary")
+        vf.add_argument("--user-agent")
+        vf.add_argument("--locale", default="en-US")
+        vf.add_argument("--timezone", default="America/New_York")
+        vf.add_argument("--raw", action="store_true")
+
     args = p.parse_args(argv)
     if args.cmd == "diagnose":
         emit(BrowserAutomation.diagnose(args.browser_binary))
@@ -373,6 +416,35 @@ async def amain(argv: list[str] | None = None) -> int:
         if provider == "tencent":
             common.update({"profile": args.profile, "appid": args.appid})
         ret = await client.solve_auto(args.url, provider=provider, **common)
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "verify":
+        headless = False if args.headed else _headless(args.headless)
+        token = args.token or _load_token(args.captcha_json)
+        ret = await verify_submit_flow(
+            SubmitFlow(
+                provider=args.provider,
+                url=args.url,
+                token=token,
+                token_field=args.token_field,
+                token_value_selector=args.token_selector,
+                submit_selector=args.submit_selector,
+                success_selector=args.success_selector,
+                failure_selector=args.failure_selector,
+                expected_url_contains=args.expected_url_contains,
+                prefill=_kv(args.prefill),
+                clicks=args.click,
+                wait_after_submit_ms=args.wait_after_submit_ms,
+                timeout_sec=args.timeout,
+                output_dir=args.output_dir,
+                headless=headless,
+                proxy_server=args.proxy,
+                browser_binary=args.browser_binary,
+                user_agent=args.user_agent,
+                locale=args.locale,
+                timezone_id=args.timezone,
+            )
+        )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
     if args.cmd == "solve" and args.provider == "tencent":
