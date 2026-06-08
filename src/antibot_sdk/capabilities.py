@@ -95,6 +95,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "redeem body / Cap token",
         "scope": "Cap v1 seeded PoW、format-2 sha256-pow 与 format-2 RSW time-lock：本地 nonce 搜索或顺序 modular squaring，可输出 /redeem body 或直接 redeem token；不启动浏览器。",
     },
+    "cryptopuzzle": {
+        "provider": "cryptopuzzle",
+        "name": "crypto-puzzle",
+        "category": "solver",
+        "captcha_type": "rsw_time_lock_puzzle",
+        "status": "alpha",
+        "output": "decrypted message/token",
+        "scope": "crypto-puzzle RSW time-lock puzzle：解析 archive，复现顺序 repeated-squaring 解出 AES-GCM/PBKDF2 secret，恢复 message/token；不启动浏览器。",
+    },
     "captxa": {
         "provider": "captxa",
         "name": "Captxa",

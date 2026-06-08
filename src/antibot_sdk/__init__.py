@@ -95,6 +95,18 @@ from .providers.fcaptcha import (
     solve_fcaptcha_challenge,
     verify_fcaptcha_solution,
 )
+from .providers.cryptopuzzle import (
+    CryptoPuzzleArchive,
+    CryptoPuzzleSolution,
+    build_cryptopuzzle_fixture,
+    decode_cryptopuzzle_base64,
+    encode_cryptopuzzle_base64,
+    parse_cryptopuzzle_archive,
+    sequential_mod_exp_squares,
+    solve_cryptopuzzle_archive,
+    tiny_encryptor_decrypt_v1,
+    verify_cryptopuzzle_solution,
+)
 from .providers.friendlycaptcha import (
     FriendlyPuzzle,
     FriendlySolution,
@@ -287,7 +299,6 @@ from .providers.tollbooth import (
     parse_tollbooth_challenge,
     solve_tollbooth_challenge,
     tollbooth_balloon_hash_hex,
-    tollbooth_sha256_hash_hex,
     verify_tollbooth_solution,
 )
 from .stress import run_stress
@@ -318,6 +329,8 @@ __all__ = [
     "ChpioPowSolution",
     "FCaptchaChallenge",
     "FCaptchaSolution",
+    "CryptoPuzzleArchive",
+    "CryptoPuzzleSolution",
     "FriendlyPuzzle",
     "FriendlySolution",
     "GunsLolChallenge",
@@ -415,6 +428,7 @@ __all__ = [
     "parse_paul_pow_challenge",
     "parse_chpiopow_challenge",
     "parse_captxa_simple_challenge",
+    "parse_cryptopuzzle_archive",
     "parse_fcaptcha_challenge",
     "parse_yourcaptcha_challenge",
     "parse_silentchallenge_challenge",
@@ -518,6 +532,7 @@ __all__ = [
     "score_silentchallenge_motion",
     "score_silentchallenge_signals",
     "solve_wicketkeeper_challenge",
+    "solve_cryptopuzzle_archive",
     "solve_fcaptcha_challenge",
     "solve_yourcaptcha_challenge",
     "solve_silentchallenge_pow",
@@ -525,6 +540,7 @@ __all__ = [
     "solve_tollbooth_challenge",
     "UNSUPPORTED_CAPABILITIES",
     "verify_wicketkeeper_work",
+    "verify_cryptopuzzle_solution",
     "verify_fcaptcha_solution",
     "verify_yourcaptcha_solution",
     "verify_silentchallenge_pow",
@@ -534,7 +550,9 @@ __all__ = [
     "swetrix_hash_hex",
     "tollbooth_balloon_hash_hex",
     "tollbooth_sha256_hash_hex",
+    "decode_cryptopuzzle_base64",
     "decode_powchallenge_base64",
+    "encode_cryptopuzzle_base64",
     "encode_powchallenge_base64",
     "powreaction_count_leading_zero_bits",
     "powreaction_hash_hex",
@@ -550,4 +568,7 @@ __all__ = [
     "procaptcha_count_leading_zero_nibbles",
     "tollbooth_count_leading_zero_bits",
     "generate_tollbooth_navigator_signals",
+    "build_cryptopuzzle_fixture",
+    "sequential_mod_exp_squares",
+    "tiny_encryptor_decrypt_v1",
 ]

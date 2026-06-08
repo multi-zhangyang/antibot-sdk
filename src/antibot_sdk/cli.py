@@ -136,6 +136,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "fcaptcha",
             "gunslol",
             "cap",
+            "cryptopuzzle",
             "captxa",
             "chpiopow",
             "impost",
@@ -352,6 +353,23 @@ async def amain(argv: list[str] | None = None) -> int:
     cap.add_argument("--redeem-url")
     cap.add_argument("--redeem", action="store_true", help="POST solved body to /redeem and return final Cap token")
     cap.add_argument("--raw", action="store_true")
+
+    cpz = solve_sub.add_parser("cryptopuzzle")
+    cpz_source = cpz.add_mutually_exclusive_group(required=True)
+    cpz_source.add_argument("--base-url", help="API root; infers /challenge and /verify")
+    cpz_source.add_argument("--puzzle", help="inline archive base64/hex")
+    cpz_source.add_argument("--puzzle-file")
+    cpz_source.add_argument("--challenge-json", help="inline JSON with puzzleB64/archive/challenge, or @/path")
+    cpz_source.add_argument("--challenge-file")
+    cpz_source.add_argument("--challenge-url", help="GET endpoint returning puzzle archive/base64/JSON")
+    cpz.add_argument("--verify-url", help="POST endpoint accepting {solution,message}")
+    cpz.add_argument("--submit", action="store_true")
+    cpz.add_argument("--expected-message")
+    cpz.add_argument("--timeout", type=int, default=60)
+    cpz.add_argument("--proxy")
+    cpz.add_argument("--output-dir")
+    cpz.add_argument("--user-agent")
+    cpz.add_argument("--raw", action="store_true")
 
     cx = solve_sub.add_parser("captxa")
     cx_source = cx.add_mutually_exclusive_group(required=True)
@@ -991,6 +1009,26 @@ async def amain(argv: list[str] | None = None) -> int:
     scap.add_argument("--output-json")
     scap.add_argument("--full", action="store_true")
 
+    scpz = stress_sub.add_parser("cryptopuzzle")
+    scpz_source = scpz.add_mutually_exclusive_group(required=True)
+    scpz_source.add_argument("--base-url")
+    scpz_source.add_argument("--puzzle")
+    scpz_source.add_argument("--puzzle-file")
+    scpz_source.add_argument("--challenge-json")
+    scpz_source.add_argument("--challenge-file")
+    scpz_source.add_argument("--challenge-url")
+    scpz.add_argument("--verify-url")
+    scpz.add_argument("--submit", action="store_true")
+    scpz.add_argument("--expected-message")
+    scpz.add_argument("--runs", type=int, default=10)
+    scpz.add_argument("--concurrency", type=int, default=2)
+    scpz.add_argument("--timeout", type=int, default=60)
+    scpz.add_argument("--proxy")
+    scpz.add_argument("--output-dir")
+    scpz.add_argument("--output-json")
+    scpz.add_argument("--user-agent")
+    scpz.add_argument("--full", action="store_true")
+
     scx = stress_sub.add_parser("captxa")
     scx_source = scx.add_mutually_exclusive_group(required=True)
     scx_source.add_argument("--base-url")
@@ -1554,6 +1592,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "recaptcha",
             "turnstile",
             "cap",
+            "cryptopuzzle",
             "captxa",
             "fcaptcha",
             "chpiopow",
@@ -1835,6 +1874,24 @@ async def amain(argv: list[str] | None = None) -> int:
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "cryptopuzzle":
+        ret = await client.solve_cryptopuzzle(
+            base_url=args.base_url,
+            puzzle=args.puzzle,
+            puzzle_file=args.puzzle_file,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            submit=args.submit,
+            expected_message=args.expected_message,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -2611,6 +2668,32 @@ async def amain(argv: list[str] | None = None) -> int:
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "cryptopuzzle":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="cryptopuzzle",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_cryptopuzzle(
+                base_url=args.base_url,
+                puzzle=args.puzzle,
+                puzzle_file=args.puzzle_file,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                submit=args.submit,
+                expected_message=args.expected_message,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
             ),
         )
         emit_stress(ret, full=args.full)

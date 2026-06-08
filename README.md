@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -20,6 +20,7 @@
 - PrivateCaptcha：新增 compute puzzle 协议 solver，解析 `puzzle.signature`，复现 blake2b-256 threshold 多解 PoW 与 solutions metadata，输出 `private-captcha-solution` payload，不启动浏览器。
 - Portcullis：新增 Argon2id + SHA-256 双阶段 PoW 协议 solver，解析 signed challenge，计算内存硬化 base hash 后搜索 nonce，可提交 `/api/v1/verify` 换 `captcha_token`，不启动浏览器。
 - Cap / @cap.js：升级 SHA-256 PoW + RSW time-lock 协议 solver，支持 v1 seeded challenge、format-2 `sha256-pow` 和 `rsw`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
+- crypto-puzzle：新增 RSW time-lock puzzle solver，解析 archive，顺序 repeated-squaring 恢复 AES-GCM/PBKDF2 secret，解出 message/token，可提交 verify，不启动浏览器。
 - Captxa：新增 simple mode browser metrics + JA4-bound opaque token + SHA-256 PoW 协议 solver，补低风险环境字段，复现 `SHA256(pow32||nonce_le64)` leading-zero，可提交 `/solve/simp` 换 `X-Captcha-Token`，不启动浏览器。
 - Swetrix CAPTCHA：新增 privacy CAPTCHA 协议 solver，解析 `/generate` 的 `challenge+difficulty`，复现 `SHA256(challenge+":"+nonce)` 前导十六进制零 PoW，可提交 `/verify` 换 token，并可选 `/validate` 服务端校验，不启动浏览器。
 - chpio/pow-captcha：新增 signed multi-challenge target-match PoW solver，复现 `signedData` 的 UTF-16LE SHA-256 签名与 `SHA256(solution_le||nonce)` target bit 匹配，可提交 redeem，不启动浏览器。
@@ -64,6 +65,7 @@
 | PrivateCaptcha | 协议 solver | `compute_pow` | alpha | `private-captcha-solution` payload |
 | Portcullis | 协议 solver | `argon2_pow` | alpha | verify body / `captcha_token` |
 | Cap / @cap.js | 协议 solver | `proof_of_work` | alpha | `/redeem` body / Cap token |
+| crypto-puzzle | 协议 solver | `rsw_time_lock_puzzle` | alpha | decrypted message/token |
 | Captxa | 协议 solver | `ja4_bound_pow` | alpha | solve body / `X-Captcha-Token` |
 | Swetrix CAPTCHA | 协议 solver | `swetrix_pow` | alpha | verify body / Swetrix token |
 | chpio/pow-captcha | 协议 solver | `target_match_pow` | alpha | challenge solution body / redeemed token |
@@ -1287,6 +1289,53 @@ antibot solve captxa \
 
 - 这是 simple mode 协议 solver；complex slider 仍不作为本轮主能力。
 - 真实部署的 JA4 由 TLS 层算，SDK 能完成客户端 PoW 与环境 payload，但出口 TLS 指纹/UA 不匹配时服务端可能下发 complex。
+
+---
+
+### 15.1.1 crypto-puzzle RSW Time-lock Puzzle
+
+`crypto-puzzle` 是一个 time-lock puzzle 生成器，README 里明确把它作为透明 captcha / anti-spam PoW 使用。它和普通前缀零 hashcash 不一样：服务端生成 puzzle 时知道 `p/q`，可以用 `φ(n)` 快速构造；客户端解题端不知道 `φ(n)`，必须执行确定数量的顺序平方，不能靠多线程或 GPU 线性加速。
+
+核心链路：
+
+```text
+archive = len(n)||n||len(a)||a||len(t)||t||len(Ck)||Ck||Cm
+b = a^(2^t) mod n        # 解题端等价为 t 次连续平方
+K = Ck - b                # BigInt -> minimal big-endian bytes
+message = AES-GCM-Decrypt(Cm, PBKDF2-SHA256(K, salt, rounds=1))
+```
+
+SDK 当前支持：
+
+- 解析 npm `crypto-puzzle@5.0.3` archive binary/base64/hex/JSON；
+- 复现 `fast-mod-exp` 生成链路对应的解题端 `sfme(a,t,n)`：顺序 repeated-squaring；
+- 复现 `tiny-encryptor` v1：`version|salt32|rounds_be32|iv16|ciphertext|tag16`，PBKDF2-HMAC-SHA256 + AES-GCM；
+- 输出解密后的 `message/token`，可选提交 `{solution,message}` 到 verify endpoint；
+- 不启动浏览器。
+
+命令示例：
+
+```bash
+antibot solve cryptopuzzle \
+  --puzzle 'AAAAAgyhAAAAAQUAAAABGQAAACARERER...' \
+  --expected-message 'crypto-puzzle-pass-token' \
+  --timeout 60
+```
+
+完整 API 闭环：
+
+```bash
+antibot solve cryptopuzzle \
+  --base-url 'https://target.example/crypto-puzzle' \
+  --submit \
+  --timeout 60
+```
+
+当前定位：
+
+- 这是 RSW time-lock 协议 solver，不是图片验证码；
+- `t` 是顺序成本，压测时不要盲目提高并发；
+- 如果站点把解出的 message 当作一次性 token，live 压测必须每轮重新拉 challenge。
 
 ---
 
@@ -2537,6 +2586,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - PrivateCaptcha / private-captcha / api.privatecaptcha.com 相关 URL -> `privatecaptcha`
 - Portcullis / pow-captcha / `/api/v1/challenge` 相关 URL -> `portcullis`
 - Cap / trycap / cap-widget 相关 URL -> `cap`
+- crypto-puzzle / cryptopuzzle / time-lock-puzzle 相关 URL -> `cryptopuzzle`
 - Captxa / `/challenge/simp` / `/solve/simp` 相关 URL -> `captxa`
 - Swetrix CAPTCHA / `swetrixcaptcha` / `/v1/captcha/generate` 相关 URL -> `swetrix`
 - chpio / chpiopow / signedData magic 相关 URL -> `chpiopow`
@@ -2858,6 +2908,11 @@ antibot solve pcaptcha --challenge-url 'https://target.example/api/challenge'
 antibot solve pcaptcha --challenge-url 'https://target.example/api/challenge' --validate-url 'https://target.example/api/validate' --validate
 antibot stress pcaptcha --challenge-url 'https://target.example/api/challenge' --validate-url 'https://target.example/api/validate' --validate --runs 20
 
+# crypto-puzzle RSW time-lock
+antibot solve cryptopuzzle --puzzle 'AAAAAgyhAAAAAQUAAAABGQAAACARERER...' --timeout 60
+antibot solve cryptopuzzle --base-url 'https://target.example/crypto-puzzle' --submit --timeout 60
+antibot stress cryptopuzzle --challenge-url 'https://target.example/crypto-puzzle/challenge' --runs 10 --concurrency 2
+
 # pow_captcha
 antibot solve powcaptcha --quiz-b64 'AP8AAQAAAAPbwbTJAP/kjVdbXaXGOAQBJfZdsP4+JElLduqYZFfZhgA=' --max-attempts 10
 antibot solve powcaptcha --challenge-url 'https://target.example/powcaptcha/challenge' --verify-url 'https://target.example/powcaptcha/verify' --submit
@@ -2927,6 +2982,7 @@ anubis_run.json
 friendlycaptcha_run.json
 fcaptcha_run.json
 cap_run.json
+cryptopuzzle_run.json
 captxa_run.json
 swetrix_run.json
 yourcaptcha_run.json
@@ -2994,6 +3050,7 @@ src/antibot_sdk/
     privatecaptcha.py       # PrivateCaptcha blake2b compute PoW protocol solver
     portcullis.py           # Portcullis Argon2id + SHA-256 PoW protocol solver
     cap.py                  # Cap/@cap.js SHA-256 PoW protocol solver
+    cryptopuzzle.py         # crypto-puzzle RSW time-lock archive solver
     captxa.py               # Captxa browser metrics + JA4-bound SHA-256 PoW solver
     swetrix.py              # Swetrix challenge:nonce SHA-256 PoW protocol solver
     chpiopow.py             # chpio/pow-captcha signed target-match PoW protocol solver
@@ -3030,6 +3087,7 @@ tests/
   test_privatecaptcha.py
   test_portcullis.py
   test_cap.py
+  test_cryptopuzzle.py
   test_captxa.py
   test_swetrix.py
   test_pcaptcha.py

@@ -123,6 +123,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "fcaptcha"
     if any(x in u or x in host for x in ("trycap.dev", "cap.js", "cap-widget", "capjs")):
         return "cap"
+    if any(x in u or x in host for x in ("crypto-puzzle", "cryptopuzzle", "time-lock-puzzle", "rsw96")):
+        return "cryptopuzzle"
     if any(x in u or x in host for x in ("captxa", "/challenge/simp", "/solve/simp")):
         return "captxa"
     if any(
@@ -265,6 +267,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "cap-sha256-pow-plus-rsw-time-lock-protocol-solver",
                 "successFields": ["/redeem body", "Cap token", "RSW {y}"],
                 "endpoints": ["/challenge", "/redeem"],
+            }
+        },
+        "cryptopuzzle": {
+            "rsw_time_lock_puzzle": {
+                "patterns": ["crypto-puzzle", "cryptopuzzle", "time-lock-puzzle", "rsw96"],
+                "mode": "rsw-time-lock-puzzle-protocol-solver",
+                "successFields": ["decrypted message", "token"],
+                "endpoints": ["/challenge", "/verify"],
             }
         },
         "captxa": {

@@ -14,6 +14,7 @@ from .providers.cap import CapSolver
 from .providers.captxa import CaptxaSolver
 from .providers.chpiopow import ChpioPowSolver
 from .providers.fcaptcha import FCaptchaSolver
+from .providers.cryptopuzzle import CryptoPuzzleSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.gunslol import GunsLolSolver
@@ -56,6 +57,7 @@ class AntibotClient:
         self.anubis = AnubisSolver()
         self.auro = AuroSolver()
         self.fcaptcha = FCaptchaSolver()
+        self.cryptopuzzle = CryptoPuzzleSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
         self.gunslol = GunsLolSolver()
         self.mcaptcha = MCaptchaSolver()
@@ -119,6 +121,9 @@ class AntibotClient:
 
     async def solve_auro(self, **kwargs: Any) -> CaptchaResult:
         return await self.auro.solve(**kwargs)
+
+    async def solve_cryptopuzzle(self, **kwargs: Any) -> CaptchaResult:
+        return await self.cryptopuzzle.solve(**kwargs)
 
     async def solve_friendlycaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.friendlycaptcha.solve(**kwargs)
@@ -395,6 +400,40 @@ class AntibotClient:
             }
             cap_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_cap(**cap_kwargs)
+        if provider == "cryptopuzzle":
+            cpz_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "puzzle",
+                    "puzzle_file",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "submit",
+                    "expected_message",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not cpz_kwargs.get("base_url") and not cpz_kwargs.get("challenge_url"):
+                if target_lower.rstrip("/").endswith("/verify"):
+                    cpz_kwargs["verify_url"] = target_url
+                    cpz_kwargs["base_url"] = target_url[: target_lower.rindex("/verify")]
+                elif target_lower.rstrip("/").endswith("/challenge"):
+                    cpz_kwargs["challenge_url"] = target_url
+                    cpz_kwargs["base_url"] = target_url[: target_lower.rindex("/challenge")]
+                else:
+                    cpz_kwargs["challenge_url"] = target_url
+            return await self.solve_cryptopuzzle(**cpz_kwargs)
         if provider == "captxa":
             captxa_kwargs = {
                 k: v
