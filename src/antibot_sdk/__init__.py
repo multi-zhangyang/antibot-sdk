@@ -66,6 +66,14 @@ from .providers.friendlycaptcha import (
     solve_friendly_puzzle,
 )
 from .providers.hcaptcha import is_hcaptcha_token, latest_hcaptcha_token
+from .providers.impost import (
+    ImpostChallenge,
+    ImpostSolution,
+    impost_argon2_hash_hex,
+    parse_impost_challenge,
+    solve_impost_challenge,
+    verify_impost_solution,
+)
 from .providers.kerberus import (
     KerberusChallenge,
     KerberusSolution,
@@ -160,6 +168,8 @@ __all__ = [
     "ChpioPowSolution",
     "FriendlyPuzzle",
     "FriendlySolution",
+    "ImpostChallenge",
+    "ImpostSolution",
     "KerberusChallenge",
     "KerberusSolution",
     "MCaptchaConfig",
@@ -194,6 +204,7 @@ __all__ = [
     "chpiopow_hash_bytes",
     "decrypt_auro_mouse_data",
     "encrypt_auro_mouse_data",
+    "impost_argon2_hash_hex",
     "kerberus_score",
     "kerberus_threshold",
     "parse_altcha_payload_b64",
@@ -215,6 +226,7 @@ __all__ = [
     "mcaptcha_score",
     "parse_mcaptcha_config",
     "parse_chpiopow_challenge",
+    "parse_impost_challenge",
     "parse_kerberus_challenge",
     "parse_powcaptcha_quiz",
     "parse_privatecaptcha_puzzle",
@@ -222,6 +234,7 @@ __all__ = [
     "parse_portcullis_token",
     "solve_mcaptcha_config",
     "solve_chpiopow_challenge",
+    "solve_impost_challenge",
     "solve_kerberus_challenge",
     "solve_powcaptcha_quiz",
     "solve_privatecaptcha_puzzle",
@@ -244,6 +257,7 @@ __all__ = [
     "verify_chpiopow_signed_data",
     "verify_chpiopow_solution",
     "verify_auro_pow",
+    "verify_impost_solution",
     "verify_kerberus_nonce",
     "verify_kerberus_solution",
     "verify_privatecaptcha_payload",

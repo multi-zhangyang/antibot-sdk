@@ -124,6 +124,8 @@ def detect_provider_for_url(url: str | None) -> str:
         for x in ("chpio", "2104f639-ba1b-48f3-9443-889128163f5a", "/chpiopow/")
     ):
         return "chpiopow"
+    if any(x in u or x in host for x in ("impost", "@impost", "impost-captcha")):
+        return "impost"
     if any(x in u or x in host for x in ("kerberus", "/kerberus/", "difficultyfactor")):
         return "kerberus"
     if any(x in u or x in host for x in ("mcaptcha", "/api/v1/pow/config", "/api/v1/pow/verify")):
@@ -228,6 +230,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "signed-multi-challenge-target-match-pow-solver",
                 "successFields": ["{challengesSigned, solutions}", "redeemed signedData/token"],
                 "endpoints": ["challenge endpoint returning signedData", "redeem endpoint accepting solutions"],
+            }
+        },
+        "impost": {
+            "argon2id_pow": {
+                "patterns": ["impost", "@impost/lib", "impost-captcha"],
+                "mode": "zig-wasm-argon2id-pow-protocol-solver",
+                "successFields": ["{challenge, nonce}", "validated message/token"],
+                "endpoints": ["/challenge", "POST verify endpoint accepting {challenge, nonce}"],
             }
         },
         "kerberus": {

@@ -86,6 +86,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "challenge solution body / redeemed token",
         "scope": "chpio/pow-captcha signed multi-challenge PoW：解析 signedData，复现 UTF-16LE SHA-256 签名与 SHA256(solution_le||nonce) target-bit 匹配，可提交 redeem；不启动浏览器。",
     },
+    "impost": {
+        "provider": "impost",
+        "name": "Impost",
+        "category": "solver",
+        "captcha_type": "argon2id_pow",
+        "status": "alpha",
+        "output": "{challenge, nonce} / validated message",
+        "scope": "Impost Zig/WASM Argon2id PoW：复现 t=3、m=8192KiB、p=1 的 Argon2id，支持 leading_zeroes 与 target_number 两种策略，输出 challenge salt + nonce；不启动浏览器。",
+    },
     "kerberus": {
         "provider": "kerberus",
         "name": "Kerberus",

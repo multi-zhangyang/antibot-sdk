@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / chpio pow-captcha Target PoW / Kerberus u128-score PoW / mCaptcha PoW / Wicketkeeper JWT PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / mCaptcha PoW / Wicketkeeper JWT PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -20,6 +20,7 @@
 - Portcullis：新增 Argon2id + SHA-256 双阶段 PoW 协议 solver，解析 signed challenge，计算内存硬化 base hash 后搜索 nonce，可提交 `/api/v1/verify` 换 `captcha_token`，不启动浏览器。
 - Cap / @cap.js：新增 SHA-256 PoW 协议 solver，支持 v1 seeded challenge 与 format-2 `sha256-pow`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
 - chpio/pow-captcha：新增 signed multi-challenge target-match PoW solver，复现 `signedData` 的 UTF-16LE SHA-256 签名与 `SHA256(solution_le||nonce)` target bit 匹配，可提交 redeem，不启动浏览器。
+- Impost：新增 Zig/WASM Argon2id PoW solver，复现 `t=3,m=8192KiB,p=1` 的内存硬化 hash，支持 `leading_zeroes` 与 `target_number` 两种策略，输出 `{challenge, nonce}`，不启动浏览器。
 - Kerberus：新增多盐 u128-score PoW solver，预计算 `SHA256(salt+serializedInput)`，搜索 `SHA256(prefixHash||nonce_dec)` 前 16 字节评分超过阈值，输出 `Solution{id, nonces}`，不启动浏览器。
 - mCaptcha：新增 SHA-256 PoW 协议 solver，复现 Rust/JS 的 `bincode(String)+u128 score` 规则，获取 `/api/v1/pow/config` 后本地找 nonce，可提交 `/api/v1/pow/verify` 换 token，不启动浏览器。
 - Wicketkeeper：新增 EdDSA-JWT PoW 协议 solver，获取 `/v0/challenge` 后计算 `SHA256(challenge+nonce)` 前导零，可提交 `/v0/siteverify` 换 success JWT，不启动浏览器。
@@ -51,6 +52,7 @@
 | Portcullis | 协议 solver | `argon2_pow` | alpha | verify body / `captcha_token` |
 | Cap / @cap.js | 协议 solver | `proof_of_work` | alpha | `/redeem` body / Cap token |
 | chpio/pow-captcha | 协议 solver | `target_match_pow` | alpha | challenge solution body / redeemed token |
+| Impost | 协议 solver | `argon2id_pow` | alpha | `{challenge, nonce}` / validated message |
 | Kerberus | 协议 solver | `u128_score_pow` | alpha | `Solution{id, nonces}` / validated token |
 | mCaptcha | 协议 solver | `proof_of_work` | alpha | verify body / mCaptcha token |
 | Wicketkeeper | 协议 solver | `proof_of_work` | alpha | hidden-input solution / success JWT |
@@ -1166,7 +1168,65 @@ async with AntibotClient() as client:
 
 ---
 
-### 17. Kerberus u128-score 多盐 PoW
+### 17. Impost Zig/WASM Argon2id PoW
+
+Impost 是一个把 PoW solver 编译成 Zig WASM worker 的验证码组件。它比普通 hashcash 更重：每次尝试不是 SHA-256，而是 Argon2id 内存硬化 KDF。SDK 当前把 WASM 里的核心参数复现成纯 Python 协议 solver。
+
+关键点：
+
+- algorithm：`argon2id`。
+- Argon2 参数：`time_cost=3`，`memory_cost=8192KiB`，`parallelism=1`，输出 32 字节。
+- 输入绑定：`secret = decimal_nonce_utf8`，`salt = challenge.salt.utf8`。
+- `leading_zeroes`：要求 Argon2id 输出 hex 具有指定数量的前导 `0`。
+- `target_number`：服务端先随机一个数字并计算 target，客户端枚举 nonce 直到 Argon2id hex 等于 target。
+- upstream worker 从 nonce `0` 开始。
+- 不启动浏览器；支持本地 JSON、challenge endpoint、可选 verify endpoint。
+
+命令示例：
+
+```bash
+antibot solve impost   --challenge-json '{"algorithm":"argon2id","strategy":"target_number","salt":"impost-salt","target":"001f1f03c8591bd692761601e1402ae569e0151ef8d5ba3d083e803ac4f2cd5e"}'   --max-attempts 5
+```
+
+拉 challenge 并提交 verify：
+
+```bash
+antibot solve impost   --challenge-url 'https://captcha.example/impost/challenge'   --verify-url 'https://captcha.example/impost/verify'   --submit   --timeout 60
+```
+
+压测：
+
+```bash
+antibot stress impost   --challenge-json '{"algorithm":"argon2id","strategy":"leading_zeroes","salt":"impost-salt","difficulty":2}'   --runs 10   --concurrency 2   --max-attempts 20
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_impost(
+        challenge_json={
+            "algorithm": "argon2id",
+            "strategy": "leading_zeroes",
+            "salt": "impost-salt",
+            "difficulty": 2,
+        },
+        max_attempts=20,
+    )
+    print(ret.ok, ret.ticket, ret.diagnostics.get("nonce"))
+```
+
+当前定位：
+
+- 这是协议层 Argon2id PoW solver，不做浏览器模拟。
+- 已和 upstream `packages/solver/src/argon2.zig` / `validator.zig` 的参数和校验方式对齐。
+- 单次 hash 需要约 8MiB 内存，VPS 上压测时优先控制 `--concurrency` 和 `--workers`。
+
+---
+
+### 18. Kerberus u128-score 多盐 PoW
 
 Kerberus 是 Kotlin Multiplatform PoW CAPTCHA 库，核心不是直接比较 hash 前导零，而是对每个 salt 先做 prefix hash，再把 hash 的前 16 字节当作 u128 score 和 difficultyFactor 派生阈值比较。它的设计重点是多个小 challenge 降低耗时方差。
 
@@ -1221,7 +1281,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 18. P-Captcha QuadraticResidueProblem
+### 19. P-Captcha QuadraticResidueProblem
 
 P-Captcha 比普通 hashcash 更有意思：服务端给出 Woodall prime `p` 下的一组二次剩余 `n = x² mod p`，浏览器 worker 用 Tonelli-Shanks 求模平方根并把答案串提交给服务端。SDK 当前把这条链路下沉成纯 Python 协议 solver。
 
@@ -1300,7 +1360,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 19. pow_captcha Buffer Reconstruction PoW
+### 20. pow_captcha Buffer Reconstruction PoW
 
 pow_captcha 不是普通前导零 hashcash，而是把“正确 buffer 的 SHA-256、当前被污染 buffer、每个不确定字节的取值范围”序列化到 quiz 里。前端 `takeTest`/WASM 会按 mixed-radix 方式枚举这些不确定字节，直到 `SHA256(candidate_buffer)` 命中目标 hash。SDK 当前把这条链路复现成纯 Python 协议 solver。
 
@@ -1363,7 +1423,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 20. mCaptcha PoW
+### 21. mCaptcha PoW
 
 mCaptcha 是 self-hosted PoW CAPTCHA。浏览器 widget 的流程是：`POST /api/v1/pow/config` 取 `string/difficulty_factor/salt`，本地搜索 nonce，再 `POST /api/v1/pow/verify` 换取服务端 token。SDK 当前把这条链路做成纯协议 solver。
 
@@ -1435,7 +1495,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 21. Wicketkeeper JWT PoW
+### 22. Wicketkeeper JWT PoW
 
 Wicketkeeper 是 self-hosted PoW CAPTCHA：服务端签发 EdDSA JWT challenge，前端 worker 搜索 nonce，后端 `/v0/siteverify` 校验 JWT、PoW 和 replay 状态后返回 success JWT。SDK 当前把这条链路做成纯协议 solver。
 
@@ -1495,7 +1555,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 22. GeeTest v4 / 极验
+### 23. GeeTest v4 / 极验
 
 GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：能在官方 v4 slide demo 上完成图片定位、轨迹拖动和成功载荷提取。但这个能力还不是稳定通杀，真实站点仍会受风险策略、设备指纹、轨迹质量和出口 IP 影响。
 
@@ -1592,7 +1652,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 23. 网易易盾 / Yidun 滑动拼图
+### 24. 网易易盾 / Yidun 滑动拼图
 
 Yidun 现在保留 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
 
@@ -1663,7 +1723,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 24. 自动分发模式
+### 25. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
@@ -1677,6 +1737,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - Portcullis / pow-captcha / `/api/v1/challenge` 相关 URL -> `portcullis`
 - Cap / trycap / cap-widget 相关 URL -> `cap`
 - chpio / chpiopow / signedData magic 相关 URL -> `chpiopow`
+- Impost / impost-captcha 相关 URL -> `impost`
 - Kerberus / difficultyFactor / serializedInput 相关 URL -> `kerberus`
 - mCaptcha / `/api/v1/pow/config` 相关 URL -> `mcaptcha`
 - Wicketkeeper / `/v0/challenge` 相关 URL -> `wicketkeeper`
@@ -1699,7 +1760,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 25. 代理格式
+### 26. 代理格式
 
 支持以下格式：
 
@@ -1942,6 +2003,11 @@ antibot stress cap --api-endpoint 'https://target.example/cap/' --runs 50 --conc
 antibot solve chpiopow --challenge-json '{"magic":"2104f639-ba1b-48f3-9443-889128163f5a","challenges":[["AQI=","AwQF"]],"difficultyBits":18}' --max-attempts-per-challenge 100000
 antibot solve chpiopow --challenge-url 'https://captcha.example/chpiopow/challenge' --redeem-url 'https://captcha.example/chpiopow/redeem' --submit
 antibot stress chpiopow --challenge-url 'https://captcha.example/chpiopow/challenge' --runs 20 --concurrency 4
+
+# Impost
+antibot solve impost --challenge-json '{"algorithm":"argon2id","strategy":"target_number","salt":"impost-salt","target":"001f1f03c8591bd692761601e1402ae569e0151ef8d5ba3d083e803ac4f2cd5e"}' --max-attempts 5
+antibot solve impost --challenge-url 'https://captcha.example/impost/challenge' --verify-url 'https://captcha.example/impost/verify' --submit
+antibot stress impost --challenge-json '{"algorithm":"argon2id","strategy":"leading_zeroes","salt":"impost-salt","difficulty":2}' --runs 10 --concurrency 2 --max-attempts 20
 
 # Kerberus
 antibot solve kerberus --challenge-json '{"id":"kerb-1","salts":["salt-a","salt-b"],"difficultyFactor":50}' --serialized-input 'JRTFM' --max-attempts-per-salt 1000

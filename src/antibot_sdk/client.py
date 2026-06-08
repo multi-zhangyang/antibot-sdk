@@ -15,6 +15,7 @@ from .providers.chpiopow import ChpioPowSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.hcaptcha import HCaptchaSolver
+from .providers.impost import ImpostSolver
 from .providers.kerberus import KerberusSolver
 from .providers.mcaptcha import MCaptchaSolver
 from .providers.pcaptcha import PCaptchaSolver
@@ -53,6 +54,7 @@ class AntibotClient:
         self.geetest = GeeTestCaptchaSolver()
         self.turnstile = TurnstileSolver()
         self.hcaptcha = HCaptchaSolver()
+        self.impost = ImpostSolver()
         self.kerberus = KerberusSolver()
         self.recaptcha = ReCaptchaSolver()
         self.yidun = YidunCaptchaSolver()
@@ -120,6 +122,9 @@ class AntibotClient:
 
     async def solve_hcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.hcaptcha.solve(**kwargs)
+
+    async def solve_impost(self, **kwargs: Any) -> CaptchaResult:
+        return await self.impost.solve(**kwargs)
 
     async def solve_kerberus(self, **kwargs: Any) -> CaptchaResult:
         return await self.kerberus.solve(**kwargs)
@@ -325,6 +330,29 @@ class AntibotClient:
             }
             cp_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_chpiopow(**cp_kwargs)
+        if provider == "impost":
+            impost_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "submit",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            impost_kwargs.setdefault("challenge_url", target_url)
+            return await self.solve_impost(**impost_kwargs)
         if provider == "kerberus":
             kerb_kwargs = {
                 k: v

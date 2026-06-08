@@ -135,6 +135,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "friendlycaptcha",
             "cap",
             "chpiopow",
+            "impost",
             "kerberus",
             "mcaptcha",
             "pcaptcha",
@@ -331,6 +332,21 @@ async def amain(argv: list[str] | None = None) -> int:
     chpio.add_argument("--proxy")
     chpio.add_argument("--output-dir")
     chpio.add_argument("--raw", action="store_true")
+
+    imp = solve_sub.add_parser("impost")
+    imp_source = imp.add_mutually_exclusive_group(required=True)
+    imp_source.add_argument("--challenge-json", help="inline JSON object, or @/path/to/challenge.json")
+    imp_source.add_argument("--challenge-file")
+    imp_source.add_argument("--challenge-url")
+    imp.add_argument("--verify-url", help="endpoint accepting {challenge, nonce}")
+    imp.add_argument("--submit", action="store_true", help="POST solution to --verify-url")
+    imp.add_argument("--start", type=int, default=0)
+    imp.add_argument("--max-attempts", type=int, default=1_000_000)
+    imp.add_argument("--workers", type=int, default=1)
+    imp.add_argument("--timeout", type=int, default=60)
+    imp.add_argument("--proxy")
+    imp.add_argument("--output-dir")
+    imp.add_argument("--raw", action="store_true")
 
     kerb = solve_sub.add_parser("kerberus")
     kerb_source = kerb.add_mutually_exclusive_group(required=True)
@@ -715,6 +731,23 @@ async def amain(argv: list[str] | None = None) -> int:
     schpio.add_argument("--output-json")
     schpio.add_argument("--full", action="store_true")
 
+    simp = stress_sub.add_parser("impost")
+    simp_source = simp.add_mutually_exclusive_group(required=True)
+    simp_source.add_argument("--challenge-json")
+    simp_source.add_argument("--challenge-file")
+    simp_source.add_argument("--challenge-url")
+    simp.add_argument("--verify-url")
+    simp.add_argument("--submit", action="store_true")
+    simp.add_argument("--runs", type=int, default=10)
+    simp.add_argument("--concurrency", type=int, default=2)
+    simp.add_argument("--timeout", type=int, default=60)
+    simp.add_argument("--max-attempts", type=int, default=1_000_000)
+    simp.add_argument("--workers", type=int, default=1)
+    simp.add_argument("--proxy")
+    simp.add_argument("--output-dir")
+    simp.add_argument("--output-json")
+    simp.add_argument("--full", action="store_true")
+
     skerb = stress_sub.add_parser("kerberus")
     skerb_source = skerb.add_mutually_exclusive_group(required=True)
     skerb_source.add_argument("--challenge-json")
@@ -1003,6 +1036,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "cap",
             "chpiopow",
             "auro",
+            "impost",
             "kerberus",
             "mcaptcha",
             "pcaptcha",
@@ -1167,6 +1201,22 @@ async def amain(argv: list[str] | None = None) -> int:
             iv_b64=args.iv_b64,
             client_guid=args.client_guid,
             submit=not args.no_submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "impost":
+        ret = await client.solve_impost(
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            submit=args.submit,
             start=args.start,
             max_attempts=args.max_attempts,
             workers=args.workers,
@@ -1649,6 +1699,29 @@ async def amain(argv: list[str] | None = None) -> int:
                 iv_b64=args.iv_b64,
                 client_guid=args.client_guid,
                 submit=not args.no_submit,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "impost":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="impost",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_impost(
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                submit=args.submit,
                 max_attempts=args.max_attempts,
                 workers=args.workers,
                 timeout_sec=args.timeout,
