@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / Captxa JA4-bound PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -20,6 +20,7 @@
 - PrivateCaptcha：新增 compute puzzle 协议 solver，解析 `puzzle.signature`，复现 blake2b-256 threshold 多解 PoW 与 solutions metadata，输出 `private-captcha-solution` payload，不启动浏览器。
 - Portcullis：新增 Argon2id + SHA-256 双阶段 PoW 协议 solver，解析 signed challenge，计算内存硬化 base hash 后搜索 nonce，可提交 `/api/v1/verify` 换 `captcha_token`，不启动浏览器。
 - Cap / @cap.js：升级 SHA-256 PoW + RSW time-lock 协议 solver，支持 v1 seeded challenge、format-2 `sha256-pow` 和 `rsw`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
+- Captxa：新增 simple mode browser metrics + JA4-bound opaque token + SHA-256 PoW 协议 solver，补低风险环境字段，复现 `SHA256(pow32||nonce_le64)` leading-zero，可提交 `/solve/simp` 换 `X-Captcha-Token`，不启动浏览器。
 - chpio/pow-captcha：新增 signed multi-challenge target-match PoW solver，复现 `signedData` 的 UTF-16LE SHA-256 签名与 `SHA256(solution_le||nonce)` target bit 匹配，可提交 redeem，不启动浏览器。
 - Impost：新增 Zig/WASM Argon2id PoW solver，复现 `t=3,m=8192KiB,p=1` 的内存硬化 hash，支持 `leading_zeroes` 与 `target_number` 两种策略，输出 `{challenge, nonce}`，不启动浏览器。
 - Kerberus：新增多盐 u128-score PoW solver，预计算 `SHA256(salt+serializedInput)`，搜索 `SHA256(prefixHash||nonce_dec)` 前 16 字节评分超过阈值，输出 `Solution{id, nonces}`，不启动浏览器。
@@ -58,6 +59,7 @@
 | PrivateCaptcha | 协议 solver | `compute_pow` | alpha | `private-captcha-solution` payload |
 | Portcullis | 协议 solver | `argon2_pow` | alpha | verify body / `captcha_token` |
 | Cap / @cap.js | 协议 solver | `proof_of_work` | alpha | `/redeem` body / Cap token |
+| Captxa | 协议 solver | `ja4_bound_pow` | alpha | solve body / `X-Captcha-Token` |
 | chpio/pow-captcha | 协议 solver | `target_match_pow` | alpha | challenge solution body / redeemed token |
 | Impost | 协议 solver | `argon2id_pow` | alpha | `{challenge, nonce}` / validated message |
 | Kerberus | 协议 solver | `u128_score_pow` | alpha | `Solution{id, nonces}` / validated token |
@@ -1188,6 +1190,64 @@ async with AntibotClient() as client:
 
 ---
 
+### 15.1 Captxa simple JA4-bound PoW
+
+Captxa simple mode 不是图片滑块，链路是“浏览器环境预检 + JA4/IP 绑定 opaque token + SHA-256 PoW”。服务端 `/challenge/simp` 先检查 browser metrics、JA4 与 UA 是否一致，然后返回：
+
+```json
+{
+  "challenge_token": "opaque-chaCha20-poly1305-token",
+  "pow_challenge": "16-byte-hex",
+  "pow_difficulty": 18
+}
+```
+
+`challenge_token` 内部是服务端临时 key 加密的：
+
+```text
+SIMP|ip|short_ja4|short_ja4o|timestamp|pow_hex
+```
+
+客户端不需要也不能解这个 token；只需要原样回传，并完成 PoW：
+
+```text
+seed = hex(pow_challenge) padded to 32 bytes
+hash = SHA256(seed || uint64_le(nonce))
+pass = leading_zero_bits(hash) >= pow_difficulty
+```
+
+SDK 当前支持：
+
+- 合成低风险 browser metrics：`webglrenderer/timezone/hardwareconcurrency/innerw/innerh/availw/availh/devicememory/webdriver/...`；
+- 解析 `/challenge/simp` 响应或本地 fixture；
+- 搜索 `pow_solution`；
+- 可选提交 `/solve/simp`，读取响应头 `X-Captcha-Token`；
+- 不启动浏览器，不做复杂滑块。
+
+命令示例：
+
+```bash
+antibot solve captxa \
+  --base-url 'https://captcha.example' \
+  --submit \
+  --timeout 60 \
+  --raw
+```
+
+只解 fixture：
+
+```bash
+antibot solve captxa \
+  --challenge-json '{"challenge_token":"opaque","pow_challenge":"0102030405060708090a0b0c0d0e0f10","pow_difficulty":12}'
+```
+
+当前定位：
+
+- 这是 simple mode 协议 solver；complex slider 仍不作为本轮主能力。
+- 真实部署的 JA4 由 TLS 层算，SDK 能完成客户端 PoW 与环境 payload，但出口 TLS 指纹/UA 不匹配时服务端可能下发 complex。
+
+---
+
 ### 16. chpio/pow-captcha Target-match PoW
 
 chpio/pow-captcha 不是“前导零 hashcash”，而是服务端一次发多个 `(nonce,target)` 任务：客户端枚举 8 字节 little-endian `solution`，直到 `SHA256(solution_le_8 || nonce_bytes)` 的前 `difficultyBits` 位和 `target` 对齐。challenge 外层用 `signedData` 包住，签名规则是 `SHA256(UTF16LE(data_json + ":" + secret))`。
@@ -2137,6 +2197,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - PrivateCaptcha / private-captcha / api.privatecaptcha.com 相关 URL -> `privatecaptcha`
 - Portcullis / pow-captcha / `/api/v1/challenge` 相关 URL -> `portcullis`
 - Cap / trycap / cap-widget 相关 URL -> `cap`
+- Captxa / `/challenge/simp` / `/solve/simp` 相关 URL -> `captxa`
 - chpio / chpiopow / signedData magic 相关 URL -> `chpiopow`
 - Impost / impost-captcha 相关 URL -> `impost`
 - Kerberus / difficultyFactor / serializedInput 相关 URL -> `kerberus`
@@ -2489,7 +2550,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / FCaptcha / Cap / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / FCaptcha / Cap / Captxa / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -2501,6 +2562,7 @@ anubis_run.json
 friendlycaptcha_run.json
 fcaptcha_run.json
 cap_run.json
+captxa_run.json
 yourcaptcha_run.json
 silentchallenge_run.json
 pcaptcha_run.json
@@ -2562,6 +2624,7 @@ src/antibot_sdk/
     privatecaptcha.py       # PrivateCaptcha blake2b compute PoW protocol solver
     portcullis.py           # Portcullis Argon2id + SHA-256 PoW protocol solver
     cap.py                  # Cap/@cap.js SHA-256 PoW protocol solver
+    captxa.py               # Captxa browser metrics + JA4-bound SHA-256 PoW solver
     chpiopow.py             # chpio/pow-captcha signed target-match PoW protocol solver
     mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
     wicketkeeper.py         # Wicketkeeper JWT PoW protocol solver
@@ -2592,6 +2655,7 @@ tests/
   test_privatecaptcha.py
   test_portcullis.py
   test_cap.py
+  test_captxa.py
   test_pcaptcha.py
   test_powcaptcha.py
   test_powbot.py
@@ -2607,7 +2671,8 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 98 passed
+pytest: 101 passed
+Captxa fixture/mock/stress: browser metrics + JA4-bound opaque token + SHA-256 PoW simple mode 验证通过
 FCaptcha fixture/mock/stress: signalsHash-bound PoW、本地 /api/pow/challenge + /api/verify 验证通过
 PoW Bot Deterrent fixture/mock/stress: scrypt-WASM PoW、本地 /GetChallenges + /Verify 验证通过
 node -c bridge.js/site_profiles.js/runner.js: passed

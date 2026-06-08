@@ -11,6 +11,7 @@ from .providers.anubis import AnubisSolver
 from .providers.auro import AuroSolver
 from .providers.browser import BrowserAutomation
 from .providers.cap import CapSolver
+from .providers.captxa import CaptxaSolver
 from .providers.chpiopow import ChpioPowSolver
 from .providers.fcaptcha import FCaptchaSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
@@ -43,6 +44,7 @@ class AntibotClient:
         self.browser_binary = browser_binary
         self.browser = BrowserAutomation()
         self.cap = CapSolver()
+        self.captxa = CaptxaSolver()
         self.chpiopow = ChpioPowSolver()
         self.ajcaptcha = AJCaptchaSolver()
         self.altcha = AltchaSolver()
@@ -92,6 +94,9 @@ class AntibotClient:
 
     async def solve_cap(self, **kwargs: Any) -> CaptchaResult:
         return await self.cap.solve(**kwargs)
+
+    async def solve_captxa(self, **kwargs: Any) -> CaptchaResult:
+        return await self.captxa.solve(**kwargs)
 
     async def solve_chpiopow(self, **kwargs: Any) -> CaptchaResult:
         return await self.chpiopow.solve(**kwargs)
@@ -360,6 +365,41 @@ class AntibotClient:
             }
             cap_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_cap(**cap_kwargs)
+        if provider == "captxa":
+            captxa_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "solve_url",
+                    "submit",
+                    "metrics_json",
+                    "metrics_file",
+                    "start",
+                    "max_attempts",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                    "timezone_id",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not captxa_kwargs.get("base_url") and not captxa_kwargs.get("challenge_url"):
+                if "/challenge/simp" in target_lower:
+                    captxa_kwargs["challenge_url"] = target_url
+                elif "/solve/simp" in target_lower:
+                    captxa_kwargs["solve_url"] = target_url
+                    captxa_kwargs["base_url"] = target_url[: target_lower.index("/solve/simp")]
+                else:
+                    captxa_kwargs["base_url"] = target_url
+            return await self.solve_captxa(**captxa_kwargs)
         if provider == "chpiopow":
             cp_kwargs = {
                 k: v

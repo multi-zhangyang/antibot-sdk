@@ -95,6 +95,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "redeem body / Cap token",
         "scope": "Cap v1 seeded PoW、format-2 sha256-pow 与 format-2 RSW time-lock：本地 nonce 搜索或顺序 modular squaring，可输出 /redeem body 或直接 redeem token；不启动浏览器。",
     },
+    "captxa": {
+        "provider": "captxa",
+        "name": "Captxa",
+        "category": "solver",
+        "captcha_type": "ja4_bound_pow",
+        "status": "alpha",
+        "output": "solve body / X-Captcha-Token",
+        "scope": "Captxa simple mode：补 browser metrics 通过环境预检，解析 opaque challenge_token 与 pow_challenge，复现 SHA256(pow32||nonce_le64) leading-zero PoW，可提交 /solve/simp；不启动浏览器。",
+    },
     "chpiopow": {
         "provider": "chpiopow",
         "name": "chpio/pow-captcha",

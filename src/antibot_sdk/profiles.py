@@ -123,6 +123,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "fcaptcha"
     if any(x in u or x in host for x in ("trycap.dev", "cap.js", "cap-widget", "capjs")):
         return "cap"
+    if any(x in u or x in host for x in ("captxa", "/challenge/simp", "/solve/simp")):
+        return "captxa"
     if any(
         x in u or x in host
         for x in ("chpio", "2104f639-ba1b-48f3-9443-889128163f5a", "/chpiopow/")
@@ -250,6 +252,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "cap-sha256-pow-plus-rsw-time-lock-protocol-solver",
                 "successFields": ["/redeem body", "Cap token", "RSW {y}"],
                 "endpoints": ["/challenge", "/redeem"],
+            }
+        },
+        "captxa": {
+            "ja4_bound_pow": {
+                "patterns": ["captxa", "/challenge/simp", "/solve/simp"],
+                "mode": "browser-metrics-plus-ja4-bound-sha256-pow-solver",
+                "successFields": ["X-Captcha-Token", "valid=true"],
+                "endpoints": ["/challenge/simp", "/solve/simp", "/api/validate"],
             }
         },
         "chpiopow": {

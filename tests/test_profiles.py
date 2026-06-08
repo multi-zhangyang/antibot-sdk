@@ -26,6 +26,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://developers.cloudflare.com/turnstile/") == "turnstile"
     assert detect_provider_for_url("https://captcha.example/api/pow/challenge?siteKey=site-key") == "fcaptcha"
     assert detect_provider_for_url("https://auro.network/api/pow/setup") == "auro"
+    assert detect_provider_for_url("https://captcha.example/challenge/simp") == "captxa"
     assert detect_provider_for_url("https://captcha.example/powcaptcha/challenge") == "powcaptcha"
     assert detect_provider_for_url("https://captcha.example/GetChallenges?difficultyLevel=5") == "powbot"
     assert detect_provider_for_url("https://captcha.example/chpiopow/challenge") == "chpiopow"
@@ -54,6 +55,7 @@ def test_generic_provider_detection():
     assert "u128_score_pow" in list_profiles()["kerberus"]
     assert "bcrypt_pow" in list_profiles()["paulpow"]
     assert "seal_pow_blake3" in list_profiles()["gunslol"]
+    assert "ja4_bound_pow" in list_profiles()["captxa"]
     assert "compute_pow" in list_profiles()["privatecaptcha"]
     assert "argon2_pow" in list_profiles()["portcullis"]
     assert "behavior_pow" in list_profiles()["yourcaptcha"]

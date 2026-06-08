@@ -136,6 +136,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "fcaptcha",
             "gunslol",
             "cap",
+            "captxa",
             "chpiopow",
             "impost",
             "kerberus",
@@ -341,6 +342,25 @@ async def amain(argv: list[str] | None = None) -> int:
     cap.add_argument("--redeem-url")
     cap.add_argument("--redeem", action="store_true", help="POST solved body to /redeem and return final Cap token")
     cap.add_argument("--raw", action="store_true")
+
+    cx = solve_sub.add_parser("captxa")
+    cx_source = cx.add_mutually_exclusive_group(required=True)
+    cx_source.add_argument("--base-url", help="Captxa API root; infers /challenge/simp and /solve/simp")
+    cx_source.add_argument("--challenge-json", help="inline simple challenge JSON, or @/path")
+    cx_source.add_argument("--challenge-file")
+    cx_source.add_argument("--challenge-url", help="Captxa /challenge/simp endpoint")
+    cx.add_argument("--solve-url", help="Captxa /solve/simp endpoint")
+    cx.add_argument("--submit", action="store_true", help="POST solved body to /solve/simp")
+    cx.add_argument("--metrics-json", help="inline browser metrics JSON, or @/path")
+    cx.add_argument("--metrics-file")
+    cx.add_argument("--start", type=int, default=0)
+    cx.add_argument("--max-attempts", type=int)
+    cx.add_argument("--timeout", type=int, default=60)
+    cx.add_argument("--proxy")
+    cx.add_argument("--output-dir")
+    cx.add_argument("--user-agent")
+    cx.add_argument("--timezone", default="America/New_York")
+    cx.add_argument("--raw", action="store_true")
 
     chpio = solve_sub.add_parser("chpiopow")
     chpio_source = chpio.add_mutually_exclusive_group(required=True)
@@ -851,6 +871,28 @@ async def amain(argv: list[str] | None = None) -> int:
     scap.add_argument("--output-json")
     scap.add_argument("--full", action="store_true")
 
+    scx = stress_sub.add_parser("captxa")
+    scx_source = scx.add_mutually_exclusive_group(required=True)
+    scx_source.add_argument("--base-url")
+    scx_source.add_argument("--challenge-json")
+    scx_source.add_argument("--challenge-file")
+    scx_source.add_argument("--challenge-url")
+    scx.add_argument("--solve-url")
+    scx.add_argument("--submit", action="store_true")
+    scx.add_argument("--metrics-json")
+    scx.add_argument("--metrics-file")
+    scx.add_argument("--runs", type=int, default=10)
+    scx.add_argument("--concurrency", type=int, default=2)
+    scx.add_argument("--timeout", type=int, default=60)
+    scx.add_argument("--start", type=int, default=0)
+    scx.add_argument("--max-attempts", type=int)
+    scx.add_argument("--proxy")
+    scx.add_argument("--output-dir")
+    scx.add_argument("--user-agent")
+    scx.add_argument("--timezone", default="America/New_York")
+    scx.add_argument("--output-json")
+    scx.add_argument("--full", action="store_true")
+
     schpio = stress_sub.add_parser("chpiopow")
     schpio_source = schpio.add_mutually_exclusive_group(required=True)
     schpio_source.add_argument("--challenge-json")
@@ -1273,6 +1315,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "recaptcha",
             "turnstile",
             "cap",
+            "captxa",
             "fcaptcha",
             "chpiopow",
             "auro",
@@ -1543,6 +1586,26 @@ async def amain(argv: list[str] | None = None) -> int:
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "captxa":
+        ret = await client.solve_captxa(
+            base_url=args.base_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            solve_url=args.solve_url,
+            submit=args.submit,
+            metrics_json=args.metrics_json,
+            metrics_file=args.metrics_file,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
+            timezone_id=args.timezone,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -2183,6 +2246,34 @@ async def amain(argv: list[str] | None = None) -> int:
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "captxa":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="captxa",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_captxa(
+                base_url=args.base_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                solve_url=args.solve_url,
+                submit=args.submit,
+                metrics_json=args.metrics_json,
+                metrics_file=args.metrics_file,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
+                timezone_id=args.timezone,
             ),
         )
         emit_stress(ret, full=args.full)
