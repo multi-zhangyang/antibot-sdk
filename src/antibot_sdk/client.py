@@ -16,6 +16,7 @@ from .providers.hcaptcha import HCaptchaSolver
 from .providers.mcaptcha import MCaptchaSolver
 from .providers.pcaptcha import PCaptchaSolver
 from .providers.powcaptcha import PowCaptchaSolver
+from .providers.privatecaptcha import PrivateCaptchaSolver
 from .providers.recaptcha import ReCaptchaSolver
 from .providers.tencent import TencentCaptchaSolver
 from .providers.turnstile import TurnstileSolver
@@ -38,6 +39,7 @@ class AntibotClient:
         self.mcaptcha = MCaptchaSolver()
         self.pcaptcha = PCaptchaSolver()
         self.powcaptcha = PowCaptchaSolver()
+        self.privatecaptcha = PrivateCaptchaSolver()
         self.wicketkeeper = WicketkeeperSolver()
         self.tencent = TencentCaptchaSolver()
         self.aliyun = AliyunCaptchaSolver()
@@ -86,6 +88,9 @@ class AntibotClient:
 
     async def solve_powcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.powcaptcha.solve(**kwargs)
+
+    async def solve_privatecaptcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.privatecaptcha.solve(**kwargs)
 
     async def solve_wicketkeeper(self, **kwargs: Any) -> CaptchaResult:
         return await self.wicketkeeper.solve(**kwargs)
@@ -323,6 +328,36 @@ class AntibotClient:
             }
             pow_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_powcaptcha(**pow_kwargs)
+        if provider == "privatecaptcha":
+            pc_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "puzzle",
+                    "puzzle_file",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "puzzle_url",
+                    "sitekey",
+                    "verify_url",
+                    "siteverify_url",
+                    "submit",
+                    "api_key",
+                    "secret",
+                    "start",
+                    "max_attempts_per_solution",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            pc_kwargs.setdefault("puzzle_url", target_url)
+            return await self.solve_privatecaptcha(**pc_kwargs)
         if provider == "wicketkeeper":
             wk_kwargs = {
                 k: v

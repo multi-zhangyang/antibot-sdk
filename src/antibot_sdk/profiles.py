@@ -123,6 +123,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "pcaptcha"
     if any(x in u or x in host for x in ("pow_captcha", "powcaptcha", "taketest", "/powcaptcha/")):
         return "powcaptcha"
+    if any(x in u or x in host for x in ("privatecaptcha", "private-captcha", "api.privatecaptcha.com", "/privatecaptcha/")):
+        return "privatecaptcha"
     if any(x in u or x in host for x in ("wicketkeeper", "/v0/challenge", "/v0/siteverify")):
         return "wicketkeeper"
     if any(x in u or x in host for x in ("geetest", "gcaptcha4", "gt4.geetest")):
@@ -223,6 +225,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "buffer-reconstruction-mixed-radix-protocol-solver",
                 "successFields": ["answer base64", "answerHex"],
                 "endpoints": ["challenge endpoint returning quiz bytes/json", "verify endpoint accepting answer"],
+            }
+        },
+        "privatecaptcha": {
+            "compute_pow": {
+                "patterns": ["privatecaptcha", "private-captcha", "api.privatecaptcha.com"],
+                "mode": "blake2b-compute-puzzle-protocol-solver",
+                "successFields": ["private-captcha-solution", "g-recaptcha-response compat"],
+                "endpoints": ["/puzzle", "/verify", "/siteverify"],
             }
         },
         "wicketkeeper": {

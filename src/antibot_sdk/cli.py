@@ -136,6 +136,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "mcaptcha",
             "pcaptcha",
             "powcaptcha",
+            "privatecaptcha",
             "wicketkeeper",
             "geetest",
             "yidun",
@@ -337,6 +338,28 @@ async def amain(argv: list[str] | None = None) -> int:
     powc.add_argument("--proxy")
     powc.add_argument("--output-dir")
     powc.add_argument("--raw", action="store_true")
+
+    priv = solve_sub.add_parser("privatecaptcha")
+    priv_source = priv.add_mutually_exclusive_group(required=True)
+    priv_source.add_argument("--puzzle", help="inline '<puzzle_b64>.<signature_b64>'")
+    priv_source.add_argument("--puzzle-file")
+    priv_source.add_argument("--challenge-json", help="inline JSON object, or @/path/to/challenge.json")
+    priv_source.add_argument("--challenge-file")
+    priv_source.add_argument("--challenge-url")
+    priv_source.add_argument("--puzzle-url", help="PrivateCaptcha /puzzle endpoint")
+    priv.add_argument("--sitekey", help="sitekey used when fetching /puzzle")
+    priv.add_argument("--verify-url", help="PrivateCaptcha /verify endpoint; POST raw widget payload")
+    priv.add_argument("--siteverify-url", help="reCAPTCHA-compatible /siteverify endpoint; POST form response/secret")
+    priv.add_argument("--submit", action="store_true")
+    priv.add_argument("--api-key", help="X-API-Key for /verify")
+    priv.add_argument("--secret", help="secret for /siteverify")
+    priv.add_argument("--start", type=int, default=0)
+    priv.add_argument("--max-attempts-per-solution", type=int, default=50_000_000)
+    priv.add_argument("--workers", type=int, default=1)
+    priv.add_argument("--timeout", type=int, default=60)
+    priv.add_argument("--proxy")
+    priv.add_argument("--output-dir")
+    priv.add_argument("--raw", action="store_true")
 
     wk = solve_sub.add_parser("wicketkeeper")
     wk_source = wk.add_mutually_exclusive_group(required=True)
@@ -611,6 +634,30 @@ async def amain(argv: list[str] | None = None) -> int:
     spow.add_argument("--output-json")
     spow.add_argument("--full", action="store_true")
 
+    spriv = stress_sub.add_parser("privatecaptcha")
+    spriv_source = spriv.add_mutually_exclusive_group(required=True)
+    spriv_source.add_argument("--puzzle")
+    spriv_source.add_argument("--puzzle-file")
+    spriv_source.add_argument("--challenge-json")
+    spriv_source.add_argument("--challenge-file")
+    spriv_source.add_argument("--challenge-url")
+    spriv_source.add_argument("--puzzle-url")
+    spriv.add_argument("--sitekey")
+    spriv.add_argument("--verify-url")
+    spriv.add_argument("--siteverify-url")
+    spriv.add_argument("--submit", action="store_true")
+    spriv.add_argument("--api-key")
+    spriv.add_argument("--secret")
+    spriv.add_argument("--runs", type=int, default=10)
+    spriv.add_argument("--concurrency", type=int, default=2)
+    spriv.add_argument("--timeout", type=int, default=60)
+    spriv.add_argument("--max-attempts-per-solution", type=int, default=50_000_000)
+    spriv.add_argument("--workers", type=int, default=1)
+    spriv.add_argument("--proxy")
+    spriv.add_argument("--output-dir")
+    spriv.add_argument("--output-json")
+    spriv.add_argument("--full", action="store_true")
+
     swk = stress_sub.add_parser("wicketkeeper")
     swk_source = swk.add_mutually_exclusive_group(required=True)
     swk_source.add_argument("--challenge-url")
@@ -780,6 +827,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "mcaptcha",
             "pcaptcha",
             "powcaptcha",
+            "privatecaptcha",
             "wicketkeeper",
             "anubis",
         ):
@@ -1006,6 +1054,29 @@ async def amain(argv: list[str] | None = None) -> int:
             submit=args.submit,
             start=args.start,
             max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "privatecaptcha":
+        ret = await client.solve_privatecaptcha(
+            puzzle=args.puzzle,
+            puzzle_file=args.puzzle_file,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            puzzle_url=args.puzzle_url,
+            sitekey=args.sitekey,
+            verify_url=args.verify_url,
+            siteverify_url=args.siteverify_url,
+            submit=args.submit,
+            api_key=args.api_key,
+            secret=args.secret,
+            start=args.start,
+            max_attempts_per_solution=args.max_attempts_per_solution,
             workers=args.workers,
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
@@ -1390,6 +1461,36 @@ async def amain(argv: list[str] | None = None) -> int:
                 verify_url=args.verify_url,
                 submit=args.submit,
                 max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "privatecaptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="privatecaptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_privatecaptcha(
+                puzzle=args.puzzle,
+                puzzle_file=args.puzzle_file,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                puzzle_url=args.puzzle_url,
+                sitekey=args.sitekey,
+                verify_url=args.verify_url,
+                siteverify_url=args.siteverify_url,
+                submit=args.submit,
+                api_key=args.api_key,
+                secret=args.secret,
+                max_attempts_per_solution=args.max_attempts_per_solution,
                 workers=args.workers,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,

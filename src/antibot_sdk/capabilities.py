@@ -95,6 +95,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "answer buffer / verification body",
         "scope": "pow_captcha 二进制 buffer reconstruction PoW：解析 serialized quiz、按 uncertainty ranges 做 mixed-radix 搜索，输出命中 SHA-256 的 answer；不启动浏览器。",
     },
+    "privatecaptcha": {
+        "provider": "privatecaptcha",
+        "name": "PrivateCaptcha",
+        "category": "solver",
+        "captcha_type": "compute_pow",
+        "status": "alpha",
+        "output": "private-captcha-solution payload",
+        "scope": "PrivateCaptcha compute puzzle：解析 puzzle/signature payload，复现 blake2b-256 threshold 多解 PoW 与 solutions metadata，输出 widget response；不启动浏览器。",
+    },
     "wicketkeeper": {
         "provider": "wicketkeeper",
         "name": "Wicketkeeper",
