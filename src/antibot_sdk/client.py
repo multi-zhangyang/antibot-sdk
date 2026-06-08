@@ -14,6 +14,7 @@ from .providers.cap import CapSolver
 from .providers.chpiopow import ChpioPowSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
+from .providers.gunslol import GunsLolSolver
 from .providers.hcaptcha import HCaptchaSolver
 from .providers.impost import ImpostSolver
 from .providers.kerberus import KerberusSolver
@@ -44,6 +45,7 @@ class AntibotClient:
         self.anubis = AnubisSolver()
         self.auro = AuroSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
+        self.gunslol = GunsLolSolver()
         self.mcaptcha = MCaptchaSolver()
         self.paulpow = PaulPowSolver()
         self.pcaptcha = PCaptchaSolver()
@@ -127,6 +129,9 @@ class AntibotClient:
 
     async def solve_hcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.hcaptcha.solve(**kwargs)
+
+    async def solve_gunslol(self, **kwargs: Any) -> CaptchaResult:
+        return await self.gunslol.solve(**kwargs)
 
     async def solve_impost(self, **kwargs: Any) -> CaptchaResult:
         return await self.impost.solve(**kwargs)
@@ -282,6 +287,31 @@ class AntibotClient:
             }
             frc_kwargs.setdefault("puzzle_url", target_url)
             return await self.solve_friendlycaptcha(**frc_kwargs)
+        if provider == "gunslol":
+            gl_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "page_url",
+                    "verify_url",
+                    "submit",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            if not gl_kwargs.get("challenge_url") and not gl_kwargs.get("page_url"):
+                gl_kwargs["page_url"] = target_url
+            return await self.solve_gunslol(**gl_kwargs)
         if provider == "cap":
             cap_kwargs = {
                 k: v

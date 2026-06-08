@@ -68,6 +68,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "frc-captcha-solution payload",
         "scope": "FriendlyCaptcha classic PoW：获取 puzzle，按 friendly-pow/blake2b 求解多段 nonce，输出隐藏表单字段 payload；不启动浏览器。",
     },
+    "gunslol": {
+        "provider": "gunslol",
+        "name": "guns.lol",
+        "category": "solver",
+        "captcha_type": "seal_pow_blake3",
+        "status": "alpha",
+        "output": "{seal, _oo} / validated token",
+        "scope": "guns.lol _gs_sets seal PoW：解析 _2xa 空位模板，枚举十六进制 seal 使 SHA256(seal+_n+_org_ts)=o09，再生成 BLAKE3 _oo 标签；不启动浏览器。",
+    },
     "cap": {
         "provider": "cap",
         "name": "Cap / @cap.js",

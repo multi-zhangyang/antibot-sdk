@@ -133,6 +133,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "aliyun",
             "tencent",
             "friendlycaptcha",
+            "gunslol",
             "cap",
             "chpiopow",
             "impost",
@@ -400,6 +401,22 @@ async def amain(argv: list[str] | None = None) -> int:
     pp.add_argument("--proxy")
     pp.add_argument("--output-dir")
     pp.add_argument("--raw", action="store_true")
+
+    gl = solve_sub.add_parser("gunslol")
+    gl_source = gl.add_mutually_exclusive_group(required=True)
+    gl_source.add_argument("--challenge-json", help="inline JSON object with o09/_n/_org_ts/_2xa, or @/path")
+    gl_source.add_argument("--challenge-file")
+    gl_source.add_argument("--challenge-url", help="endpoint returning JSON or HTML containing const _gs_sets")
+    gl_source.add_argument("--page-url", help="page HTML containing const _gs_sets")
+    gl.add_argument("--verify-url", help="endpoint accepting {seal, _oo}")
+    gl.add_argument("--submit", action="store_true", help="POST solution to --verify-url")
+    gl.add_argument("--start", type=int, default=0)
+    gl.add_argument("--max-attempts", type=int)
+    gl.add_argument("--workers", type=int, default=1)
+    gl.add_argument("--timeout", type=int, default=60)
+    gl.add_argument("--proxy")
+    gl.add_argument("--output-dir")
+    gl.add_argument("--raw", action="store_true")
 
     pc = solve_sub.add_parser("pcaptcha")
     pc_source = pc.add_mutually_exclusive_group(required=True)
@@ -819,6 +836,25 @@ async def amain(argv: list[str] | None = None) -> int:
     spp.add_argument("--output-json")
     spp.add_argument("--full", action="store_true")
 
+    sgl = stress_sub.add_parser("gunslol")
+    sgl_source = sgl.add_mutually_exclusive_group(required=True)
+    sgl_source.add_argument("--challenge-json")
+    sgl_source.add_argument("--challenge-file")
+    sgl_source.add_argument("--challenge-url")
+    sgl_source.add_argument("--page-url")
+    sgl.add_argument("--verify-url")
+    sgl.add_argument("--submit", action="store_true")
+    sgl.add_argument("--runs", type=int, default=10)
+    sgl.add_argument("--concurrency", type=int, default=2)
+    sgl.add_argument("--timeout", type=int, default=60)
+    sgl.add_argument("--start", type=int, default=0)
+    sgl.add_argument("--max-attempts", type=int)
+    sgl.add_argument("--workers", type=int, default=1)
+    sgl.add_argument("--proxy")
+    sgl.add_argument("--output-dir")
+    sgl.add_argument("--output-json")
+    sgl.add_argument("--full", action="store_true")
+
     spc = stress_sub.add_parser("pcaptcha")
     spc.add_argument("--challenge-url", required=True)
     spc.add_argument("--validate-url")
@@ -1069,6 +1105,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "cap",
             "chpiopow",
             "auro",
+            "gunslol",
             "impost",
             "kerberus",
             "mcaptcha",
@@ -1358,6 +1395,23 @@ async def amain(argv: list[str] | None = None) -> int:
             challenge_json=args.challenge_json,
             challenge_file=args.challenge_file,
             challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            submit=args.submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "gunslol":
+        ret = await client.solve_gunslol(
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            page_url=args.page_url,
             verify_url=args.verify_url,
             submit=args.submit,
             start=args.start,
@@ -1911,6 +1965,31 @@ async def amain(argv: list[str] | None = None) -> int:
                 challenge_url=args.challenge_url,
                 verify_url=args.verify_url,
                 submit=args.submit,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "gunslol":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="gunslol",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_gunslol(
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                page_url=args.page_url,
+                verify_url=args.verify_url,
+                submit=args.submit,
+                start=args.start,
                 max_attempts=args.max_attempts,
                 workers=args.workers,
                 timeout_sec=args.timeout,

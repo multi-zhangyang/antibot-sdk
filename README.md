@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / mCaptcha PoW / Wicketkeeper JWT PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -23,6 +23,7 @@
 - Impost：新增 Zig/WASM Argon2id PoW solver，复现 `t=3,m=8192KiB,p=1` 的内存硬化 hash，支持 `leading_zeroes` 与 `target_number` 两种策略，输出 `{challenge, nonce}`，不启动浏览器。
 - Kerberus：新增多盐 u128-score PoW solver，预计算 `SHA256(salt+serializedInput)`，搜索 `SHA256(prefixHash||nonce_dec)` 前 16 字节评分超过阈值，输出 `Solution{id, nonces}`，不启动浏览器。
 - PaulDotSH/pow-captcha：新增 bcrypt exact/prefix PoW solver，复现 `bcrypt::verify` 与 `bcrypt::hash_with_salt(salt[0:16])` 两条链路，输出 `CaptchaServerInfo` 风格 JSON，不启动浏览器。
+- guns.lol：新增 `_gs_sets` seal PoW solver，解析 `_2xa` 空位模板，枚举十六进制 seal 使 `SHA256(seal+_n+_org_ts)=o09`，再生成 BLAKE3 `_oo` 提交标签，不启动浏览器。
 - mCaptcha：新增 SHA-256 PoW 协议 solver，复现 Rust/JS 的 `bincode(String)+u128 score` 规则，获取 `/api/v1/pow/config` 后本地找 nonce，可提交 `/api/v1/pow/verify` 换 token，不启动浏览器。
 - Wicketkeeper：新增 EdDSA-JWT PoW 协议 solver，获取 `/v0/challenge` 后计算 `SHA256(challenge+nonce)` 前导零，可提交 `/v0/siteverify` 换 success JWT，不启动浏览器。
 - P-Captcha：新增 QuadraticResidueProblem 协议 solver，解析 Woodall prime challenge，用模平方根直接求 answer，可提交 `{id, answer}`，不启动浏览器。
@@ -56,6 +57,7 @@
 | Impost | 协议 solver | `argon2id_pow` | alpha | `{challenge, nonce}` / validated message |
 | Kerberus | 协议 solver | `u128_score_pow` | alpha | `Solution{id, nonces}` / validated token |
 | PaulDotSH/pow-captcha | 协议 solver | `bcrypt_pow` | alpha | `CaptchaServerInfo` JSON / validated token |
+| guns.lol | 协议 solver | `seal_pow_blake3` | alpha | `{seal, _oo}` / validated token |
 | mCaptcha | 协议 solver | `proof_of_work` | alpha | verify body / mCaptcha token |
 | Wicketkeeper | 协议 solver | `proof_of_work` | alpha | hidden-input solution / success JWT |
 | P-Captcha | 协议 solver | `quadratic_residue_pow` | alpha | `answer` / `{id, answer}` |
@@ -1341,7 +1343,74 @@ async with AntibotClient() as client:
 
 ---
 
-### 20. P-Captcha QuadraticResidueProblem
+### 20. guns.lol seal PoW / BLAKE3 `_oo`
+
+guns.lol 这类 challenge 把参数塞在页面里的 `const _gs_sets = {...}`，核心不是普通前导零 PoW，而是“补全 64 字节 seal 空位 + 服务端 hash 目标 + BLAKE3 提交标签”。SDK 当前把这条链路做成纯协议 solver，不启动浏览器，适合 VPS 上低资源压测。
+
+关键点：
+
+- 页面或 JSON 中提取：`o09`、`_n`、`_org_ts`、`_2xa`。
+- `_2xa` 是 base64url blob：包含 `dd`、原始空位顺序、8 字节 BLAKE3 key、`64-dd` 字节 seal 模板。
+- 求解：枚举 `16^dd` 个十六进制填充，直到：
+
+```text
+SHA256(seal + _n + _org_ts) == bytes.fromhex(o09)
+```
+
+- 提交：按原始空位顺序取 solution chars，构造 prefix，再计算：
+
+```text
+_oo = base64url(prefix || BLAKE3(prefix + key + target)[:8])
+```
+
+- 输出：`{"seal":"...","_oo":"..."}`，可直接 POST 到业务 verify endpoint。
+- 不启动浏览器；支持本地 JSON、HTML 页面、challenge endpoint、可选 verify endpoint。
+
+命令示例：
+
+```bash
+antibot solve gunslol   --challenge-json '{"o09":"3ffcf8567b45ac19c1d6bf9e20b1770ce1068f3dc409b87e2659d6a132dfcc0a","_n":"auR64ybDXa6A5eyEsLIqsRiNEcqEIOE2","_org_ts":"1777135187","_2xa":"oUAFJQw_BBsAAQIEA2blekXYbMz_Yzg4YTk4NzQzZDJjZmRjOGU1N2Y5MTE3ZGJjNGU4ZjZkOWU4NjU4MTBhZDBiY2Q1YTZmZDI2YTA1NDHTB1wf2McZRA"}'
+```
+
+从页面抓 `_gs_sets` 并提交 verify：
+
+```bash
+antibot solve gunslol   --page-url 'https://guns.lol/example'   --verify-url 'https://target.example/verify'   --submit
+```
+
+压测：
+
+```bash
+antibot stress gunslol   --challenge-json '{"o09":"3ffcf8567b45ac19c1d6bf9e20b1770ce1068f3dc409b87e2659d6a132dfcc0a","_n":"auR64ybDXa6A5eyEsLIqsRiNEcqEIOE2","_org_ts":"1777135187","_2xa":"oUAFJQw_BBsAAQIEA2blekXYbMz_Yzg4YTk4NzQzZDJjZmRjOGU1N2Y5MTE3ZGJjNGU4ZjZkOWU4NjU4MTBhZDBiY2Q1YTZmZDI2YTA1NDHTB1wf2McZRA"}'   --runs 20   --concurrency 4
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_gunslol(
+        challenge_json={
+            "o09": "3ffcf8567b45ac19c1d6bf9e20b1770ce1068f3dc409b87e2659d6a132dfcc0a",
+            "_n": "auR64ybDXa6A5eyEsLIqsRiNEcqEIOE2",
+            "_org_ts": "1777135187",
+            "_2xa": "oUAFJQw_BBsAAQIEA2blekXYbMz_Yzg4YTk4NzQzZDJjZmRjOGU1N2Y5MTE3ZGJjNGU4ZjZkOWU4NjU4MTBhZDBiY2Q1YTZmZDI2YTA1NDHTB1wf2McZRA",
+        },
+        workers=1,
+    )
+    print(ret.ok, ret.ticket, ret.diagnostics.get("_oo"))
+```
+
+当前定位：
+
+- 这是协议层 seal PoW + BLAKE3 tag solver，不做浏览器模拟。
+- 已用公开 README fixture 对齐：seal=`c88a698743d20cfdc8e57f9117d6bc4e8f6d9be865810ad0bcd5a6fd26a05419`，`_oo=UQViMDk2NgEAAABD-WCuD2rtiQ`。
+- 难度主要由 `dd` 决定：`dd=5` 约 104 万次 SHA-256；VPS 上压测先控制 `--concurrency`，再按 CPU 调整 `--workers`。
+
+---
+
+### 21. P-Captcha QuadraticResidueProblem
 
 P-Captcha 比普通 hashcash 更有意思：服务端给出 Woodall prime `p` 下的一组二次剩余 `n = x² mod p`，浏览器 worker 用 Tonelli-Shanks 求模平方根并把答案串提交给服务端。SDK 当前把这条链路下沉成纯 Python 协议 solver。
 
@@ -1420,7 +1489,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 21. pow_captcha Buffer Reconstruction PoW
+### 22. pow_captcha Buffer Reconstruction PoW
 
 pow_captcha 不是普通前导零 hashcash，而是把“正确 buffer 的 SHA-256、当前被污染 buffer、每个不确定字节的取值范围”序列化到 quiz 里。前端 `takeTest`/WASM 会按 mixed-radix 方式枚举这些不确定字节，直到 `SHA256(candidate_buffer)` 命中目标 hash。SDK 当前把这条链路复现成纯 Python 协议 solver。
 
@@ -1483,7 +1552,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 22. mCaptcha PoW
+### 23. mCaptcha PoW
 
 mCaptcha 是 self-hosted PoW CAPTCHA。浏览器 widget 的流程是：`POST /api/v1/pow/config` 取 `string/difficulty_factor/salt`，本地搜索 nonce，再 `POST /api/v1/pow/verify` 换取服务端 token。SDK 当前把这条链路做成纯协议 solver。
 
@@ -1555,7 +1624,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 23. Wicketkeeper JWT PoW
+### 24. Wicketkeeper JWT PoW
 
 Wicketkeeper 是 self-hosted PoW CAPTCHA：服务端签发 EdDSA JWT challenge，前端 worker 搜索 nonce，后端 `/v0/siteverify` 校验 JWT、PoW 和 replay 状态后返回 success JWT。SDK 当前把这条链路做成纯协议 solver。
 
@@ -1615,7 +1684,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 24. GeeTest v4 / 极验
+### 25. GeeTest v4 / 极验
 
 GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：能在官方 v4 slide demo 上完成图片定位、轨迹拖动和成功载荷提取。但这个能力还不是稳定通杀，真实站点仍会受风险策略、设备指纹、轨迹质量和出口 IP 影响。
 
@@ -1712,7 +1781,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 25. 网易易盾 / Yidun 滑动拼图
+### 26. 网易易盾 / Yidun 滑动拼图
 
 Yidun 现在保留 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
 
@@ -1783,7 +1852,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 26. 自动分发模式
+### 27. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
@@ -1800,6 +1869,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - Impost / impost-captcha 相关 URL -> `impost`
 - Kerberus / difficultyFactor / serializedInput 相关 URL -> `kerberus`
 - PaulDotSH / bcrypt_pow / paulpow 相关 URL -> `paulpow`
+- guns.lol / `_gs_sets` / `_2xa` 相关 URL -> `gunslol`
 - mCaptcha / `/api/v1/pow/config` 相关 URL -> `mcaptcha`
 - Wicketkeeper / `/v0/challenge` 相关 URL -> `wicketkeeper`
 - P-Captcha / QuadraticResidueProblem 相关 URL -> `pcaptcha`
@@ -1821,7 +1891,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 27. 代理格式
+### 28. 代理格式
 
 支持以下格式：
 
@@ -2079,6 +2149,11 @@ antibot stress kerberus --challenge-json '{"id":"kerb-1","salts":["salt-a","salt
 antibot solve paulpow --challenge-json '{"hash":"$2b$04$WUHhXETkX0fnYkrqZU3ta.8fgEd9BkOc6WYotoKsxTqtUY77MC9KC","salt":"abcdefghijklmnopXYZ","captchaType":"prefix","size":30,"cost":4}' --max-attempts 10
 antibot solve paulpow --challenge-url 'https://captcha.example/paulpow/challenge' --verify-url 'https://captcha.example/paulpow/verify' --submit
 antibot stress paulpow --challenge-json '{"hash":"$2b$04$WUHhXETkX0fnYkrqZU3ta.8fgEd9BkOc6WYotoKsxTqtUY77MC9KC","salt":"abcdefghijklmnopXYZ","captchaType":"prefix","size":30,"cost":4}' --runs 8 --concurrency 2 --max-attempts 10
+
+# guns.lol
+antibot solve gunslol --challenge-json '{"o09":"3ffcf8567b45ac19c1d6bf9e20b1770ce1068f3dc409b87e2659d6a132dfcc0a","_n":"auR64ybDXa6A5eyEsLIqsRiNEcqEIOE2","_org_ts":"1777135187","_2xa":"oUAFJQw_BBsAAQIEA2blekXYbMz_Yzg4YTk4NzQzZDJjZmRjOGU1N2Y5MTE3ZGJjNGU4ZjZkOWU4NjU4MTBhZDBiY2Q1YTZmZDI2YTA1NDHTB1wf2McZRA"}'
+antibot solve gunslol --page-url 'https://guns.lol/example' --verify-url 'https://target.example/verify' --submit
+antibot stress gunslol --challenge-json '{"o09":"3ffcf8567b45ac19c1d6bf9e20b1770ce1068f3dc409b87e2659d6a132dfcc0a","_n":"auR64ybDXa6A5eyEsLIqsRiNEcqEIOE2","_org_ts":"1777135187","_2xa":"oUAFJQw_BBsAAQIEA2blekXYbMz_Yzg4YTk4NzQzZDJjZmRjOGU1N2Y5MTE3ZGJjNGU4ZjZkOWU4NjU4MTBhZDBiY2Q1YTZmZDI2YTA1NDHTB1wf2McZRA"}' --runs 20 --concurrency 4
 
 # mCaptcha
 antibot solve mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key'

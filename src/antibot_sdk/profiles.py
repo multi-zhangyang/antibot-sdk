@@ -115,6 +115,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "anubis"
     if any(x in u or x in host for x in ("auro.network", "auro-captcha", "/api/pow/setup", "/api/pow/validate")):
         return "auro"
+    if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
+        return "gunslol"
     if any(x in u or x in host for x in ("friendlycaptcha", "friendlycaptcha.com", "frc-captcha")):
         return "friendlycaptcha"
     if any(x in u or x in host for x in ("trycap.dev", "cap.js", "cap-widget", "capjs")):
@@ -216,6 +218,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "friendly-pow-protocol-solver",
                 "successFields": ["frc-captcha-solution"],
                 "endpoints": ["/api/v1/puzzle"],
+            }
+        },
+        "gunslol": {
+            "seal_pow_blake3": {
+                "patterns": ["guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3"],
+                "mode": "seal-template-sha256-plus-blake3-protocol-solver",
+                "successFields": ["seal", "_oo"],
+                "endpoints": ["page containing const _gs_sets", "verify endpoint accepting {seal,_oo}"],
             }
         },
         "cap": {

@@ -30,6 +30,8 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://captcha.example/impost/challenge") == "impost"
     assert detect_provider_for_url("https://captcha.example/kerberus/challenge?difficultyFactor=50") == "kerberus"
     assert detect_provider_for_url("https://captcha.example/paulpow/challenge?type=bcrypt_pow") == "paulpow"
+    assert detect_provider_for_url("https://guns.lol/example") == "gunslol"
+    assert detect_provider_for_url("https://captcha.example/page?_gs_sets=1&_2xa=1") == "gunslol"
     assert detect_provider_for_url("https://api.privatecaptcha.com/puzzle") == "privatecaptcha"
     assert detect_provider_for_url("https://captcha.example/api/v1/challenge") == "portcullis"
     assert detect_provider_for_url("https://example.com") == "browser"
@@ -45,6 +47,7 @@ def test_generic_provider_detection():
     assert "argon2id_pow" in list_profiles()["impost"]
     assert "u128_score_pow" in list_profiles()["kerberus"]
     assert "bcrypt_pow" in list_profiles()["paulpow"]
+    assert "seal_pow_blake3" in list_profiles()["gunslol"]
     assert "compute_pow" in list_profiles()["privatecaptcha"]
     assert "argon2_pow" in list_profiles()["portcullis"]
 
