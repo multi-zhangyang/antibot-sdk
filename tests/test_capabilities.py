@@ -32,6 +32,7 @@ def test_capability_matrix_product_boundary() -> None:
         "powbot",
         "privatecaptcha",
         "portcullis",
+        "swetrix",
         "wicketkeeper",
         "yourcaptcha",
         "silentchallenge",
@@ -58,6 +59,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["powbot"]["captcha_type"] == "scrypt_pow"
     assert solvers["privatecaptcha"]["captcha_type"] == "compute_pow"
     assert solvers["portcullis"]["captcha_type"] == "argon2_pow"
+    assert solvers["swetrix"]["captcha_type"] == "swetrix_pow"
     assert solvers["wicketkeeper"]["captcha_type"] == "proof_of_work"
     assert solvers["yourcaptcha"]["captcha_type"] == "behavior_pow"
     assert solvers["silentchallenge"]["captcha_type"] == "passive_pow"

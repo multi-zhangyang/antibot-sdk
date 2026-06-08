@@ -227,6 +227,15 @@ from .providers.silentchallenge import (
     solve_silentchallenge_pow,
     verify_silentchallenge_pow,
 )
+from .providers.swetrix import (
+    SwetrixChallenge,
+    SwetrixSolution,
+    count_leading_zero_nibbles,
+    parse_swetrix_challenge,
+    solve_swetrix_challenge,
+    swetrix_hash_hex,
+    verify_swetrix_solution,
+)
 from .stress import run_stress
 from .verification import FailureClassifier, SubmitFlow, SuccessOracle, VerificationResult, verify_submit_flow
 
@@ -287,6 +296,8 @@ __all__ = [
     "YourCaptchaSolution",
     "SilentChallengePow",
     "SilentChallengeSolution",
+    "SwetrixChallenge",
+    "SwetrixSolution",
     "aliyun_policy_decision",
     "detect_provider_for_url",
     "detect_geetest_slide_gap",
@@ -336,6 +347,7 @@ __all__ = [
     "parse_fcaptcha_challenge",
     "parse_yourcaptcha_challenge",
     "parse_silentchallenge_challenge",
+    "parse_swetrix_challenge",
     "extract_gunslol_gs_sets",
     "parse_gunslol_2xa",
     "parse_gunslol_challenge",
@@ -423,11 +435,15 @@ __all__ = [
     "solve_fcaptcha_challenge",
     "solve_yourcaptcha_challenge",
     "solve_silentchallenge_pow",
+    "solve_swetrix_challenge",
     "UNSUPPORTED_CAPABILITIES",
     "verify_wicketkeeper_work",
     "verify_fcaptcha_solution",
     "verify_yourcaptcha_solution",
     "verify_silentchallenge_pow",
+    "verify_swetrix_solution",
+    "count_leading_zero_nibbles",
+    "swetrix_hash_hex",
     "verify_submit_flow",
     "wicketkeeper_hash_hex",
     "yourcaptcha_hash_hex",

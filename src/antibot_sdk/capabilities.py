@@ -194,6 +194,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "verify body / captcha_token",
         "scope": "Portcullis Argon2id + SHA-256 PoW：解析 signed challenge，先计算 Argon2id base hash，再搜索 SHA256(base||nonce_le) 前导零，可提交 /verify 换 token；不启动浏览器。",
     },
+    "swetrix": {
+        "provider": "swetrix",
+        "name": "Swetrix CAPTCHA",
+        "category": "solver",
+        "captcha_type": "swetrix_pow",
+        "status": "alpha",
+        "output": "verify body / Swetrix token",
+        "scope": "Swetrix CAPTCHA：解析 /generate 的 challenge+difficulty，复现 SHA256(challenge+':'+nonce) 前导十六进制零 PoW，可提交 /verify 并可选 /validate；不启动浏览器。",
+    },
     "wicketkeeper": {
         "provider": "wicketkeeper",
         "name": "Wicketkeeper",

@@ -37,6 +37,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://captcha.example/page?_gs_sets=1&_2xa=1") == "gunslol"
     assert detect_provider_for_url("https://api.privatecaptcha.com/puzzle") == "privatecaptcha"
     assert detect_provider_for_url("https://captcha.example/api/v1/challenge") == "portcullis"
+    assert detect_provider_for_url("https://api.swetrixcaptcha.com/v1/captcha/generate") == "swetrix"
     assert detect_provider_for_url("https://example.com/api/captcha/challenge") == "yourcaptcha"
     assert detect_provider_for_url("https://captcha.example/silent-challenge") == "silentchallenge"
     assert detect_provider_for_url("https://example.com") == "browser"
@@ -58,6 +59,7 @@ def test_generic_provider_detection():
     assert "ja4_bound_pow" in list_profiles()["captxa"]
     assert "compute_pow" in list_profiles()["privatecaptcha"]
     assert "argon2_pow" in list_profiles()["portcullis"]
+    assert "swetrix_pow" in list_profiles()["swetrix"]
     assert "behavior_pow" in list_profiles()["yourcaptcha"]
     assert "passive_pow" in list_profiles()["silentchallenge"]
 

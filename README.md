@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / Captxa JA4-bound PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -21,6 +21,7 @@
 - Portcullis：新增 Argon2id + SHA-256 双阶段 PoW 协议 solver，解析 signed challenge，计算内存硬化 base hash 后搜索 nonce，可提交 `/api/v1/verify` 换 `captcha_token`，不启动浏览器。
 - Cap / @cap.js：升级 SHA-256 PoW + RSW time-lock 协议 solver，支持 v1 seeded challenge、format-2 `sha256-pow` 和 `rsw`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
 - Captxa：新增 simple mode browser metrics + JA4-bound opaque token + SHA-256 PoW 协议 solver，补低风险环境字段，复现 `SHA256(pow32||nonce_le64)` leading-zero，可提交 `/solve/simp` 换 `X-Captcha-Token`，不启动浏览器。
+- Swetrix CAPTCHA：新增 privacy CAPTCHA 协议 solver，解析 `/generate` 的 `challenge+difficulty`，复现 `SHA256(challenge+":"+nonce)` 前导十六进制零 PoW，可提交 `/verify` 换 token，并可选 `/validate` 服务端校验，不启动浏览器。
 - chpio/pow-captcha：新增 signed multi-challenge target-match PoW solver，复现 `signedData` 的 UTF-16LE SHA-256 签名与 `SHA256(solution_le||nonce)` target bit 匹配，可提交 redeem，不启动浏览器。
 - Impost：新增 Zig/WASM Argon2id PoW solver，复现 `t=3,m=8192KiB,p=1` 的内存硬化 hash，支持 `leading_zeroes` 与 `target_number` 两种策略，输出 `{challenge, nonce}`，不启动浏览器。
 - Kerberus：新增多盐 u128-score PoW solver，预计算 `SHA256(salt+serializedInput)`，搜索 `SHA256(prefixHash||nonce_dec)` 前 16 字节评分超过阈值，输出 `Solution{id, nonces}`，不启动浏览器。
@@ -60,6 +61,7 @@
 | Portcullis | 协议 solver | `argon2_pow` | alpha | verify body / `captcha_token` |
 | Cap / @cap.js | 协议 solver | `proof_of_work` | alpha | `/redeem` body / Cap token |
 | Captxa | 协议 solver | `ja4_bound_pow` | alpha | solve body / `X-Captcha-Token` |
+| Swetrix CAPTCHA | 协议 solver | `swetrix_pow` | alpha | verify body / Swetrix token |
 | chpio/pow-captcha | 协议 solver | `target_match_pow` | alpha | challenge solution body / redeemed token |
 | Impost | 协议 solver | `argon2id_pow` | alpha | `{challenge, nonce}` / validated message |
 | Kerberus | 协议 solver | `u128_score_pow` | alpha | `Solution{id, nonces}` / validated token |
@@ -1248,6 +1250,55 @@ antibot solve captxa \
 
 ---
 
+### 15.2 Swetrix CAPTCHA challenge:nonce PoW
+
+Swetrix CAPTCHA 是一个隐私取向的开源 CAPTCHA，客户端不做图片识别，而是在 iframe 内点击后走 PoW 协议：
+
+```text
+POST /v1/captcha/generate {pid}
+-> {challenge, difficulty}
+
+hash = SHA256(challenge + ":" + nonce)
+pass = hash 前 difficulty 个十六进制字符全为 0
+
+POST /v1/captcha/verify {pid, challenge, nonce, solution}
+-> {success, token, timestamp, challenge, pid}
+```
+
+服务端还提供 `/validate`：后端把 widget token 和项目 secret 发过去，校验 token 是否有效、过期或重放。SDK 当前支持：
+
+- 从 `/generate` 拉取 challenge，或读取本地 fixture；
+- 按浏览器 worker 的规则复现 `SHA256(challenge+":"+nonce)`；
+- 用 digest 字节做前导十六进制零判断，避免每次循环都转 hex；
+- 可多进程 worker 搜索高 difficulty；
+- 可提交 `/verify` 换 token，并可选调用 `/validate`；
+- 不启动浏览器。
+
+命令示例：
+
+```bash
+antibot solve swetrix \
+  --pid 'AP00000000000' \
+  --submit \
+  --secret 'PASS000000000000000000' \
+  --raw
+```
+
+只解 fixture：
+
+```bash
+antibot solve swetrix \
+  --pid 'AP00000000000' \
+  --challenge-json '{"challenge":"swetrix-fixture-challenge","difficulty":4}'
+```
+
+当前定位：
+
+- 这是 PoW 协议 solver，不是图像/文字 solver；
+- 真实项目的 difficulty 可能由 auto mode 根据 UA、headers、IP reputation、重放/失败率动态提高，SDK 已补齐常见浏览器头并保留 `workers/max-attempts/timeout` 调参。
+
+---
+
 ### 16. chpio/pow-captcha Target-match PoW
 
 chpio/pow-captcha 不是“前导零 hashcash”，而是服务端一次发多个 `(nonce,target)` 任务：客户端枚举 8 字节 little-endian `solution`，直到 `SHA256(solution_le_8 || nonce_bytes)` 的前 `difficultyBits` 位和 `target` 对齐。challenge 外层用 `signedData` 包住，签名规则是 `SHA256(UTF16LE(data_json + ":" + secret))`。
@@ -2198,6 +2249,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - Portcullis / pow-captcha / `/api/v1/challenge` 相关 URL -> `portcullis`
 - Cap / trycap / cap-widget 相关 URL -> `cap`
 - Captxa / `/challenge/simp` / `/solve/simp` 相关 URL -> `captxa`
+- Swetrix CAPTCHA / `swetrixcaptcha` / `/v1/captcha/generate` 相关 URL -> `swetrix`
 - chpio / chpiopow / signedData magic 相关 URL -> `chpiopow`
 - Impost / impost-captcha 相关 URL -> `impost`
 - Kerberus / difficultyFactor / serializedInput 相关 URL -> `kerberus`
@@ -2550,7 +2602,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / FCaptcha / Cap / Captxa / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / FCaptcha / Cap / Captxa / Swetrix / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -2563,6 +2615,7 @@ friendlycaptcha_run.json
 fcaptcha_run.json
 cap_run.json
 captxa_run.json
+swetrix_run.json
 yourcaptcha_run.json
 silentchallenge_run.json
 pcaptcha_run.json
@@ -2625,6 +2678,7 @@ src/antibot_sdk/
     portcullis.py           # Portcullis Argon2id + SHA-256 PoW protocol solver
     cap.py                  # Cap/@cap.js SHA-256 PoW protocol solver
     captxa.py               # Captxa browser metrics + JA4-bound SHA-256 PoW solver
+    swetrix.py              # Swetrix challenge:nonce SHA-256 PoW protocol solver
     chpiopow.py             # chpio/pow-captcha signed target-match PoW protocol solver
     mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
     wicketkeeper.py         # Wicketkeeper JWT PoW protocol solver
@@ -2656,6 +2710,7 @@ tests/
   test_portcullis.py
   test_cap.py
   test_captxa.py
+  test_swetrix.py
   test_pcaptcha.py
   test_powcaptcha.py
   test_powbot.py
@@ -2671,7 +2726,8 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 101 passed
+pytest: 103 passed
+Swetrix fixture/mock/live/stress: /generate + SHA256(challenge:nonce) PoW + /verify + /validate 验证通过
 Captxa fixture/mock/stress: browser metrics + JA4-bound opaque token + SHA-256 PoW simple mode 验证通过
 FCaptcha fixture/mock/stress: signalsHash-bound PoW、本地 /api/pow/challenge + /api/verify 验证通过
 PoW Bot Deterrent fixture/mock/stress: scrypt-WASM PoW、本地 /GetChallenges + /Verify 验证通过

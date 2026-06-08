@@ -29,6 +29,7 @@ from .providers.privatecaptcha import PrivateCaptchaSolver
 from .providers.portcullis import PortcullisSolver
 from .providers.recaptcha import ReCaptchaSolver
 from .providers.silentchallenge import SilentChallengeSolver
+from .providers.swetrix import SwetrixSolver
 from .providers.tencent import TencentCaptchaSolver
 from .providers.turnstile import TurnstileSolver
 from .providers.yourcaptcha import YourCaptchaSolver
@@ -60,6 +61,7 @@ class AntibotClient:
         self.powbot = PowBotSolver()
         self.privatecaptcha = PrivateCaptchaSolver()
         self.portcullis = PortcullisSolver()
+        self.swetrix = SwetrixSolver()
         self.wicketkeeper = WicketkeeperSolver()
         self.yourcaptcha = YourCaptchaSolver()
         self.silentchallenge = SilentChallengeSolver()
@@ -136,6 +138,9 @@ class AntibotClient:
 
     async def solve_portcullis(self, **kwargs: Any) -> CaptchaResult:
         return await self.portcullis.solve(**kwargs)
+
+    async def solve_swetrix(self, **kwargs: Any) -> CaptchaResult:
+        return await self.swetrix.solve(**kwargs)
 
     async def solve_wicketkeeper(self, **kwargs: Any) -> CaptchaResult:
         return await self.wicketkeeper.solve(**kwargs)
@@ -681,6 +686,46 @@ class AntibotClient:
                 else:
                     pc_kwargs["base_url"] = target_url
             return await self.solve_portcullis(**pc_kwargs)
+        if provider == "swetrix":
+            sx_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "pid",
+                    "api_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "validate_url",
+                    "submit",
+                    "secret",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not sx_kwargs.get("api_url") and not sx_kwargs.get("challenge_url"):
+                if target_lower.rstrip("/").endswith("/generate"):
+                    sx_kwargs["challenge_url"] = target_url
+                    sx_kwargs["api_url"] = target_url[: target_lower.rindex("/generate")]
+                elif target_lower.rstrip("/").endswith("/verify"):
+                    sx_kwargs["verify_url"] = target_url
+                    sx_kwargs["api_url"] = target_url[: target_lower.rindex("/verify")]
+                elif target_lower.rstrip("/").endswith("/validate"):
+                    sx_kwargs["validate_url"] = target_url
+                    sx_kwargs["api_url"] = target_url[: target_lower.rindex("/validate")]
+                else:
+                    sx_kwargs["api_url"] = target_url
+            return await self.solve_swetrix(**sx_kwargs)
         if provider == "wicketkeeper":
             wk_kwargs = {
                 k: v

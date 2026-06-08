@@ -148,6 +148,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "privatecaptcha"
     if any(x in u or x in host for x in ("portcullis", "pow-captcha", "/api/v1/challenge", "/api/v1/verify")):
         return "portcullis"
+    if any(x in u or x in host for x in ("swetrixcaptcha", "swecaptcha", "/v1/captcha/generate", "/v1/captcha/verify")):
+        return "swetrix"
     if any(x in u or x in host for x in ("wicketkeeper", "/v0/challenge", "/v0/siteverify")):
         return "wicketkeeper"
     if any(x in u or x in host for x in ("yourcaptcha", "/api/captcha/challenge", "/api/captcha/verify")):
@@ -340,6 +342,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "argon2id-sha256-protocol-solver",
                 "successFields": ["verify body", "captcha_token"],
                 "endpoints": ["/api/v1/challenge", "/api/v1/verify", "/api/v1/siteverify"],
+            }
+        },
+        "swetrix": {
+            "swetrix_pow": {
+                "patterns": ["swetrixcaptcha", "swecaptcha", "/v1/captcha/generate", "/v1/captcha/verify"],
+                "mode": "sha256-challenge-colon-nonce-pow-protocol-solver",
+                "successFields": ["token", "validate data"],
+                "endpoints": ["/generate", "/verify", "/validate"],
             }
         },
         "wicketkeeper": {
