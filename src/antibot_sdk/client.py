@@ -13,6 +13,7 @@ from .providers.cap import CapSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.hcaptcha import HCaptchaSolver
+from .providers.mcaptcha import MCaptchaSolver
 from .providers.pcaptcha import PCaptchaSolver
 from .providers.recaptcha import ReCaptchaSolver
 from .providers.tencent import TencentCaptchaSolver
@@ -32,6 +33,7 @@ class AntibotClient:
         self.altcha = AltchaSolver()
         self.anubis = AnubisSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
+        self.mcaptcha = MCaptchaSolver()
         self.pcaptcha = PCaptchaSolver()
         self.tencent = TencentCaptchaSolver()
         self.aliyun = AliyunCaptchaSolver()
@@ -71,6 +73,9 @@ class AntibotClient:
 
     async def solve_friendlycaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.friendlycaptcha.solve(**kwargs)
+
+    async def solve_mcaptcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.mcaptcha.solve(**kwargs)
 
     async def solve_pcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.pcaptcha.solve(**kwargs)
@@ -225,6 +230,39 @@ class AntibotClient:
             }
             cap_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_cap(**cap_kwargs)
+        if provider == "mcaptcha":
+            mc_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "config_json",
+                    "config_file",
+                    "config_url",
+                    "base_url",
+                    "sitekey",
+                    "key",
+                    "verify_url",
+                    "submit",
+                    "siteverify_url",
+                    "siteverify",
+                    "secret",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            if not mc_kwargs.get("config_url") and not mc_kwargs.get("base_url"):
+                if target_url.rstrip("/").endswith("/config"):
+                    mc_kwargs["config_url"] = target_url
+                else:
+                    mc_kwargs["base_url"] = target_url
+            return await self.solve_mcaptcha(**mc_kwargs)
         if provider == "pcaptcha":
             pc_kwargs = {
                 k: v

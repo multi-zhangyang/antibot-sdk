@@ -133,6 +133,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "tencent",
             "friendlycaptcha",
             "cap",
+            "mcaptcha",
             "pcaptcha",
             "geetest",
             "yidun",
@@ -280,6 +281,26 @@ async def amain(argv: list[str] | None = None) -> int:
     cap.add_argument("--redeem-url")
     cap.add_argument("--redeem", action="store_true", help="POST solved body to /redeem and return final Cap token")
     cap.add_argument("--raw", action="store_true")
+
+    mc = solve_sub.add_parser("mcaptcha")
+    mc_source = mc.add_mutually_exclusive_group(required=True)
+    mc_source.add_argument("--config-json", help="inline JSON object, or @/path/to/config.json")
+    mc_source.add_argument("--config-file")
+    mc_source.add_argument("--config-url", help="mCaptcha /api/v1/pow/config endpoint")
+    mc_source.add_argument("--base-url", help="mCaptcha instance root; infers /api/v1/pow/{config,verify}")
+    mc.add_argument("--sitekey", "--key", dest="sitekey", help="mCaptcha sitekey/key")
+    mc.add_argument("--verify-url", help="mCaptcha /api/v1/pow/verify endpoint")
+    mc.add_argument("--no-submit", action="store_true", help="only return the solved verify body")
+    mc.add_argument("--siteverify-url", help="mCaptcha /api/v1/pow/siteverify endpoint")
+    mc.add_argument("--siteverify", action="store_true", help="POST token+secret to siteverify")
+    mc.add_argument("--secret")
+    mc.add_argument("--start", type=int, default=1)
+    mc.add_argument("--max-attempts", type=int, default=50_000_000)
+    mc.add_argument("--workers", type=int, default=1)
+    mc.add_argument("--timeout", type=int, default=60)
+    mc.add_argument("--proxy")
+    mc.add_argument("--output-dir")
+    mc.add_argument("--raw", action="store_true")
 
     pc = solve_sub.add_parser("pcaptcha")
     pc_source = pc.add_mutually_exclusive_group(required=True)
@@ -497,6 +518,25 @@ async def amain(argv: list[str] | None = None) -> int:
     scap.add_argument("--output-json")
     scap.add_argument("--full", action="store_true")
 
+    smc = stress_sub.add_parser("mcaptcha")
+    smc_source = smc.add_mutually_exclusive_group(required=True)
+    smc_source.add_argument("--config-url")
+    smc_source.add_argument("--base-url")
+    smc_source.add_argument("--config-json")
+    smc_source.add_argument("--config-file")
+    smc.add_argument("--sitekey", "--key", dest="sitekey")
+    smc.add_argument("--verify-url")
+    smc.add_argument("--no-submit", action="store_true")
+    smc.add_argument("--runs", type=int, default=10)
+    smc.add_argument("--concurrency", type=int, default=2)
+    smc.add_argument("--timeout", type=int, default=60)
+    smc.add_argument("--max-attempts", type=int, default=50_000_000)
+    smc.add_argument("--workers", type=int, default=1)
+    smc.add_argument("--proxy")
+    smc.add_argument("--output-dir")
+    smc.add_argument("--output-json")
+    smc.add_argument("--full", action="store_true")
+
     spc = stress_sub.add_parser("pcaptcha")
     spc.add_argument("--challenge-url", required=True)
     spc.add_argument("--validate-url")
@@ -648,7 +688,19 @@ async def amain(argv: list[str] | None = None) -> int:
             "proxy_server": args.proxy,
             "headless": headless,
         }
-        if provider in (None, "aliyun", "geetest", "yidun", "hcaptcha", "recaptcha", "turnstile", "cap", "pcaptcha", "anubis"):
+        if provider in (
+            None,
+            "aliyun",
+            "geetest",
+            "yidun",
+            "hcaptcha",
+            "recaptcha",
+            "turnstile",
+            "cap",
+            "mcaptcha",
+            "pcaptcha",
+            "anubis",
+        ):
             common.update({
                 "site_profile": args.site_profile,
                 "output_dir": args.output_dir,
@@ -815,6 +867,27 @@ async def amain(argv: list[str] | None = None) -> int:
             redeem=args.redeem,
             start=args.start,
             max_attempts_per_challenge=args.max_attempts_per_challenge,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "mcaptcha":
+        ret = await client.solve_mcaptcha(
+            config_json=args.config_json,
+            config_file=args.config_file,
+            config_url=args.config_url,
+            base_url=args.base_url,
+            sitekey=args.sitekey,
+            verify_url=args.verify_url,
+            submit=not args.no_submit,
+            siteverify_url=args.siteverify_url,
+            siteverify=args.siteverify,
+            secret=args.secret,
+            start=args.start,
+            max_attempts=args.max_attempts,
             workers=args.workers,
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
@@ -1123,6 +1196,31 @@ async def amain(argv: list[str] | None = None) -> int:
                 redeem_url=args.redeem_url,
                 redeem=args.redeem,
                 max_attempts_per_challenge=args.max_attempts_per_challenge,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "mcaptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="mcaptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_mcaptcha(
+                config_json=args.config_json,
+                config_file=args.config_file,
+                config_url=args.config_url,
+                base_url=args.base_url,
+                sitekey=args.sitekey,
+                verify_url=args.verify_url,
+                submit=not args.no_submit,
+                max_attempts=args.max_attempts,
                 workers=args.workers,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,

@@ -117,6 +117,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "friendlycaptcha"
     if any(x in u or x in host for x in ("trycap.dev", "cap.js", "cap-widget", "capjs")):
         return "cap"
+    if any(x in u or x in host for x in ("mcaptcha", "/api/v1/pow/config", "/api/v1/pow/verify")):
+        return "mcaptcha"
     if any(x in u or x in host for x in ("p-captcha", "pcaptcha", "quadraticresidueproblem")):
         return "pcaptcha"
     if any(x in u or x in host for x in ("geetest", "gcaptcha4", "gt4.geetest")):
@@ -193,6 +195,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "cap-sha256-pow-protocol-solver",
                 "successFields": ["/redeem body", "Cap token"],
                 "endpoints": ["/challenge", "/redeem"],
+            }
+        },
+        "mcaptcha": {
+            "sha256_pow": {
+                "patterns": ["mcaptcha", "/api/v1/pow/config", "/api/v1/pow/verify"],
+                "mode": "mcaptcha-sha256-pow-protocol-solver",
+                "successFields": ["verify body", "mCaptcha token"],
+                "endpoints": ["/api/v1/pow/config", "/api/v1/pow/verify", "/api/v1/pow/siteverify"],
             }
         },
         "pcaptcha": {

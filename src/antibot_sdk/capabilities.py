@@ -68,6 +68,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "redeem body / Cap token",
         "scope": "Cap v1 seeded PoW 与 format-2 sha256-pow：本地 SHA-256 nonce 搜索，可输出 /redeem body 或直接 redeem token；不启动浏览器。",
     },
+    "mcaptcha": {
+        "provider": "mcaptcha",
+        "name": "mCaptcha",
+        "category": "solver",
+        "captcha_type": "proof_of_work",
+        "status": "alpha",
+        "output": "verify body / mCaptcha token",
+        "scope": "mCaptcha SHA-256 PoW：获取 /api/v1/pow/config，复现 bincode(String)+u128 score nonce 搜索，可提交 /verify 换 token；不启动浏览器。",
+    },
     "pcaptcha": {
         "provider": "pcaptcha",
         "name": "P-Captcha",

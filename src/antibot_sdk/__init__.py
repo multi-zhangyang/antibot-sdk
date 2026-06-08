@@ -43,6 +43,17 @@ from .providers.friendlycaptcha import (
     solve_friendly_puzzle,
 )
 from .providers.hcaptcha import is_hcaptcha_token, latest_hcaptcha_token
+from .providers.mcaptcha import (
+    MCaptchaConfig,
+    MCaptchaSolution,
+    bincode_serialize_string,
+    mcaptcha_difficulty_target,
+    mcaptcha_hash_bytes,
+    mcaptcha_score,
+    parse_mcaptcha_config,
+    solve_mcaptcha_config,
+    verify_mcaptcha_work,
+)
 from .providers.pcaptcha import (
     PCaptchaChallenge,
     PCaptchaSolution,
@@ -73,6 +84,8 @@ __all__ = [
     "CapSolution",
     "FriendlyPuzzle",
     "FriendlySolution",
+    "MCaptchaConfig",
+    "MCaptchaSolution",
     "FailureClassifier",
     "PCaptchaChallenge",
     "PCaptchaSolution",
@@ -103,6 +116,13 @@ __all__ = [
     "solve_cap_challenges",
     "solve_cap_seeded",
     "verify_cap_solution",
+    "bincode_serialize_string",
+    "mcaptcha_difficulty_target",
+    "mcaptcha_hash_bytes",
+    "mcaptcha_score",
+    "parse_mcaptcha_config",
+    "solve_mcaptcha_config",
+    "verify_mcaptcha_work",
     "generate_pcaptcha_challenge_from_roots",
     "parse_pcaptcha_challenge",
     "solve_pcaptcha_challenge",

@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / FriendlyCaptcha PoW / Cap PoW / P-Captcha 二次剩余 PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / FriendlyCaptcha PoW / Cap PoW / mCaptcha PoW / P-Captcha 二次剩余 PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -16,6 +16,7 @@
 - Anubis：新增 `fast/slow` PoW 协议 solver，解析 challenge 页面或 make-challenge JSON，计算 `SHA256(randomData+nonce)` 前导零，可生成 `pass-challenge` 参数或直接换取 auth cookie，不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
 - Cap / @cap.js：新增 SHA-256 PoW 协议 solver，支持 v1 seeded challenge 与 format-2 `sha256-pow`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
+- mCaptcha：新增 SHA-256 PoW 协议 solver，复现 Rust/JS 的 `bincode(String)+u128 score` 规则，获取 `/api/v1/pow/config` 后本地找 nonce，可提交 `/api/v1/pow/verify` 换 token，不启动浏览器。
 - P-Captcha：新增 QuadraticResidueProblem 协议 solver，解析 Woodall prime challenge，用模平方根直接求 answer，可提交 `{id, answer}`，不启动浏览器。
 - GeeTest v4：从 observer 升级出滑动 solver alpha，抓取 bg/slice、CV 匹配缺口、生成拖动轨迹，并提取 `lot_number/captcha_output/pass_token/gen_time`。
 - 网易易盾 / Yidun：滑动拼图 solver alpha，抓取 bg/front、OpenCV 定位缺口、模拟滑块轨迹，并提取 `validate/token/zoneId`。
@@ -39,6 +40,7 @@
 | Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
 | FriendlyCaptcha | 协议 solver | `proof_of_work` | alpha | `frc-captcha-solution` payload |
 | Cap / @cap.js | 协议 solver | `proof_of_work` | alpha | `/redeem` body / Cap token |
+| mCaptcha | 协议 solver | `proof_of_work` | alpha | verify body / mCaptcha token |
 | P-Captcha | 协议 solver | `quadratic_residue_pow` | alpha | `answer` / `{id, answer}` |
 | GeeTest v4 | 真实 solver | `slider` | alpha | `pass_token/lot_number` |
 | NetEase Yidun | 真实 solver | `jigsaw` | alpha | `validate/token/zoneId` |
@@ -956,7 +958,79 @@ async with AntibotClient() as client:
 
 ---
 
-### 14. GeeTest v4 / 极验
+### 14. mCaptcha PoW
+
+mCaptcha 是 self-hosted PoW CAPTCHA。浏览器 widget 的流程是：`POST /api/v1/pow/config` 取 `string/difficulty_factor/salt`，本地搜索 nonce，再 `POST /api/v1/pow/verify` 换取服务端 token。SDK 当前把这条链路做成纯协议 solver。
+
+关键点：
+
+- 官方 Rust verifier 会先对 challenge string 做 `bincode::serialize(&String)`。SDK 已复现：`u64 little-endian byte length + UTF-8 bytes`。
+- 哈希输入：`salt || bincode(String) || decimal_nonce`。
+- score：SHA-256 digest 前 16 字节按 big-endian `u128` 解释。
+- 通过条件：
+
+```text
+score >= u128::MAX - u128::MAX / difficulty_factor
+```
+
+命令示例：
+
+```bash
+antibot solve mcaptcha \
+  --base-url 'https://captcha.example' \
+  --sitekey 'site-key'
+```
+
+只解 PoW，不提交 `/verify`：
+
+```bash
+antibot solve mcaptcha \
+  --config-json '{"key":"site-key","string":"...","difficulty_factor":50,"salt":"..."}' \
+  --no-submit
+```
+
+带服务端 token 校验：
+
+```bash
+antibot solve mcaptcha \
+  --base-url 'https://captcha.example' \
+  --sitekey 'site-key' \
+  --secret 'owner-secret' \
+  --siteverify
+```
+
+压测：
+
+```bash
+antibot stress mcaptcha \
+  --base-url 'https://captcha.example' \
+  --sitekey 'site-key' \
+  --runs 20 \
+  --concurrency 4
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_mcaptcha(
+        base_url="https://captcha.example",
+        sitekey="site-key",
+    )
+    print(ret.ok, ret.ticket, ret.verify_code)
+```
+
+当前定位：
+
+- 这是协议层 PoW solver，不开浏览器，适合 VPS/headless 受限环境。
+- 已和官方 `mcaptcha_pow_sha256 0.5.0` Rust fixture 对齐。
+- difficulty_factor 越大平均搜索空间越大，VPS 上默认单 worker，避免 CPU 打满。
+
+---
+
+### 15. GeeTest v4 / 极验
 
 GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：能在官方 v4 slide demo 上完成图片定位、轨迹拖动和成功载荷提取。但这个能力还不是稳定通杀，真实站点仍会受风险策略、设备指纹、轨迹质量和出口 IP 影响。
 
@@ -1053,7 +1127,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 15. 网易易盾 / Yidun 滑动拼图
+### 16. 网易易盾 / Yidun 滑动拼图
 
 Yidun 现在保留 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
 
@@ -1124,7 +1198,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 16. 自动分发模式
+### 17. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
@@ -1134,6 +1208,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - Anubis / `.within.website/x/cmd/anubis` 相关 URL -> `anubis`
 - FriendlyCaptcha / `frc-captcha` 相关 URL -> `friendlycaptcha`
 - Cap / trycap / cap-widget 相关 URL -> `cap`
+- mCaptcha / `/api/v1/pow/config` 相关 URL -> `mcaptcha`
 - P-Captcha / QuadraticResidueProblem 相关 URL -> `pcaptcha`
 - Tencent / TCaptcha 相关 URL -> `tencent`
 - GeeTest / gcaptcha4 相关 URL -> `geetest`
@@ -1152,7 +1227,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 17. 代理格式
+### 18. 代理格式
 
 支持以下格式：
 
@@ -1356,6 +1431,10 @@ antibot solve cap --api-endpoint 'https://target.example/cap/'
 antibot solve cap --token 'challenge token' --c 50 --s 32 --d 4
 antibot stress cap --api-endpoint 'https://target.example/cap/' --runs 50 --concurrency 5
 
+# mCaptcha
+antibot solve mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key'
+antibot stress mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key' --runs 20
+
 # P-Captcha
 antibot solve pcaptcha --challenge-url 'https://target.example/api/challenge'
 antibot solve pcaptcha --challenge-url 'https://target.example/api/challenge' --validate-url 'https://target.example/api/validate' --validate
@@ -1457,6 +1536,7 @@ src/antibot_sdk/
     anubis.py               # Anubis SHA-256 PoW protocol solver
     friendlycaptcha.py      # FriendlyCaptcha classic PoW protocol solver
     cap.py                  # Cap/@cap.js SHA-256 PoW protocol solver
+    mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
     pcaptcha.py             # P-Captcha quadratic residue protocol solver
     geetest.py              # GeeTest v4 hook + slide solver alpha
     hcaptcha.py             # hCaptcha hook/observer provider
@@ -1586,6 +1666,14 @@ Cap PRNG/FNV 与 upstream core/src/prng.js 交叉校验。
 unsupported 协议回归：format-2 rsw 明确返回 unsupported_protocols。
 ```
 
+mCaptcha：
+
+```text
+官方 mcaptcha_pow_sha256 0.5.0 fixture：Python nonce/result 与 Rust prove_work(&String, difficulty) 对齐。
+本地 mock config + verify + siteverify：ok=true，成功返回 mCaptcha token。
+本地 mCaptcha stress 20 轮/concurrency=4：20/20，avg≈29.8ms，p95≈50ms。
+```
+
 P-Captcha：
 
 ```text
@@ -1625,6 +1713,7 @@ stress recaptcha mock 2 轮：2/2。
 - Anubis 是 SHA-256 前导零 PoW；difficulty 每加 1，平均搜索空间约乘 16。页面解析和提交 cookie 是协议闭环，但高 difficulty 仍会吃 CPU。
 - FriendlyCaptcha classic 也是 PoW；耗时主要由 difficulty、solution count、命中位置和 worker 数决定。默认 `10,000,000` 次/段 solution 上限，真实站点不够时调 `--max-attempts-per-solution`。
 - Cap PoW 耗时主要由 `c/s/d`、format-2 target 长度、命中位置和 worker 数决定；遇到 `rsw/instrumentation` 时不要硬解，当前版本会按 unsupported 返回。
+- mCaptcha PoW 耗时主要由 `difficulty_factor`、nonce 命中位置和 worker 数决定；默认单 worker，压测时先控制并发避免把 VPS CPU 打满。
 - P-Captcha 当前不是暴力搜索，而是模平方根；耗时主要由 Woodall prime bit 数和 rounds 决定，`2xs` 约 761 bits，`3xl` 约 22974 bits。
 - Yidun 的误差主要来自三类：浅色缺口的 `color_template` / 暗色缺口的 `shadow_*` 分支选择、front 图片相对 slider 的视觉偏移、以及轨迹/IP/设备指纹。
 - 代理池能明显降低部分 F001，但仍会出现 `NONE`、`gap not found`、`candidate rejected` 等临时状态。
