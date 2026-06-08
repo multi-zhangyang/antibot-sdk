@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / GeeTest v4** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -12,6 +12,7 @@
 - Tencent Captcha：封装腾讯滑块的页面触发、浏览器池、缺口识别、轨迹拖拽、ticket/randstr 输出。
 - Aliyun Captcha：封装阿里云滑块的 Node/Puppeteer runner、站点 profile、attempt/session retry、错误归一、artifact 保留。
 - GeeTest v4：从 observer 升级出滑动 solver alpha，抓取 bg/slice、CV 匹配缺口、生成拖动轨迹，并提取 `lot_number/captcha_output/pass_token/gen_time`。
+- 网易易盾 / Yidun：新增滑动拼图 solver alpha，hook `initNECaptcha`，保留 `.use()` 静态方法，抓取 bg/front、CV 定位缺口、补偿滑块/拼图视觉偏移，并提取 `validate/token/zoneId`。
 - Policy Engine：把 `F001/F015/NONE/gap/candidate/watchdog timeout` 等失败归类，决定是否换 session，并输出下一步调参建议。
 - Stress Harness：统一压测入口，输出 summary、records、attempt code 分布、失败现场。
 
@@ -554,13 +555,85 @@ async with AntibotClient() as client:
 
 ---
 
-### 9. 自动分发模式
+### 9. 网易易盾 / Yidun 滑动拼图
+
+Yidun 现在加入 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
+
+关键实现点：
+
+- 在页面最早阶段 hook `window.initNECaptcha`。
+- hook 使用 `Proxy` 包装，保留官方 loader 需要的 `.use()` 等静态属性，避免破坏运行链路。
+- 记录 `captchaId/mode/captchaType/width`、实例方法、网络 `api/v3/get/check`。
+- 抽取：
+  - `.yidun_bg-img` 背景图
+  - `.yidun_jigsaw` 拼图 front PNG
+  - `.yidun_slider` / control / panel 坐标
+- OpenCV 定位策略：
+  - `shadow_dark`
+  - `shadow_dark_blur`
+  - `shadow_dark_low_sat`
+  - `color_template` fallback
+- 处理 Yidun 的关键几何坑：front 图片显示位置通常比 slider left 少半个视觉差值，SDK 会自动加 `(front_width - slider_width) / 2` 补偿。
+- 成功时输出：
+
+```json
+{
+  "validate": "...",
+  "token": "...",
+  "zoneId": "NANP"
+}
+```
+
+命令示例：
+
+```bash
+antibot solve yidun \
+  --url 'https://dun.163.com/trial/jigsaw' \
+  --output-dir /tmp/yidun-run \
+  --timeout 90 \
+  --slide-attempts 3
+```
+
+压测：
+
+```bash
+antibot stress yidun \
+  --url 'https://dun.163.com/trial/jigsaw' \
+  --runs 10 \
+  --concurrency 1 \
+  --timeout 90 \
+  --slide-attempts 3 \
+  --output-json /tmp/yidun-stress.json
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_yidun(
+        target_url="https://dun.163.com/trial/jigsaw",
+        output_dir="/tmp/yidun-run",
+    )
+    print(ret.ok, ret.ticket, ret.randstr, ret.raw.get("success"))
+```
+
+当前定位：
+
+- 已验证官方 `trial/jigsaw` 单次 solve 成功，能拿到 `validate/token/zoneId`。
+- 这条线仍是 alpha：复杂业务站点可能叠加设备指纹、IP reputation、业务态绑定；后续要继续扩大样本、优化轨迹、补齐更多 Yidun 类型。
+
+---
+
+### 10. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
 - Qoder / Aliyun 相关 URL -> `aliyun`
 - Tencent / TCaptcha 相关 URL -> `tencent`
 - GeeTest / gcaptcha4 相关 URL -> `geetest`
+- Yidun / NetEase Dun / necaptcha / dun.163.com 相关 URL -> `yidun`
 - hCaptcha / h-captcha / js.hcaptcha.com 相关 URL -> `hcaptcha`
 - reCAPTCHA / g-recaptcha / recaptcha.net 相关 URL -> `recaptcha`
 - Turnstile / challenges.cloudflare.com 相关 URL -> `turnstile`
@@ -575,7 +648,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 10. 代理格式
+### 11. 代理格式
 
 支持以下格式：
 
@@ -662,6 +735,12 @@ async def main():
         )
         print(recaptcha.ok, recaptcha.ticket, recaptcha.diagnostics.get("action"))
 
+        yidun = await client.solve_yidun(
+            target_url="https://dun.163.com/trial/jigsaw",
+            output_dir="/tmp/yidun-run",
+        )
+        print(yidun.ok, yidun.ticket, yidun.randstr, yidun.raw.get("success"))
+
         # token 采集后，再做真实提交闭环验证
         from antibot_sdk import SubmitFlow, verify_submit_flow
 
@@ -740,6 +819,10 @@ antibot verify turnstile --url 'https://target.example/form' --token '0.xxx' --s
 antibot solve geetest --url 'https://target.example/path-with-geetest'
 antibot stress geetest --url 'https://target.example/path-with-geetest' --runs 10
 
+# Yidun
+antibot solve yidun --url 'https://dun.163.com/trial/jigsaw'
+antibot stress yidun --url 'https://dun.163.com/trial/jigsaw' --runs 10 --concurrency 1
+
 # Aliyun
 antibot solve aliyun --url 'https://qoder.com/users/sign-up' --site-profile qoder_signup
 antibot stress aliyun --url 'https://qoder.com/users/sign-up' --site-profile qoder_signup --runs 10
@@ -759,13 +842,15 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / GeeTest 会保留：
+Turnstile / hCaptcha / reCAPTCHA / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
 turnstile_page.png / hcaptcha_page.png / recaptcha_page.png / geetest_page.png
 turnstile_page.html / hcaptcha_page.html / recaptcha_page.html / geetest_page.html
 geetest_slide_bg_N.png / geetest_slide_slice_N.png
+yidun_run.json / yidun_page.png / yidun_page.html
+yidun_slide_bg_N.jpg / yidun_slide_front_N.png
 ```
 
 Submit verification 会保留：
@@ -814,6 +899,7 @@ src/antibot_sdk/
     hcaptcha.py             # hCaptcha hook/observer provider
     recaptcha.py            # reCAPTCHA/Enterprise hook/observer provider
     turnstile.py            # Cloudflare Turnstile hook/observer provider
+    yidun.py                # 网易易盾 hook + jigsaw solver alpha
   vendor/
     tencent/                # Tencent solver + upstream snapshot
     aliyun/                 # Aliyun Node bridge/runner/site profiles
@@ -823,6 +909,7 @@ tests/
   test_proxy.py
   test_stress.py
   test_verification.py
+  test_yidun_slide.py
 ```
 
 ---
@@ -839,6 +926,7 @@ watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON
 geetest mock: initGeetest4/onSuccess/getValidate 链路通过
 geetest official slide: 单次 solve 成功提取 pass_token/lot_number/captcha_output/gen_time
 geetest official slide stress: 最新 3/3，avg≈16.35s，p95≈21.5s，命中过 color_template/shadow_dark 两种定位分支
+yidun official jigsaw: 单次 solve 成功提取 validate/token/zoneId；stress 2/2，avg≈30.3s，p95≈34.7s
 turnstile mock: render/callback/input token 链路通过
 hcaptcha mock: render/callback/input token 链路通过
 recaptcha mock: render/enterprise execute/callback/input token 链路通过
@@ -875,6 +963,14 @@ GeeTest：
 本地 v4 mock 页面：ok=true，成功提取 lot_number/captcha_output/pass_token/gen_time。
 ```
 
+Yidun：
+
+```text
+官方 trial/jigsaw 页面：ok=true，成功提取 validate/token/zoneId。
+官方 trial/jigsaw stress 2 轮：2/2，avg≈30.3s，p95≈34.7s。
+关键修复：initNECaptcha hook 改为 Proxy，保留 .use() 静态方法；拖动距离加入 front/slider 视觉偏移补偿。
+```
+
 Turnstile：
 
 ```text
@@ -901,6 +997,7 @@ stress recaptcha mock 2 轮：2/2。
 ## 已知调优点
 
 - Qoder/Aliyun 的 `F001` 常和出口 IP / session reputation / 当前页面状态有关。
+- Yidun 的误差主要来自三类：浅色缺口的 `color_template` / 暗色缺口的 `shadow_*` 分支选择、front 图片相对 slider 的视觉偏移、以及轨迹/IP/设备指纹。
 - 代理池能明显降低部分 F001，但仍会出现 `NONE`、`gap not found`、`candidate rejected` 等临时状态。
 - 当前最佳基线是：**Qoder + proxy + 快 session 策略**。
 - watchdog 阈值可通过环境变量覆盖，例如：

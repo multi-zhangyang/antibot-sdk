@@ -20,12 +20,14 @@ def test_qoder_profile_auto_detects_aliyun():
 def test_generic_provider_detection():
     assert detect_provider_for_url("https://cloud.tencent.com/product/captcha") == "tencent"
     assert detect_provider_for_url("https://www.geetest.com/adaptive-captcha-demo") == "geetest"
+    assert detect_provider_for_url("https://dun.163.com/trial/jigsaw") == "yidun"
     assert detect_provider_for_url("https://docs.hcaptcha.com/invisible/") == "hcaptcha"
     assert detect_provider_for_url("https://cloud.google.com/recaptcha/docs/overview") == "recaptcha"
     assert detect_provider_for_url("https://developers.cloudflare.com/turnstile/") == "turnstile"
     assert detect_provider_for_url("https://example.com") == "browser"
     assert "qoder_signup" in list_profiles()["aliyun"]
     assert "generic_v4" in list_profiles()["geetest"]
+    assert "generic_jigsaw" in list_profiles()["yidun"]
     assert "generic_widget" in list_profiles()["hcaptcha"]
     assert "generic_widget_enterprise" in list_profiles()["recaptcha"]
     assert "generic_widget" in list_profiles()["turnstile"]

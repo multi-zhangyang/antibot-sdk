@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "antibot-sdk"
 version = "0.1.0"
-description = "Unified anti-bot browser automation SDK: Pydoll Cloudflare flows, Tencent slider, and Aliyun slider."
+description = "Unified anti-bot browser automation SDK: Pydoll Cloudflare flows, Tencent/Aliyun/GeeTest/Yidun sliders, and token verification."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

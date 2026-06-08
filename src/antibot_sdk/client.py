@@ -11,6 +11,7 @@ from .providers.hcaptcha import HCaptchaSolver
 from .providers.recaptcha import ReCaptchaSolver
 from .providers.tencent import TencentCaptchaSolver
 from .providers.turnstile import TurnstileSolver
+from .providers.yidun import YidunCaptchaSolver
 
 
 class AntibotClient:
@@ -26,6 +27,7 @@ class AntibotClient:
         self.turnstile = TurnstileSolver()
         self.hcaptcha = HCaptchaSolver()
         self.recaptcha = ReCaptchaSolver()
+        self.yidun = YidunCaptchaSolver()
 
     async def __aenter__(self) -> "AntibotClient":
         return self
@@ -54,6 +56,9 @@ class AntibotClient:
 
     async def solve_recaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.recaptcha.solve(**kwargs)
+
+    async def solve_yidun(self, **kwargs: Any) -> CaptchaResult:
+        return await self.yidun.solve(**kwargs)
 
     async def solve_auto(self, target_url: str, **kwargs: Any) -> BrowserResult | CaptchaResult:
         provider = kwargs.pop("provider", None) or detect_provider_for_url(target_url)
@@ -141,6 +146,28 @@ class AntibotClient:
                 and v is not None
             }
             return await self.solve_geetest(target_url=target_url, **gt_kwargs)
+        if provider == "yidun":
+            yd_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "headless",
+                    "proxy_server",
+                    "timeout_sec",
+                    "trigger_selectors",
+                    "auto_trigger",
+                    "slide_solve",
+                    "slide_max_attempts",
+                    "output_dir",
+                    "browser_binary",
+                    "user_agent",
+                    "locale",
+                    "timezone_id",
+                }
+                and v is not None
+            }
+            return await self.solve_yidun(target_url=target_url, **yd_kwargs)
         if provider == "tencent":
             ten_kwargs = {
                 k: v

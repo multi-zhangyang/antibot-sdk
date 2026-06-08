@@ -6,6 +6,7 @@ from .providers.geetest import detect_geetest_slide_gap, is_geetest_success_payl
 from .providers.hcaptcha import is_hcaptcha_token, latest_hcaptcha_token
 from .providers.recaptcha import is_recaptcha_token, latest_recaptcha_token
 from .providers.turnstile import is_turnstile_token, latest_turnstile_token
+from .providers.yidun import detect_yidun_slide_gap, latest_yidun_success
 from .stress import run_stress
 from .verification import FailureClassifier, SubmitFlow, SuccessOracle, VerificationResult, verify_submit_flow
 
@@ -22,6 +23,7 @@ __all__ = [
     "aliyun_policy_decision",
     "detect_provider_for_url",
     "detect_geetest_slide_gap",
+    "detect_yidun_slide_gap",
     "is_geetest_success_payload",
     "is_hcaptcha_token",
     "is_recaptcha_token",
@@ -30,6 +32,7 @@ __all__ = [
     "latest_hcaptcha_token",
     "latest_recaptcha_token",
     "latest_turnstile_token",
+    "latest_yidun_success",
     "list_profiles",
     "run_stress",
     "verify_submit_flow",

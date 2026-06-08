@@ -109,6 +109,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "aliyun"
     if any(x in u or x in host for x in ("geetest", "gcaptcha4", "gt4.geetest")):
         return "geetest"
+    if any(x in u or x in host for x in ("yidun", "necaptcha", "dun.163.com", "c.dun.163.com")):
+        return "yidun"
     if any(x in u or x in host for x in ("hcaptcha", "h-captcha", "js.hcaptcha.com")):
         return "hcaptcha"
     if any(x in u or x in host for x in ("recaptcha", "g-recaptcha", "grecaptcha", "recaptcha.net")):
@@ -138,8 +140,15 @@ def list_profiles() -> dict[str, Any]:
         "geetest": {
             "generic_v4": {
                 "patterns": ["geetest", "gcaptcha4"],
-                "mode": "browser-hook-observer",
+                "mode": "browser-hook-slide-solver-alpha",
                 "successFields": ["lot_number", "captcha_output", "pass_token", "gen_time"],
+            }
+        },
+        "yidun": {
+            "generic_jigsaw": {
+                "patterns": ["yidun", "necaptcha", "dun.163.com", "c.dun.163.com"],
+                "mode": "browser-hook-slide-solver-alpha",
+                "successFields": ["validate", "token", "zoneId"],
             }
         },
         "hcaptcha": {

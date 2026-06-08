@@ -127,6 +127,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "aliyun",
             "tencent",
             "geetest",
+            "yidun",
             "hcaptcha",
             "recaptcha",
             "turnstile",
@@ -196,6 +197,23 @@ async def amain(argv: list[str] | None = None) -> int:
     gt.add_argument("--locale", default="zh-CN")
     gt.add_argument("--timezone", default="Asia/Shanghai")
     gt.add_argument("--raw", action="store_true")
+
+    yd = solve_sub.add_parser("yidun")
+    yd.add_argument("--url", dest="target_url", required=True)
+    yd.add_argument("--headless", default="auto", choices=["auto", "true", "false"])
+    yd.add_argument("--headed", action="store_true")
+    yd.add_argument("--proxy")
+    yd.add_argument("--timeout", type=int, default=90)
+    yd.add_argument("--output-dir")
+    yd.add_argument("--trigger", action="append", default=[])
+    yd.add_argument("--no-auto-trigger", action="store_true")
+    yd.add_argument("--no-slide-solve", action="store_true")
+    yd.add_argument("--slide-attempts", type=int, default=3)
+    yd.add_argument("--browser-binary")
+    yd.add_argument("--user-agent")
+    yd.add_argument("--locale", default="zh-CN")
+    yd.add_argument("--timezone", default="Asia/Shanghai")
+    yd.add_argument("--raw", action="store_true")
 
     ts = solve_sub.add_parser("turnstile")
     ts.add_argument("--url", dest="target_url", required=True)
@@ -305,6 +323,22 @@ async def amain(argv: list[str] | None = None) -> int:
     sg.add_argument("--output-json")
     sg.add_argument("--full", action="store_true")
 
+    sy = stress_sub.add_parser("yidun")
+    sy.add_argument("--url", dest="target_url", required=True)
+    sy.add_argument("--runs", type=int, default=3)
+    sy.add_argument("--concurrency", type=int, default=1)
+    sy.add_argument("--timeout", type=int, default=90)
+    sy.add_argument("--headless", default="auto", choices=["auto", "true", "false"])
+    sy.add_argument("--headed", action="store_true")
+    sy.add_argument("--proxy")
+    sy.add_argument("--trigger", action="append", default=[])
+    sy.add_argument("--no-auto-trigger", action="store_true")
+    sy.add_argument("--no-slide-solve", action="store_true")
+    sy.add_argument("--slide-attempts", type=int, default=3)
+    sy.add_argument("--output-dir")
+    sy.add_argument("--output-json")
+    sy.add_argument("--full", action="store_true")
+
     sts = stress_sub.add_parser("turnstile")
     sts.add_argument("--url", dest="target_url", required=True)
     sts.add_argument("--runs", type=int, default=3)
@@ -409,7 +443,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "proxy_server": args.proxy,
             "headless": headless,
         }
-        if provider in (None, "aliyun", "geetest", "hcaptcha", "recaptcha", "turnstile"):
+        if provider in (None, "aliyun", "geetest", "yidun", "hcaptcha", "recaptcha", "turnstile"):
             common.update({
                 "site_profile": args.site_profile,
                 "output_dir": args.output_dir,
@@ -500,6 +534,25 @@ async def amain(argv: list[str] | None = None) -> int:
                 browser_binary=args.browser_binary,
                 user_agent=args.user_agent,
                 locale=args.locale,
+            timezone_id=args.timezone,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "yidun":
+        headless = False if args.headed else _headless(args.headless)
+        ret = await client.solve_yidun(
+            target_url=args.target_url,
+            headless=headless,
+            proxy_server=args.proxy,
+            timeout_sec=args.timeout,
+            output_dir=args.output_dir,
+            trigger_selectors=args.trigger or None,
+            auto_trigger=not args.no_auto_trigger,
+            slide_solve=not args.no_slide_solve,
+            slide_max_attempts=args.slide_attempts,
+            browser_binary=args.browser_binary,
+            user_agent=args.user_agent,
+            locale=args.locale,
             timezone_id=args.timezone,
         )
         emit(ret, include_raw=args.raw)
@@ -661,6 +714,29 @@ async def amain(argv: list[str] | None = None) -> int:
             per_run_timeout=args.timeout + 20,
             output_json=args.output_json,
             run_once=lambda i: client.solve_geetest(
+                target_url=args.target_url,
+                headless=headless,
+                proxy_server=args.proxy,
+                timeout_sec=args.timeout,
+                trigger_selectors=args.trigger or None,
+                auto_trigger=not args.no_auto_trigger,
+                slide_solve=not args.no_slide_solve,
+                slide_max_attempts=args.slide_attempts,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "yidun":
+        root = Path(args.output_dir) if args.output_dir else None
+        headless = False if args.headed else _headless(args.headless)
+        ret = await run_stress(
+            name="yidun",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 20,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_yidun(
                 target_url=args.target_url,
                 headless=headless,
                 proxy_server=args.proxy,
