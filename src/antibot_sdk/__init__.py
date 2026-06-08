@@ -10,6 +10,13 @@ from .providers.ajcaptcha import (
     detect_ajcaptcha_block_gap,
     encrypt_ajcaptcha_text,
 )
+from .providers.altcha import (
+    AltchaChallenge,
+    AltchaSolution,
+    altcha_hash_hex,
+    parse_altcha_payload_b64,
+    solve_altcha_challenge,
+)
 from .providers.hcaptcha import is_hcaptcha_token, latest_hcaptcha_token
 from .providers.recaptcha import is_recaptcha_token, latest_recaptcha_token
 from .providers.turnstile import is_turnstile_token, latest_turnstile_token
@@ -23,6 +30,8 @@ __all__ = [
     "BrowserResult",
     "CAPABILITY_MATRIX",
     "CaptchaResult",
+    "AltchaChallenge",
+    "AltchaSolution",
     "FailureClassifier",
     "PolicyDecision",
     "SubmitFlow",
@@ -36,6 +45,9 @@ __all__ = [
     "build_ajcaptcha_point_json",
     "decrypt_ajcaptcha_text",
     "encrypt_ajcaptcha_text",
+    "altcha_hash_hex",
+    "parse_altcha_payload_b64",
+    "solve_altcha_challenge",
     "is_geetest_success_payload",
     "is_hcaptcha_token",
     "is_recaptcha_token",

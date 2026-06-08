@@ -109,6 +109,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "aliyun"
     if any(x in u or x in host for x in ("ajcaptcha", "anji-plus", "/captcha/get", "/captcha/check")):
         return "ajcaptcha"
+    if any(x in u or x in host for x in ("altcha", "altcha.org")):
+        return "altcha"
     if any(x in u or x in host for x in ("geetest", "gcaptcha4", "gt4.geetest")):
         return "geetest"
     if any(x in u or x in host for x in ("yidun", "necaptcha", "dun.163.com", "c.dun.163.com")):
@@ -152,6 +154,13 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "http-protocol-solver",
                 "successFields": ["captchaVerification", "token"],
                 "endpoints": ["/captcha/get", "/captcha/check"],
+            }
+        },
+        "altcha": {
+            "generic_pow": {
+                "patterns": ["altcha", "altcha.org"],
+                "mode": "proof-of-work-protocol-solver",
+                "successFields": ["altcha base64 payload", "Authorization: Altcha ..."],
             }
         },
         "yidun": {

@@ -32,6 +32,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "captchaVerification/token",
         "scope": "AJ-Captcha blockPuzzle：/captcha/get 图像缺口定位 + AES pointJson + /captcha/check 协议提交；不启动浏览器。",
     },
+    "altcha": {
+        "provider": "altcha",
+        "name": "ALTCHA",
+        "category": "solver",
+        "captcha_type": "proof_of_work",
+        "status": "alpha",
+        "output": "base64 payload / Authorization header",
+        "scope": "ALTCHA v1 PoW：解析 challenge 或 WWW-Authenticate，计算 number，输出表单 payload 或 M2M Authorization header；不启动浏览器。",
+    },
     "geetest": {
         "provider": "geetest",
         "name": "GeeTest v4",

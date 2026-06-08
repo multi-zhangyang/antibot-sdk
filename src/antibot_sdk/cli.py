@@ -127,6 +127,7 @@ async def amain(argv: list[str] | None = None) -> int:
         choices=[
             "auto",
             "ajcaptcha",
+            "altcha",
             "aliyun",
             "tencent",
             "geetest",
@@ -202,6 +203,23 @@ async def amain(argv: list[str] | None = None) -> int:
     aj.add_argument("--no-returned-point", action="store_true")
     aj.add_argument("--verify-after-check", action="store_true")
     aj.add_argument("--raw", action="store_true")
+
+    alt = solve_sub.add_parser("altcha")
+    alt_source = alt.add_mutually_exclusive_group(required=True)
+    alt_source.add_argument("--challenge-url")
+    alt_source.add_argument("--challenge-json", help="inline JSON object, or @/path/to/challenge.json")
+    alt_source.add_argument("--challenge-file")
+    alt_source.add_argument("--www-authenticate", help="M2M WWW-Authenticate: Altcha ... challenge")
+    alt.add_argument("--default-maxnumber", type=int, default=1_000_000)
+    alt.add_argument("--max-number", type=int)
+    alt.add_argument("--start", type=int, default=0)
+    alt.add_argument("--workers", type=int, default=1)
+    alt.add_argument("--timeout", type=int, default=30)
+    alt.add_argument("--proxy")
+    alt.add_argument("--output-dir")
+    alt.add_argument("--include-took", action="store_true")
+    alt.add_argument("--mode", choices=["form", "m2m"], default="form")
+    alt.add_argument("--raw", action="store_true")
 
     gt = solve_sub.add_parser("geetest")
     gt.add_argument("--url", dest="target_url", required=True)
@@ -343,6 +361,18 @@ async def amain(argv: list[str] | None = None) -> int:
     saj.add_argument("--min-score", type=float, default=0.15)
     saj.add_argument("--output-json")
     saj.add_argument("--full", action="store_true")
+
+    salt = stress_sub.add_parser("altcha")
+    salt.add_argument("--challenge-url", required=True)
+    salt.add_argument("--runs", type=int, default=10)
+    salt.add_argument("--concurrency", type=int, default=2)
+    salt.add_argument("--timeout", type=int, default=30)
+    salt.add_argument("--max-number", type=int)
+    salt.add_argument("--workers", type=int, default=1)
+    salt.add_argument("--proxy")
+    salt.add_argument("--output-dir")
+    salt.add_argument("--output-json")
+    salt.add_argument("--full", action="store_true")
 
     sg = stress_sub.add_parser("geetest")
     sg.add_argument("--url", dest="target_url", required=True)
@@ -580,6 +610,24 @@ async def amain(argv: list[str] | None = None) -> int:
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "altcha":
+        ret = await client.solve_altcha(
+            challenge_url=args.challenge_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            www_authenticate=args.www_authenticate,
+            default_maxnumber=args.default_maxnumber,
+            max_number=args.max_number,
+            start=args.start,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            include_took=args.include_took,
+            mode=args.mode,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
     if args.cmd == "solve" and args.provider == "geetest":
         headless = False if args.headed else _headless(args.headless)
         ret = await client.solve_geetest(
@@ -783,6 +831,25 @@ async def amain(argv: list[str] | None = None) -> int:
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
                 min_score=args.min_score,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "altcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="altcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_altcha(
+                challenge_url=args.challenge_url,
+                max_number=args.max_number,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
             ),
         )
         emit_stress(ret, full=args.full)

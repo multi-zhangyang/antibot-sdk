@@ -6,6 +6,7 @@ from .models import BrowserResult, CaptchaResult
 from .profiles import detect_provider_for_url
 from .providers.aliyun import AliyunCaptchaSolver
 from .providers.ajcaptcha import AJCaptchaSolver
+from .providers.altcha import AltchaSolver
 from .providers.browser import BrowserAutomation
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.hcaptcha import HCaptchaSolver
@@ -23,6 +24,7 @@ class AntibotClient:
         self.browser_binary = browser_binary
         self.browser = BrowserAutomation()
         self.ajcaptcha = AJCaptchaSolver()
+        self.altcha = AltchaSolver()
         self.tencent = TencentCaptchaSolver()
         self.aliyun = AliyunCaptchaSolver()
         self.geetest = GeeTestCaptchaSolver()
@@ -49,6 +51,9 @@ class AntibotClient:
 
     async def solve_ajcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.ajcaptcha.solve(**kwargs)
+
+    async def solve_altcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.altcha.solve(**kwargs)
 
     async def solve_geetest(self, **kwargs: Any) -> CaptchaResult:
         return await self.geetest.solve(**kwargs)
@@ -95,6 +100,31 @@ class AntibotClient:
             }
             aj_kwargs.setdefault("base_url", target_url)
             return await self.solve_ajcaptcha(**aj_kwargs)
+        if provider == "altcha":
+            altcha_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "www_authenticate",
+                    "default_maxnumber",
+                    "max_number",
+                    "start",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "include_took",
+                    "mode",
+                    "headers",
+                }
+                and v is not None
+            }
+            altcha_kwargs.setdefault("challenge_url", target_url)
+            return await self.solve_altcha(**altcha_kwargs)
         if provider == "aliyun":
             return await self.solve_aliyun(target_url=target_url, **kwargs)
         if provider == "recaptcha":
