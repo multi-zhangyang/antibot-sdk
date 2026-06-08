@@ -58,6 +58,7 @@ def _compact_raw(raw):
         "retryHint": raw.get("retryHint"),
         "watchdog": raw.get("watchdog"),
         "watchdogEvents": raw.get("watchdogEvents"),
+        "success": raw.get("success"),
     }
     return {k: v for k, v in keep.items() if v not in (None, "", [], {})}
 
@@ -102,7 +103,11 @@ async def amain(argv: list[str] | None = None) -> int:
 
     auto = sub.add_parser("auto")
     auto.add_argument("url")
-    auto.add_argument("--provider", choices=["auto", "aliyun", "tencent", "cloudflare", "browser"], default="auto")
+    auto.add_argument(
+        "--provider",
+        choices=["auto", "aliyun", "tencent", "geetest", "cloudflare", "browser"],
+        default="auto",
+    )
     auto.add_argument("--headless", default="auto", choices=["auto", "new", "true", "false"])
     auto.add_argument("--headed", action="store_true")
     auto.add_argument("--site-profile", default="auto")
@@ -147,6 +152,21 @@ async def amain(argv: list[str] | None = None) -> int:
     ali.add_argument("--session-retry-delay", type=float)
     ali.add_argument("--session-retry-max-attempts", type=int)
     ali.add_argument("--raw", action="store_true")
+
+    gt = solve_sub.add_parser("geetest")
+    gt.add_argument("--url", dest="target_url", required=True)
+    gt.add_argument("--headless", default="auto", choices=["auto", "true", "false"])
+    gt.add_argument("--headed", action="store_true")
+    gt.add_argument("--proxy")
+    gt.add_argument("--timeout", type=int, default=90)
+    gt.add_argument("--output-dir")
+    gt.add_argument("--trigger", action="append", default=[])
+    gt.add_argument("--no-auto-trigger", action="store_true")
+    gt.add_argument("--browser-binary")
+    gt.add_argument("--user-agent")
+    gt.add_argument("--locale", default="zh-CN")
+    gt.add_argument("--timezone", default="Asia/Shanghai")
+    gt.add_argument("--raw", action="store_true")
 
     stress = sub.add_parser("stress")
     stress_sub = stress.add_subparsers(dest="provider", required=True)
@@ -195,6 +215,20 @@ async def amain(argv: list[str] | None = None) -> int:
     sa.add_argument("--output-json")
     sa.add_argument("--full", action="store_true")
 
+    sg = stress_sub.add_parser("geetest")
+    sg.add_argument("--url", dest="target_url", required=True)
+    sg.add_argument("--runs", type=int, default=3)
+    sg.add_argument("--concurrency", type=int, default=1)
+    sg.add_argument("--timeout", type=int, default=90)
+    sg.add_argument("--headless", default="auto", choices=["auto", "true", "false"])
+    sg.add_argument("--headed", action="store_true")
+    sg.add_argument("--proxy")
+    sg.add_argument("--trigger", action="append", default=[])
+    sg.add_argument("--no-auto-trigger", action="store_true")
+    sg.add_argument("--output-dir")
+    sg.add_argument("--output-json")
+    sg.add_argument("--full", action="store_true")
+
     args = p.parse_args(argv)
     if args.cmd == "diagnose":
         emit(BrowserAutomation.diagnose(args.browser_binary))
@@ -230,7 +264,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "proxy_server": args.proxy,
             "headless": headless,
         }
-        if provider in (None, "aliyun"):
+        if provider in (None, "aliyun", "geetest"):
             common.update({
                 "site_profile": args.site_profile,
                 "output_dir": args.output_dir,
@@ -274,6 +308,23 @@ async def amain(argv: list[str] | None = None) -> int:
             session_retries=args.session_retries,
             session_retry_delay_sec=args.session_retry_delay,
             session_retry_max_attempts=args.session_retry_max_attempts,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "geetest":
+        headless = False if args.headed else _headless(args.headless)
+        ret = await client.solve_geetest(
+            target_url=args.target_url,
+            headless=headless,
+            proxy_server=args.proxy,
+            timeout_sec=args.timeout,
+            output_dir=args.output_dir,
+            trigger_selectors=args.trigger or None,
+            auto_trigger=not args.no_auto_trigger,
+            browser_binary=args.browser_binary,
+            user_agent=args.user_agent,
+            locale=args.locale,
+            timezone_id=args.timezone,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -369,6 +420,27 @@ async def amain(argv: list[str] | None = None) -> int:
                 session_retry_max_attempts=args.session_retry_max_attempts,
                 output_dir=str(root / f"run_{i}") if root else None,
                 timeout_sec=args.timeout,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "geetest":
+        root = Path(args.output_dir) if args.output_dir else None
+        headless = False if args.headed else _headless(args.headless)
+        ret = await run_stress(
+            name="geetest",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 20,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_geetest(
+                target_url=args.target_url,
+                headless=headless,
+                proxy_server=args.proxy,
+                timeout_sec=args.timeout,
+                trigger_selectors=args.trigger or None,
+                auto_trigger=not args.no_auto_trigger,
+                output_dir=str(root / f"run_{i}") if root else None,
             ),
         )
         emit_stress(ret, full=args.full)

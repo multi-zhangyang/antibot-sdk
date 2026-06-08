@@ -107,6 +107,8 @@ def detect_provider_for_url(url: str | None) -> str:
     host = (urlparse(url).hostname or "").lower()
     if aliyun_profile_for_url(url, "auto") or "aliyun" in u or "alibaba" in u:
         return "aliyun"
+    if any(x in u or x in host for x in ("geetest", "gcaptcha4", "gt4.geetest")):
+        return "geetest"
     if any(x in u or x in host for x in ("tencent", "gtimg", "turing.captcha", "tcaptcha")):
         return "tencent"
     if any(x in u or x in host for x in ("cloudflare", "turnstile", "cf-challenge")):
@@ -126,5 +128,12 @@ def list_profiles() -> dict[str, Any]:
                 "proxySessionRetries": profile.proxy_session_retries,
             }
             for name, profile in ALIYUN_SITE_PROFILES.items()
-        }
+        },
+        "geetest": {
+            "generic_v4": {
+                "patterns": ["geetest", "gcaptcha4"],
+                "mode": "browser-hook-observer",
+                "successFields": ["lot_number", "captcha_output", "pass_token", "gen_time"],
+            }
+        },
     }

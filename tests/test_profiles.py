@@ -1,5 +1,6 @@
 from antibot_sdk.profiles import aliyun_profile_for_url, detect_provider_for_url, list_profiles
 from antibot_sdk.policy import aliyun_policy_decision
+from antibot_sdk.providers.geetest import is_geetest_success_payload, latest_geetest_success
 from antibot_sdk.providers.aliyun import AliyunCaptchaSolver, is_recoverable_attempt_codes
 
 
@@ -15,8 +16,10 @@ def test_qoder_profile_auto_detects_aliyun():
 
 def test_generic_provider_detection():
     assert detect_provider_for_url("https://cloud.tencent.com/product/captcha") == "tencent"
+    assert detect_provider_for_url("https://www.geetest.com/adaptive-captcha-demo") == "geetest"
     assert detect_provider_for_url("https://example.com") == "browser"
     assert "qoder_signup" in list_profiles()["aliyun"]
+    assert "generic_v4" in list_profiles()["geetest"]
 
 
 def test_vendored_upstream_snapshots_present():
@@ -55,3 +58,16 @@ def test_aliyun_policy_engine_classifies_watchdog_and_geometry():
     assert geometry_decision.recoverable
     assert not geometry_decision.should_retry_session
     assert geometry_decision.env_overrides["LISTENER_AUTO_DELTA"] == "1"
+
+
+def test_geetest_success_payload_extraction():
+    payload = {
+        "lot_number": "lot",
+        "captcha_output": "output",
+        "pass_token": "token",
+        "gen_time": "1710000000",
+    }
+    state = {"validates": [{"value": {"lot_number": ""}}, {"value": payload}]}
+    assert is_geetest_success_payload(payload)
+    assert latest_geetest_success(state) == payload
+    assert not is_geetest_success_payload({"lot_number": "lot"})

@@ -7,6 +7,7 @@
 - Pydoll / CDP 浏览器运行器：页面打开、指纹补丁、Cloudflare/Turnstile/Managed Challenge 相关流程观察与自动化。
 - Tencent Captcha：封装腾讯滑块的页面触发、浏览器池、缺口识别、轨迹拖拽、ticket/randstr 输出。
 - Aliyun Captcha：封装阿里云滑块的 Node/Puppeteer runner、站点 profile、attempt/session retry、错误归一、artifact 保留。
+- GeeTest v4：新增浏览器 hook/observer provider，采集 `initGeetest4` 配置、实例方法、运行事件、`getValidate()` 成功载荷和网络现场。
 - Policy Engine：把 `F001/F015/NONE/gap/candidate/watchdog timeout` 等失败归类，决定是否换 session，并输出下一步调参建议。
 - Stress Harness：统一压测入口，输出 summary、records、attempt code 分布、失败现场。
 
@@ -174,12 +175,86 @@ antibot stress aliyun \
 
 ---
 
-### 4. 自动分发模式
+### 4. GeeTest v4 / 极验
+
+第一版 GeeTest provider 先做 **可探测、可触发、可采集、可压测**，为后续轨迹/图像/行为模型接入打底。
+
+能力：
+
+- 在页面最早阶段 hook `window.initGeetest4`。
+- 记录 GeeTest v4 config，例如 `captchaId/captcha_id`、`product`。
+- wrap CAPTCHA 实例的 `appendTo / bindForm / showCaptcha / verify / onReady / onSuccess / getValidate` 等方法。
+- 自动尝试调用 `showCaptcha()`，并点击页面中的 GeeTest 相关元素。
+- 当页面触发 `onSuccess` 时，自动读取 v4 成功载荷：
+
+```json
+{
+  "lot_number": "...",
+  "captcha_output": "...",
+  "pass_token": "...",
+  "gen_time": "..."
+}
+```
+
+- 保留 `geetest_run.json`、截图、HTML、GeeTest 相关网络记录。
+- 支持代理、headless/headed、trigger selector、stress 压测。
+
+命令示例：
+
+```bash
+antibot solve geetest \
+  --url 'https://target.example/path-with-geetest' \
+  --output-dir /tmp/geetest-run
+```
+
+指定触发按钮：
+
+```bash
+antibot solve geetest \
+  --url 'https://target.example/path-with-geetest' \
+  --trigger '.login-submit' \
+  --trigger '.geetest_btn'
+```
+
+压测：
+
+```bash
+antibot stress geetest \
+  --url 'https://target.example/path-with-geetest' \
+  --runs 10 \
+  --concurrency 2 \
+  --timeout 90 \
+  --output-json /tmp/geetest-stress.json
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_geetest(
+        target_url="https://target.example/path-with-geetest",
+        trigger_selectors=[".geetest_btn"],
+        output_dir="/tmp/geetest-run",
+    )
+    print(ret.ok, ret.ticket, ret.randstr, ret.raw.get("success"))
+```
+
+当前定位：
+
+- 已能处理无感/低风险直接成功、页面自身成功回调、以及本地/测试页面的 GeeTest v4 成功链路。
+- 如果遇到真实图片/滑块挑战，当前版本会先完整保留现场；下一步再接入识别、轨迹和按站点 profile 的行为策略。
+
+---
+
+### 5. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
 - Qoder / Aliyun 相关 URL -> `aliyun`
 - Tencent / TCaptcha 相关 URL -> `tencent`
+- GeeTest / gcaptcha4 相关 URL -> `geetest`
 - Cloudflare / Turnstile 相关 URL -> `cloudflare/browser`
 - 其他 -> 普通浏览器打开
 
@@ -191,7 +266,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 5. 代理格式
+### 6. 代理格式
 
 支持以下格式：
 
@@ -301,6 +376,10 @@ antibot auto 'https://qoder.com/users/sign-up' --proxy 'host:port:user:pass'
 antibot solve tencent --profile cloud_product --headless
 antibot stress tencent --profile cloud_product --runs 10 --concurrency 3
 
+# GeeTest
+antibot solve geetest --url 'https://target.example/path-with-geetest'
+antibot stress geetest --url 'https://target.example/path-with-geetest' --runs 10
+
 # Aliyun
 antibot solve aliyun --url 'https://qoder.com/users/sign-up' --site-profile qoder_signup
 antibot stress aliyun --url 'https://qoder.com/users/sign-up' --site-profile qoder_signup --runs 10
@@ -353,6 +432,7 @@ src/antibot_sdk/
     cloudflare.py           # Pydoll runner
     tencent.py              # Tencent provider adapter
     aliyun.py               # Aliyun provider adapter
+    geetest.py              # GeeTest v4 hook/observer provider
   vendor/
     tencent/                # Tencent solver + upstream snapshot
     aliyun/                 # Aliyun Node bridge/runner/site profiles
@@ -370,10 +450,11 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 8 passed
+pytest: 9 passed
 node -c bridge.js/site_profiles.js/runner.js: passed
 uv build: success
 watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON
+geetest mock: initGeetest4/onSuccess/getValidate 链路通过
 ```
 
 腾讯：
@@ -397,6 +478,12 @@ stress tencent --proxy ... --runs 4 --concurrency 2: 4/4
 ```text
 Tencent marker residual: 0
 Aliyun temp profile dirs: 0
+```
+
+GeeTest：
+
+```text
+本地 v4 mock 页面：ok=true，成功提取 lot_number/captcha_output/pass_token/gen_time。
 ```
 
 ---

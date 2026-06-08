@@ -40,6 +40,7 @@ def compact_result(result: Any) -> dict[str, Any]:
                 "candidate": raw.get("candidate"),
                 "error": raw.get("error"),
                 "watchdog": raw.get("watchdog"),
+                "success": raw.get("success"),
                 "type": raw.get("type"),
             }.items()
             if v not in (None, "", [], {})
