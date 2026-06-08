@@ -145,6 +145,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "privatecaptcha",
             "portcullis",
             "wicketkeeper",
+            "yourcaptcha",
             "geetest",
             "yidun",
             "hcaptcha",
@@ -515,6 +516,22 @@ async def amain(argv: list[str] | None = None) -> int:
     wk.add_argument("--proxy")
     wk.add_argument("--output-dir")
     wk.add_argument("--raw", action="store_true")
+
+    yc = solve_sub.add_parser("yourcaptcha")
+    yc_source = yc.add_mutually_exclusive_group(required=True)
+    yc_source.add_argument("--challenge-json", help="inline JSON challenge, or @/path")
+    yc_source.add_argument("--challenge-file")
+    yc_source.add_argument("--challenge-url", help="yourcaptcha challenge endpoint")
+    yc.add_argument("--verify-url", help="yourcaptcha verify endpoint")
+    yc.add_argument("--submit", action="store_true", help="POST solved payload to --verify-url")
+    yc.add_argument("--signals-json", help="inline signals JSON, or @/path; default synthesizes low-risk signals")
+    yc.add_argument("--signals-file")
+    yc.add_argument("--start", type=int, default=0)
+    yc.add_argument("--max-attempts", type=int)
+    yc.add_argument("--timeout", type=int, default=60)
+    yc.add_argument("--proxy")
+    yc.add_argument("--output-dir")
+    yc.add_argument("--raw", action="store_true")
 
     gt = solve_sub.add_parser("geetest")
     gt.add_argument("--url", dest="target_url", required=True)
@@ -957,6 +974,25 @@ async def amain(argv: list[str] | None = None) -> int:
     swk.add_argument("--output-json")
     swk.add_argument("--full", action="store_true")
 
+    syc = stress_sub.add_parser("yourcaptcha")
+    syc_source = syc.add_mutually_exclusive_group(required=True)
+    syc_source.add_argument("--challenge-json")
+    syc_source.add_argument("--challenge-file")
+    syc_source.add_argument("--challenge-url")
+    syc.add_argument("--verify-url")
+    syc.add_argument("--submit", action="store_true")
+    syc.add_argument("--signals-json")
+    syc.add_argument("--signals-file")
+    syc.add_argument("--runs", type=int, default=10)
+    syc.add_argument("--concurrency", type=int, default=2)
+    syc.add_argument("--timeout", type=int, default=60)
+    syc.add_argument("--start", type=int, default=0)
+    syc.add_argument("--max-attempts", type=int)
+    syc.add_argument("--proxy")
+    syc.add_argument("--output-dir")
+    syc.add_argument("--output-json")
+    syc.add_argument("--full", action="store_true")
+
     sg = stress_sub.add_parser("geetest")
     sg.add_argument("--url", dest="target_url", required=True)
     sg.add_argument("--runs", type=int, default=3)
@@ -1117,6 +1153,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "privatecaptcha",
             "portcullis",
             "wicketkeeper",
+            "yourcaptcha",
             "anubis",
         ):
             common.update({
@@ -1522,6 +1559,23 @@ async def amain(argv: list[str] | None = None) -> int:
             start=args.start,
             max_attempts=args.max_attempts,
             workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "yourcaptcha":
+        ret = await client.solve_yourcaptcha(
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            submit=args.submit,
+            signals_json=args.signals_json,
+            signals_file=args.signals_file,
+            start=args.start,
+            max_attempts=args.max_attempts,
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
@@ -2127,6 +2181,31 @@ async def amain(argv: list[str] | None = None) -> int:
                 submit=not args.no_submit,
                 max_attempts=args.max_attempts,
                 workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "yourcaptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="yourcaptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_yourcaptcha(
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                submit=args.submit,
+                signals_json=args.signals_json,
+                signals_file=args.signals_file,
+                start=args.start,
+                max_attempts=args.max_attempts,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,

@@ -176,6 +176,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "hidden-input solution / success JWT",
         "scope": "Wicketkeeper EdDSA-JWT PoW：获取 /v0/challenge，计算 SHA256(challenge+nonce) 前导零，可提交 /v0/siteverify 换 success JWT；不启动浏览器。",
     },
+    "yourcaptcha": {
+        "provider": "yourcaptcha",
+        "name": "yourcaptcha",
+        "category": "solver",
+        "captcha_type": "behavior_pow",
+        "status": "alpha",
+        "output": "captcha payload / verified result",
+        "scope": "yourcaptcha 行为 signals + HMAC challenge + SHA-256 exact PoW：合成低风险 telemetry 获取低 maxnumber，搜索 salt+number exact hash，可提交 verify；不启动浏览器。",
+    },
     "geetest": {
         "provider": "geetest",
         "name": "GeeTest v4",

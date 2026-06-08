@@ -27,6 +27,7 @@ from .providers.portcullis import PortcullisSolver
 from .providers.recaptcha import ReCaptchaSolver
 from .providers.tencent import TencentCaptchaSolver
 from .providers.turnstile import TurnstileSolver
+from .providers.yourcaptcha import YourCaptchaSolver
 from .providers.yidun import YidunCaptchaSolver
 from .providers.wicketkeeper import WicketkeeperSolver
 
@@ -53,6 +54,7 @@ class AntibotClient:
         self.privatecaptcha = PrivateCaptchaSolver()
         self.portcullis = PortcullisSolver()
         self.wicketkeeper = WicketkeeperSolver()
+        self.yourcaptcha = YourCaptchaSolver()
         self.tencent = TencentCaptchaSolver()
         self.aliyun = AliyunCaptchaSolver()
         self.geetest = GeeTestCaptchaSolver()
@@ -144,6 +146,9 @@ class AntibotClient:
 
     async def solve_yidun(self, **kwargs: Any) -> CaptchaResult:
         return await self.yidun.solve(**kwargs)
+
+    async def solve_yourcaptcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.yourcaptcha.solve(**kwargs)
 
     async def solve_auto(self, target_url: str, **kwargs: Any) -> BrowserResult | CaptchaResult:
         provider = kwargs.pop("provider", None) or detect_provider_for_url(target_url)
@@ -615,6 +620,35 @@ class AntibotClient:
                 else:
                     wk_kwargs["base_url"] = target_url
             return await self.solve_wicketkeeper(**wk_kwargs)
+        if provider == "yourcaptcha":
+            yc_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "submit",
+                    "signals_json",
+                    "signals_file",
+                    "start",
+                    "max_attempts",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            if not yc_kwargs.get("challenge_url"):
+                if "/api/captcha/verify" in target_url:
+                    yc_kwargs.setdefault("verify_url", target_url)
+                    yc_kwargs["challenge_url"] = target_url.replace("/api/captcha/verify", "/api/captcha/challenge")
+                else:
+                    yc_kwargs["challenge_url"] = target_url
+            return await self.solve_yourcaptcha(**yc_kwargs)
         if provider == "aliyun":
             return await self.solve_aliyun(target_url=target_url, **kwargs)
         if provider == "recaptcha":

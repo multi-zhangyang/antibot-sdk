@@ -30,6 +30,7 @@ def test_capability_matrix_product_boundary() -> None:
         "privatecaptcha",
         "portcullis",
         "wicketkeeper",
+        "yourcaptcha",
         "geetest",
         "yidun",
     }
@@ -51,6 +52,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["privatecaptcha"]["captcha_type"] == "compute_pow"
     assert solvers["portcullis"]["captcha_type"] == "argon2_pow"
     assert solvers["wicketkeeper"]["captcha_type"] == "proof_of_work"
+    assert solvers["yourcaptcha"]["captcha_type"] == "behavior_pow"
     assert solvers["yidun"]["captcha_type"] == "jigsaw"
     assert set(observers) == {"turnstile", "hcaptcha", "recaptcha"}
     assert all(item["captcha_type"] == "token_widget" for item in observers.values())

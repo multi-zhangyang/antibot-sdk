@@ -170,6 +170,17 @@ from .providers.wicketkeeper import (
     verify_wicketkeeper_work,
     wicketkeeper_hash_hex,
 )
+from .providers.yourcaptcha import (
+    YourCaptchaChallenge,
+    YourCaptchaSolution,
+    finalize_yourcaptcha_signals,
+    generate_yourcaptcha_signals,
+    parse_yourcaptcha_challenge,
+    score_yourcaptcha_signals,
+    solve_yourcaptcha_challenge,
+    verify_yourcaptcha_solution,
+    yourcaptcha_hash_hex,
+)
 from .stress import run_stress
 from .verification import FailureClassifier, SubmitFlow, SuccessOracle, VerificationResult, verify_submit_flow
 
@@ -220,6 +231,8 @@ __all__ = [
     "VerificationResult",
     "WicketkeeperChallenge",
     "WicketkeeperSolution",
+    "YourCaptchaChallenge",
+    "YourCaptchaSolution",
     "aliyun_policy_decision",
     "detect_provider_for_url",
     "detect_geetest_slide_gap",
@@ -264,6 +277,7 @@ __all__ = [
     "parse_mcaptcha_config",
     "parse_paul_pow_challenge",
     "parse_chpiopow_challenge",
+    "parse_yourcaptcha_challenge",
     "extract_gunslol_gs_sets",
     "parse_gunslol_2xa",
     "parse_gunslol_challenge",
@@ -310,7 +324,9 @@ __all__ = [
     "verify_privatecaptcha_solutions",
     "verify_portcullis_signature",
     "verify_portcullis_solution",
+    "finalize_yourcaptcha_signals",
     "friendly_difficulty_to_threshold",
+    "generate_yourcaptcha_signals",
     "parse_friendly_solution_payload",
     "solve_friendly_puzzle",
     "is_geetest_success_payload",
@@ -325,9 +341,13 @@ __all__ = [
     "list_capabilities",
     "list_profiles",
     "run_stress",
+    "score_yourcaptcha_signals",
     "solve_wicketkeeper_challenge",
+    "solve_yourcaptcha_challenge",
     "UNSUPPORTED_CAPABILITIES",
     "verify_wicketkeeper_work",
+    "verify_yourcaptcha_solution",
     "verify_submit_flow",
     "wicketkeeper_hash_hex",
+    "yourcaptcha_hash_hex",
 ]
