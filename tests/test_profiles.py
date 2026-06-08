@@ -34,6 +34,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://captcha.example/powchallenge-server/challenge") == "powchallenge"
     assert detect_provider_for_url("https://pow-reaction.pages.dev/demo/reactions/challenge") == "powreaction"
     assert detect_provider_for_url("https://hashguard.example/v1/pow/challenges") == "hashguard"
+    assert detect_provider_for_url("https://api.trustcomponent.com/v2/verifications") == "trustcaptcha"
     assert detect_provider_for_url("https://provider.example/v1/prosopo/provider/client/captcha/pow") == "procaptcha"
     assert detect_provider_for_url("https://example.com/.tollbooth/verify") == "tollbooth"
     assert detect_provider_for_url("https://captcha.example/chpiopow/challenge") == "chpiopow"
@@ -59,6 +60,7 @@ def test_generic_provider_detection():
     assert "argon2id_memory_pow" in list_profiles()["powchallenge"]
     assert "signed_multi_round_pow" in list_profiles()["powreaction"]
     assert "jwt_proof_pow" in list_profiles()["hashguard"]
+    assert "fingerprint_multi_pow" in list_profiles()["trustcaptcha"]
     assert "prosopo_pow" in list_profiles()["procaptcha"]
     assert "tollbooth_protocol" in list_profiles()["tollbooth"]
     assert "signals_bound_pow" in list_profiles()["fcaptcha"]

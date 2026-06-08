@@ -38,6 +38,7 @@ from .providers.silentchallenge import SilentChallengeSolver
 from .providers.swetrix import SwetrixSolver
 from .providers.tencent import TencentCaptchaSolver
 from .providers.tollbooth import TollboothSolver
+from .providers.trustcaptcha import TrustcaptchaSolver
 from .providers.turnstile import TurnstileSolver
 from .providers.yourcaptcha import YourCaptchaSolver
 from .providers.yidun import YidunCaptchaSolver
@@ -79,6 +80,7 @@ class AntibotClient:
         self.silentchallenge = SilentChallengeSolver()
         self.tencent = TencentCaptchaSolver()
         self.tollbooth = TollboothSolver()
+        self.trustcaptcha = TrustcaptchaSolver()
         self.aliyun = AliyunCaptchaSolver()
         self.geetest = GeeTestCaptchaSolver()
         self.turnstile = TurnstileSolver()
@@ -179,6 +181,9 @@ class AntibotClient:
 
     async def solve_tollbooth(self, **kwargs: Any) -> CaptchaResult:
         return await self.tollbooth.solve(**kwargs)
+
+    async def solve_trustcaptcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.trustcaptcha.solve(**kwargs)
 
     async def solve_turnstile(self, **kwargs: Any) -> CaptchaResult:
         return await self.turnstile.solve(**kwargs)
@@ -436,6 +441,52 @@ class AntibotClient:
                 else:
                     hg_kwargs["base_url"] = target_url
             return await self.solve_hashguard(**hg_kwargs)
+        if provider == "trustcaptcha":
+            tc_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "site_key",
+                    "api_url",
+                    "target_url",
+                    "create_url",
+                    "submit_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "create_body_json",
+                    "create_body_file",
+                    "submit",
+                    "max_rounds",
+                    "start",
+                    "max_attempts_per_task",
+                    "workers",
+                    "timeout_sec",
+                    "min_solve_ms",
+                    "minimal_data_mode",
+                    "bypass_token",
+                    "framework",
+                    "language",
+                    "theme",
+                    "user_agent",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            tc_kwargs.setdefault("target_url", target_url)
+            if not tc_kwargs.get("api_url") and not tc_kwargs.get("create_url"):
+                if target_lower.rstrip("/").endswith("/v2/verifications"):
+                    tc_kwargs["create_url"] = target_url
+                    tc_kwargs["api_url"] = target_url[: target_lower.rindex("/v2/verifications")]
+                elif "/v2/verifications/" in target_lower and target_lower.rstrip("/").endswith("/challenges"):
+                    tc_kwargs["submit_url"] = target_url
+                    tc_kwargs["api_url"] = target_url[: target_lower.index("/v2/verifications/")]
+                else:
+                    tc_kwargs["api_url"] = target_url
+            return await self.solve_trustcaptcha(**tc_kwargs)
         if provider == "cap":
             cap_kwargs = {
                 k: v

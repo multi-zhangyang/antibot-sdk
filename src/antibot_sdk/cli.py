@@ -136,6 +136,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "fcaptcha",
             "gunslol",
             "hashguard",
+            "trustcaptcha",
             "cap",
             "cryptopuzzle",
             "captxa",
@@ -546,6 +547,35 @@ async def amain(argv: list[str] | None = None) -> int:
     hg.add_argument("--output-dir")
     hg.add_argument("--user-agent")
     hg.add_argument("--raw", action="store_true")
+
+    tc = solve_sub.add_parser("trustcaptcha")
+    tc_source = tc.add_mutually_exclusive_group(required=True)
+    tc_source.add_argument("--site-key", help="TrustCaptcha site key; POSTs /v2/verifications")
+    tc_source.add_argument("--challenge-json", help="inline {verificationId,difficulty,tasks} JSON, or @/path")
+    tc_source.add_argument("--challenge-file")
+    tc.add_argument("--api-url", default="https://api.trustcomponent.com")
+    tc.add_argument("--target-url", default="https://example.com/")
+    tc.add_argument("--create-url", help="explicit POST /v2/verifications endpoint")
+    tc.add_argument("--submit-url", help="explicit POST /v2/verifications/{id}/challenges endpoint")
+    tc.add_argument("--create-body-json", help="override create body JSON, or @/path")
+    tc.add_argument("--create-body-file")
+    tc.add_argument("--submit", dest="submit", action="store_true", default=None)
+    tc.add_argument("--no-submit", dest="submit", action="store_false")
+    tc.add_argument("--max-rounds", type=int, default=3)
+    tc.add_argument("--start", type=int, default=0)
+    tc.add_argument("--max-attempts-per-task", type=int, default=20_000_000)
+    tc.add_argument("--workers", type=int, default=1)
+    tc.add_argument("--timeout", type=int, default=60)
+    tc.add_argument("--min-solve-ms", type=int, default=1200)
+    tc.add_argument("--minimal-data-mode", action="store_true")
+    tc.add_argument("--bypass-token")
+    tc.add_argument("--framework", default="other")
+    tc.add_argument("--language", default="en-US")
+    tc.add_argument("--theme", default="light")
+    tc.add_argument("--proxy")
+    tc.add_argument("--output-dir")
+    tc.add_argument("--user-agent")
+    tc.add_argument("--raw", action="store_true")
 
     pc = solve_sub.add_parser("pcaptcha")
     pc_source = pc.add_mutually_exclusive_group(required=True)
@@ -1278,6 +1308,38 @@ async def amain(argv: list[str] | None = None) -> int:
     shg.add_argument("--user-agent")
     shg.add_argument("--full", action="store_true")
 
+    stc = stress_sub.add_parser("trustcaptcha")
+    stc_source = stc.add_mutually_exclusive_group(required=True)
+    stc_source.add_argument("--site-key")
+    stc_source.add_argument("--challenge-json")
+    stc_source.add_argument("--challenge-file")
+    stc.add_argument("--api-url", default="https://api.trustcomponent.com")
+    stc.add_argument("--target-url", default="https://example.com/")
+    stc.add_argument("--create-url")
+    stc.add_argument("--submit-url")
+    stc.add_argument("--create-body-json")
+    stc.add_argument("--create-body-file")
+    stc.add_argument("--submit", dest="submit", action="store_true", default=None)
+    stc.add_argument("--no-submit", dest="submit", action="store_false")
+    stc.add_argument("--runs", type=int, default=10)
+    stc.add_argument("--concurrency", type=int, default=2)
+    stc.add_argument("--timeout", type=int, default=60)
+    stc.add_argument("--max-rounds", type=int, default=3)
+    stc.add_argument("--start", type=int, default=0)
+    stc.add_argument("--max-attempts-per-task", type=int, default=20_000_000)
+    stc.add_argument("--workers", type=int, default=1)
+    stc.add_argument("--min-solve-ms", type=int, default=1200)
+    stc.add_argument("--minimal-data-mode", action="store_true")
+    stc.add_argument("--bypass-token")
+    stc.add_argument("--framework", default="other")
+    stc.add_argument("--language", default="en-US")
+    stc.add_argument("--theme", default="light")
+    stc.add_argument("--proxy")
+    stc.add_argument("--output-dir")
+    stc.add_argument("--output-json")
+    stc.add_argument("--user-agent")
+    stc.add_argument("--full", action="store_true")
+
     spc = stress_sub.add_parser("pcaptcha")
     spc.add_argument("--challenge-url", required=True)
     spc.add_argument("--validate-url")
@@ -1718,6 +1780,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "auro",
             "gunslol",
             "hashguard",
+            "trustcaptcha",
             "impost",
             "kerberus",
             "mcaptcha",
@@ -2158,6 +2221,35 @@ async def amain(argv: list[str] | None = None) -> int:
             workers=args.workers,
             timeout_sec=args.timeout,
             min_solve_ms=args.min_solve_ms,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "trustcaptcha":
+        ret = await client.solve_trustcaptcha(
+            site_key=args.site_key,
+            api_url=args.api_url,
+            target_url=args.target_url,
+            create_url=args.create_url,
+            submit_url=args.submit_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            create_body_json=args.create_body_json,
+            create_body_file=args.create_body_file,
+            submit=args.submit,
+            max_rounds=args.max_rounds,
+            start=args.start,
+            max_attempts_per_task=args.max_attempts_per_task,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            min_solve_ms=args.min_solve_ms,
+            minimal_data_mode=args.minimal_data_mode,
+            bypass_token=args.bypass_token,
+            framework=args.framework,
+            language=args.language,
+            theme=args.theme,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
             user_agent=args.user_agent,
@@ -3066,6 +3158,43 @@ async def amain(argv: list[str] | None = None) -> int:
                 workers=args.workers,
                 timeout_sec=args.timeout,
                 min_solve_ms=args.min_solve_ms,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "trustcaptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="trustcaptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_trustcaptcha(
+                site_key=args.site_key,
+                api_url=args.api_url,
+                target_url=args.target_url,
+                create_url=args.create_url,
+                submit_url=args.submit_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                create_body_json=args.create_body_json,
+                create_body_file=args.create_body_file,
+                submit=args.submit,
+                max_rounds=args.max_rounds,
+                start=args.start,
+                max_attempts_per_task=args.max_attempts_per_task,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                min_solve_ms=args.min_solve_ms,
+                minimal_data_mode=args.minimal_data_mode,
+                bypass_token=args.bypass_token,
+                framework=args.framework,
+                language=args.language,
+                theme=args.theme,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
                 user_agent=args.user_agent,

@@ -95,6 +95,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "proofToken JWT / introspection result",
         "scope": "HashGuard PoW CAPTCHA：请求 /pow/challenges，复现 SHA256(challengeId:seed:nonce) <= target 的阈值搜索，提交 /pow/verifications 换 ES256/JWT proofToken，可选 /pow/assertions/introspect；不启动浏览器。",
     },
+    "trustcaptcha": {
+        "provider": "trustcaptcha",
+        "name": "TrustCaptcha",
+        "category": "solver",
+        "captcha_type": "fingerprint_multi_pow",
+        "status": "alpha",
+        "output": "tc-verification-token / submit body",
+        "scope": "TrustCaptcha v3：合成 widget/browserInformation/fingerprints/integrityHash，复现 worker 中 SHA256(input||'tcn'+counter) 多任务 PoW，提交 /v2/verifications/{id}/challenges 换 verificationToken；不启动浏览器。",
+    },
     "cap": {
         "provider": "cap",
         "name": "Cap / @cap.js",

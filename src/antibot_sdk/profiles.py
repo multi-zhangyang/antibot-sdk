@@ -119,6 +119,11 @@ def detect_provider_for_url(url: str | None) -> str:
         return "gunslol"
     if any(x in u or x in host for x in ("hashguard", "/pow/challenges", "/pow/verifications", "/pow/assertions/introspect")):
         return "hashguard"
+    if any(
+        x in u or x in host
+        for x in ("trustcaptcha", "trustcomponent", "tc-verification-token", "/v2/verifications")
+    ):
+        return "trustcaptcha"
     if any(x in u or x in host for x in ("friendlycaptcha", "friendlycaptcha.com", "frc-captcha")):
         return "friendlycaptcha"
     if any(x in u or x in host for x in ("fcaptcha", "/api/pow/challenge")):
@@ -255,6 +260,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "behavior-environment-signals-hash-bound-pow-solver",
                 "successFields": ["token", "success"],
                 "endpoints": ["/api/pow/challenge", "/api/verify", "/api/score"],
+            }
+        },
+        "trustcaptcha": {
+            "fingerprint_multi_pow": {
+                "patterns": ["trustcaptcha", "trustcomponent", "/v2/verifications"],
+                "mode": "fingerprint-integrity-plus-multi-task-sha256-pow-solver",
+                "successFields": ["tc-verification-token", "finished.verificationToken"],
+                "endpoints": ["/v2/verifications", "/v2/verifications/{id}/challenges"],
             }
         },
         "gunslol": {
