@@ -117,6 +117,11 @@ def detect_provider_for_url(url: str | None) -> str:
         return "friendlycaptcha"
     if any(x in u or x in host for x in ("trycap.dev", "cap.js", "cap-widget", "capjs")):
         return "cap"
+    if any(
+        x in u or x in host
+        for x in ("chpio", "2104f639-ba1b-48f3-9443-889128163f5a", "/chpiopow/")
+    ):
+        return "chpiopow"
     if any(x in u or x in host for x in ("mcaptcha", "/api/v1/pow/config", "/api/v1/pow/verify")):
         return "mcaptcha"
     if any(x in u or x in host for x in ("p-captcha", "pcaptcha", "quadraticresidueproblem")):
@@ -203,6 +208,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "cap-sha256-pow-protocol-solver",
                 "successFields": ["/redeem body", "Cap token"],
                 "endpoints": ["/challenge", "/redeem"],
+            }
+        },
+        "chpiopow": {
+            "target_match_pow": {
+                "patterns": ["chpio", "pow-captcha signedData", "2104f639-ba1b-48f3-9443-889128163f5a"],
+                "mode": "signed-multi-challenge-target-match-pow-solver",
+                "successFields": ["{challengesSigned, solutions}", "redeemed signedData/token"],
+                "endpoints": ["challenge endpoint returning signedData", "redeem endpoint accepting solutions"],
             }
         },
         "mcaptcha": {

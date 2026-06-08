@@ -133,6 +133,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "tencent",
             "friendlycaptcha",
             "cap",
+            "chpiopow",
             "mcaptcha",
             "pcaptcha",
             "powcaptcha",
@@ -285,6 +286,23 @@ async def amain(argv: list[str] | None = None) -> int:
     cap.add_argument("--redeem-url")
     cap.add_argument("--redeem", action="store_true", help="POST solved body to /redeem and return final Cap token")
     cap.add_argument("--raw", action="store_true")
+
+    chpio = solve_sub.add_parser("chpiopow")
+    chpio_source = chpio.add_mutually_exclusive_group(required=True)
+    chpio_source.add_argument("--challenge", help="inline signed/raw challenge JSON")
+    chpio_source.add_argument("--challenge-json", help="inline JSON object, or @/path/to/challenge.json")
+    chpio_source.add_argument("--challenge-file")
+    chpio_source.add_argument("--challenge-url", help="endpoint returning signed/raw chpio pow-captcha challenge")
+    chpio.add_argument("--redeem-url", help="endpoint accepting {challengesSigned, solutions}")
+    chpio.add_argument("--submit", action="store_true", help="POST solved body to --redeem-url")
+    chpio.add_argument("--secret", help="optional server secret for signed-data cross-check / local fixtures")
+    chpio.add_argument("--start", type=int, default=0)
+    chpio.add_argument("--max-attempts-per-challenge", type=int, default=50_000_000)
+    chpio.add_argument("--workers", type=int, default=1)
+    chpio.add_argument("--timeout", type=int, default=60)
+    chpio.add_argument("--proxy")
+    chpio.add_argument("--output-dir")
+    chpio.add_argument("--raw", action="store_true")
 
     mc = solve_sub.add_parser("mcaptcha")
     mc_source = mc.add_mutually_exclusive_group(required=True)
@@ -606,6 +624,24 @@ async def amain(argv: list[str] | None = None) -> int:
     scap.add_argument("--output-json")
     scap.add_argument("--full", action="store_true")
 
+    schpio = stress_sub.add_parser("chpiopow")
+    schpio_source = schpio.add_mutually_exclusive_group(required=True)
+    schpio_source.add_argument("--challenge-json")
+    schpio_source.add_argument("--challenge-file")
+    schpio_source.add_argument("--challenge-url")
+    schpio.add_argument("--redeem-url")
+    schpio.add_argument("--submit", action="store_true")
+    schpio.add_argument("--secret")
+    schpio.add_argument("--runs", type=int, default=10)
+    schpio.add_argument("--concurrency", type=int, default=2)
+    schpio.add_argument("--timeout", type=int, default=60)
+    schpio.add_argument("--max-attempts-per-challenge", type=int, default=50_000_000)
+    schpio.add_argument("--workers", type=int, default=1)
+    schpio.add_argument("--proxy")
+    schpio.add_argument("--output-dir")
+    schpio.add_argument("--output-json")
+    schpio.add_argument("--full", action="store_true")
+
     smc = stress_sub.add_parser("mcaptcha")
     smc_source = smc.add_mutually_exclusive_group(required=True)
     smc_source.add_argument("--config-url")
@@ -873,6 +909,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "recaptcha",
             "turnstile",
             "cap",
+            "chpiopow",
             "mcaptcha",
             "pcaptcha",
             "powcaptcha",
@@ -1045,6 +1082,24 @@ async def amain(argv: list[str] | None = None) -> int:
             api_endpoint=args.api_endpoint,
             redeem_url=args.redeem_url,
             redeem=args.redeem,
+            start=args.start,
+            max_attempts_per_challenge=args.max_attempts_per_challenge,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "chpiopow":
+        ret = await client.solve_chpiopow(
+            challenge=args.challenge,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            redeem_url=args.redeem_url,
+            submit=args.submit,
+            secret=args.secret,
             start=args.start,
             max_attempts_per_challenge=args.max_attempts_per_challenge,
             workers=args.workers,
@@ -1463,6 +1518,30 @@ async def amain(argv: list[str] | None = None) -> int:
                 api_endpoint=args.api_endpoint,
                 redeem_url=args.redeem_url,
                 redeem=args.redeem,
+                max_attempts_per_challenge=args.max_attempts_per_challenge,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "chpiopow":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="chpiopow",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_chpiopow(
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                redeem_url=args.redeem_url,
+                submit=args.submit,
+                secret=args.secret,
                 max_attempts_per_challenge=args.max_attempts_per_challenge,
                 workers=args.workers,
                 timeout_sec=args.timeout,

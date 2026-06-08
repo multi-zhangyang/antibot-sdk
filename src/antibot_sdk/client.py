@@ -10,6 +10,7 @@ from .providers.altcha import AltchaSolver
 from .providers.anubis import AnubisSolver
 from .providers.browser import BrowserAutomation
 from .providers.cap import CapSolver
+from .providers.chpiopow import ChpioPowSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.hcaptcha import HCaptchaSolver
@@ -33,6 +34,7 @@ class AntibotClient:
         self.browser_binary = browser_binary
         self.browser = BrowserAutomation()
         self.cap = CapSolver()
+        self.chpiopow = ChpioPowSolver()
         self.ajcaptcha = AJCaptchaSolver()
         self.altcha = AltchaSolver()
         self.anubis = AnubisSolver()
@@ -72,6 +74,9 @@ class AntibotClient:
 
     async def solve_cap(self, **kwargs: Any) -> CaptchaResult:
         return await self.cap.solve(**kwargs)
+
+    async def solve_chpiopow(self, **kwargs: Any) -> CaptchaResult:
+        return await self.chpiopow.solve(**kwargs)
 
     async def solve_altcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.altcha.solve(**kwargs)
@@ -250,6 +255,31 @@ class AntibotClient:
             }
             cap_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_cap(**cap_kwargs)
+        if provider == "chpiopow":
+            cp_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "redeem_url",
+                    "submit",
+                    "secret",
+                    "start",
+                    "max_attempts_per_challenge",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            cp_kwargs.setdefault("challenge_url", target_url)
+            return await self.solve_chpiopow(**cp_kwargs)
         if provider == "mcaptcha":
             mc_kwargs = {
                 k: v

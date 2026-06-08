@@ -18,6 +18,7 @@ def test_capability_matrix_product_boundary() -> None:
         "anubis",
         "friendlycaptcha",
         "cap",
+        "chpiopow",
         "mcaptcha",
         "pcaptcha",
         "powcaptcha",
@@ -33,6 +34,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["anubis"]["captcha_type"] == "proof_of_work"
     assert solvers["friendlycaptcha"]["captcha_type"] == "proof_of_work"
     assert solvers["cap"]["captcha_type"] == "proof_of_work"
+    assert solvers["chpiopow"]["captcha_type"] == "target_match_pow"
     assert solvers["mcaptcha"]["captcha_type"] == "proof_of_work"
     assert solvers["pcaptcha"]["captcha_type"] == "quadratic_residue_pow"
     assert solvers["powcaptcha"]["captcha_type"] == "buffer_reconstruction_pow"

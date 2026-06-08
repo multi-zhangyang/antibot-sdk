@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / FriendlyCaptcha PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / mCaptcha PoW / Wicketkeeper JWT PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / FriendlyCaptcha PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / chpio pow-captcha Target PoW / mCaptcha PoW / Wicketkeeper JWT PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -18,6 +18,7 @@
 - PrivateCaptcha：新增 compute puzzle 协议 solver，解析 `puzzle.signature`，复现 blake2b-256 threshold 多解 PoW 与 solutions metadata，输出 `private-captcha-solution` payload，不启动浏览器。
 - Portcullis：新增 Argon2id + SHA-256 双阶段 PoW 协议 solver，解析 signed challenge，计算内存硬化 base hash 后搜索 nonce，可提交 `/api/v1/verify` 换 `captcha_token`，不启动浏览器。
 - Cap / @cap.js：新增 SHA-256 PoW 协议 solver，支持 v1 seeded challenge 与 format-2 `sha256-pow`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
+- chpio/pow-captcha：新增 signed multi-challenge target-match PoW solver，复现 `signedData` 的 UTF-16LE SHA-256 签名与 `SHA256(solution_le||nonce)` target bit 匹配，可提交 redeem，不启动浏览器。
 - mCaptcha：新增 SHA-256 PoW 协议 solver，复现 Rust/JS 的 `bincode(String)+u128 score` 规则，获取 `/api/v1/pow/config` 后本地找 nonce，可提交 `/api/v1/pow/verify` 换 token，不启动浏览器。
 - Wicketkeeper：新增 EdDSA-JWT PoW 协议 solver，获取 `/v0/challenge` 后计算 `SHA256(challenge+nonce)` 前导零，可提交 `/v0/siteverify` 换 success JWT，不启动浏览器。
 - P-Captcha：新增 QuadraticResidueProblem 协议 solver，解析 Woodall prime challenge，用模平方根直接求 answer，可提交 `{id, answer}`，不启动浏览器。
@@ -46,6 +47,7 @@
 | PrivateCaptcha | 协议 solver | `compute_pow` | alpha | `private-captcha-solution` payload |
 | Portcullis | 协议 solver | `argon2_pow` | alpha | verify body / `captcha_token` |
 | Cap / @cap.js | 协议 solver | `proof_of_work` | alpha | `/redeem` body / Cap token |
+| chpio/pow-captcha | 协议 solver | `target_match_pow` | alpha | challenge solution body / redeemed token |
 | mCaptcha | 协议 solver | `proof_of_work` | alpha | verify body / mCaptcha token |
 | Wicketkeeper | 协议 solver | `proof_of_work` | alpha | hidden-input solution / success JWT |
 | P-Captcha | 协议 solver | `quadratic_residue_pow` | alpha | `answer` / `{id, answer}` |
@@ -1049,7 +1051,64 @@ async with AntibotClient() as client:
 
 ---
 
-### 15. P-Captcha QuadraticResidueProblem
+### 15. chpio/pow-captcha Target-match PoW
+
+chpio/pow-captcha 不是“前导零 hashcash”，而是服务端一次发多个 `(nonce,target)` 任务：客户端枚举 8 字节 little-endian `solution`，直到 `SHA256(solution_le_8 || nonce_bytes)` 的前 `difficultyBits` 位和 `target` 对齐。challenge 外层用 `signedData` 包住，签名规则是 `SHA256(UTF16LE(data_json + ":" + secret))`。
+
+关键点：
+
+- 支持 raw challenge：`{"magic":"2104...","challenges":[[nonce_b64,target_b64]],"difficultyBits":18}`。
+- 支持 signed challenge：`{"data":"...json...","hash":"...base64..."}`，可用 `--secret` 做本地/fixture 交叉校验。
+- 搜索输入复现 upstream `solver.ts` / WASM：`solution` 是 8 字节 little-endian，hash buffer 是 `solution || nonce`。
+- target 匹配支持非整字节难度，例如 18 bits 会比对 2 个整字节 + 第 3 字节高 2 bit。
+- 输出 `{challengesSigned, solutions}`；如果传 `--redeem-url --submit`，可提交 redeem endpoint。
+- 不启动浏览器，适合 VPS/headless 受限环境。
+
+命令示例：
+
+```bash
+antibot solve chpiopow   --challenge-json '{"magic":"2104f639-ba1b-48f3-9443-889128163f5a","challenges":[["AQI=","AwQF"]],"difficultyBits":18}'   --max-attempts-per-challenge 100000
+```
+
+拉取 signed challenge 并 redeem：
+
+```bash
+antibot solve chpiopow   --challenge-url 'https://captcha.example/chpiopow/challenge'   --redeem-url 'https://captcha.example/chpiopow/redeem'   --submit   --timeout 60
+```
+
+压测：
+
+```bash
+antibot stress chpiopow   --challenge-url 'https://captcha.example/chpiopow/challenge'   --redeem-url 'https://captcha.example/chpiopow/redeem'   --submit   --runs 20   --concurrency 4
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_chpiopow(
+        challenge_json={
+            "magic": "2104f639-ba1b-48f3-9443-889128163f5a",
+            "challenges": [["AQI=", "AwQF"]],
+            "difficultyBits": 18,
+        },
+        max_attempts_per_challenge=100_000,
+    )
+    print(ret.ok, ret.ticket, ret.diagnostics.get("solution_ints"))
+```
+
+当前定位：
+
+- 这是协议层 signed multi-challenge target-match PoW solver，不做浏览器模拟。
+- 已和 upstream `solver.spec.ts` fixture 对齐：`[1,2] / [3,4,5] / 18bits -> solution bytes [45,176,0,0,0,0,0,0]`。
+- `secret` 只用于本地签名交叉校验或验证 signed redeem response；真实服务端 secret 不需要、也不应放入 SDK。
+- difficultyBits 每 +1 平均搜索空间约乘 2；challengeCount 越多 CPU 越重，VPS 上先降 `--concurrency`。
+
+---
+
+### 16. P-Captcha QuadraticResidueProblem
 
 P-Captcha 比普通 hashcash 更有意思：服务端给出 Woodall prime `p` 下的一组二次剩余 `n = x² mod p`，浏览器 worker 用 Tonelli-Shanks 求模平方根并把答案串提交给服务端。SDK 当前把这条链路下沉成纯 Python 协议 solver。
 
@@ -1128,7 +1187,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 16. pow_captcha Buffer Reconstruction PoW
+### 17. pow_captcha Buffer Reconstruction PoW
 
 pow_captcha 不是普通前导零 hashcash，而是把“正确 buffer 的 SHA-256、当前被污染 buffer、每个不确定字节的取值范围”序列化到 quiz 里。前端 `takeTest`/WASM 会按 mixed-radix 方式枚举这些不确定字节，直到 `SHA256(candidate_buffer)` 命中目标 hash。SDK 当前把这条链路复现成纯 Python 协议 solver。
 
@@ -1191,7 +1250,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 17. mCaptcha PoW
+### 18. mCaptcha PoW
 
 mCaptcha 是 self-hosted PoW CAPTCHA。浏览器 widget 的流程是：`POST /api/v1/pow/config` 取 `string/difficulty_factor/salt`，本地搜索 nonce，再 `POST /api/v1/pow/verify` 换取服务端 token。SDK 当前把这条链路做成纯协议 solver。
 
@@ -1263,7 +1322,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 18. Wicketkeeper JWT PoW
+### 19. Wicketkeeper JWT PoW
 
 Wicketkeeper 是 self-hosted PoW CAPTCHA：服务端签发 EdDSA JWT challenge，前端 worker 搜索 nonce，后端 `/v0/siteverify` 校验 JWT、PoW 和 replay 状态后返回 success JWT。SDK 当前把这条链路做成纯协议 solver。
 
@@ -1323,7 +1382,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 19. GeeTest v4 / 极验
+### 20. GeeTest v4 / 极验
 
 GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：能在官方 v4 slide demo 上完成图片定位、轨迹拖动和成功载荷提取。但这个能力还不是稳定通杀，真实站点仍会受风险策略、设备指纹、轨迹质量和出口 IP 影响。
 
@@ -1420,7 +1479,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 20. 网易易盾 / Yidun 滑动拼图
+### 21. 网易易盾 / Yidun 滑动拼图
 
 Yidun 现在保留 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
 
@@ -1491,7 +1550,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 21. 自动分发模式
+### 22. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
@@ -1503,6 +1562,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - PrivateCaptcha / private-captcha / api.privatecaptcha.com 相关 URL -> `privatecaptcha`
 - Portcullis / pow-captcha / `/api/v1/challenge` 相关 URL -> `portcullis`
 - Cap / trycap / cap-widget 相关 URL -> `cap`
+- chpio / chpiopow / signedData magic 相关 URL -> `chpiopow`
 - mCaptcha / `/api/v1/pow/config` 相关 URL -> `mcaptcha`
 - Wicketkeeper / `/v0/challenge` 相关 URL -> `wicketkeeper`
 - P-Captcha / QuadraticResidueProblem 相关 URL -> `pcaptcha`
@@ -1524,7 +1584,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 22. 代理格式
+### 23. 代理格式
 
 支持以下格式：
 
@@ -1758,6 +1818,11 @@ antibot solve cap --api-endpoint 'https://target.example/cap/'
 antibot solve cap --token 'challenge token' --c 50 --s 32 --d 4
 antibot stress cap --api-endpoint 'https://target.example/cap/' --runs 50 --concurrency 5
 
+# chpio/pow-captcha
+antibot solve chpiopow --challenge-json '{"magic":"2104f639-ba1b-48f3-9443-889128163f5a","challenges":[["AQI=","AwQF"]],"difficultyBits":18}' --max-attempts-per-challenge 100000
+antibot solve chpiopow --challenge-url 'https://captcha.example/chpiopow/challenge' --redeem-url 'https://captcha.example/chpiopow/redeem' --submit
+antibot stress chpiopow --challenge-url 'https://captcha.example/chpiopow/challenge' --runs 20 --concurrency 4
+
 # mCaptcha
 antibot solve mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key'
 antibot stress mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key' --runs 20
@@ -1874,6 +1939,7 @@ src/antibot_sdk/
     privatecaptcha.py       # PrivateCaptcha blake2b compute PoW protocol solver
     portcullis.py           # Portcullis Argon2id + SHA-256 PoW protocol solver
     cap.py                  # Cap/@cap.js SHA-256 PoW protocol solver
+    chpiopow.py             # chpio/pow-captcha signed target-match PoW protocol solver
     mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
     wicketkeeper.py         # Wicketkeeper JWT PoW protocol solver
     pcaptcha.py             # P-Captcha quadratic residue protocol solver
@@ -2029,6 +2095,16 @@ Cap PRNG/FNV 与 upstream core/src/prng.js 交叉校验。
 unsupported 协议回归：format-2 rsw 明确返回 unsupported_protocols。
 ```
 
+chpio/pow-captcha：
+
+```text
+upstream pkgs/pow-captcha/src/solver/solver.ts + solver-wasm/src/lib.rs：确认 SHA256(solution_le_8||nonce) 与 target difficultyBits 匹配规则。
+upstream wire.ts：确认 signedData hash = SHA256(UTF16LE(data_json + ":" + secret))。
+solver.spec.ts fixture：nonce=[1,2], target=[3,4,5], difficultyBits=18 -> solution=LbAAAAAAAAA= / int=45101。
+本地 mock signed challenge + redeem signedData：ok=true，成功验证 redeemed magic。
+本地 chpiopow fixture stress 20 轮/concurrency=4：20/20，avg≈543.9ms，p95≈741ms。
+```
+
 mCaptcha：
 
 ```text
@@ -2096,6 +2172,7 @@ stress recaptcha mock 2 轮：2/2。
 - PrivateCaptcha compute puzzle 的 difficulty 每 +8 平均搜索空间约乘 2，solutionsCount 常是多解；先控制 `--concurrency`，再按 CPU 调 `--workers`。
 - Portcullis 多了 Argon2id 内存成本，`m_cost` 默认可到 19456 KiB；压测时先用低 concurrency，避免 VPS 内存抖动。
 - Cap PoW 耗时主要由 `c/s/d`、format-2 target 长度、命中位置和 worker 数决定；遇到 `rsw/instrumentation` 时不要硬解，当前版本会按 unsupported 返回。
+- chpio/pow-captcha 是 target-match PoW；difficultyBits 每 +1 平均搜索空间约乘 2，challengeCount 越多 CPU 越重，VPS 上优先降 `--concurrency`。
 - mCaptcha PoW 耗时主要由 `difficulty_factor`、nonce 命中位置和 worker 数决定；默认单 worker，压测时先控制并发避免把 VPS CPU 打满。
 - Wicketkeeper difficulty 是前导 0 nibble 个数，每 +1 平均搜索空间约乘 16；success JWT 只能由服务端 `/siteverify` 签发。
 - P-Captcha 当前不是暴力搜索，而是模平方根；耗时主要由 Woodall prime bit 数和 rounds 决定，`2xs` 约 761 bits，`3xl` 约 22974 bits。
