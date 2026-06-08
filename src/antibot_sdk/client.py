@@ -7,6 +7,7 @@ from .profiles import detect_provider_for_url
 from .providers.aliyun import AliyunCaptchaSolver
 from .providers.browser import BrowserAutomation
 from .providers.geetest import GeeTestCaptchaSolver
+from .providers.hcaptcha import HCaptchaSolver
 from .providers.tencent import TencentCaptchaSolver
 from .providers.turnstile import TurnstileSolver
 
@@ -22,6 +23,7 @@ class AntibotClient:
         self.aliyun = AliyunCaptchaSolver()
         self.geetest = GeeTestCaptchaSolver()
         self.turnstile = TurnstileSolver()
+        self.hcaptcha = HCaptchaSolver()
 
     async def __aenter__(self) -> "AntibotClient":
         return self
@@ -45,10 +47,33 @@ class AntibotClient:
     async def solve_turnstile(self, **kwargs: Any) -> CaptchaResult:
         return await self.turnstile.solve(**kwargs)
 
+    async def solve_hcaptcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.hcaptcha.solve(**kwargs)
+
     async def solve_auto(self, target_url: str, **kwargs: Any) -> BrowserResult | CaptchaResult:
         provider = kwargs.pop("provider", None) or detect_provider_for_url(target_url)
         if provider == "aliyun":
             return await self.solve_aliyun(target_url=target_url, **kwargs)
+        if provider == "hcaptcha":
+            hc_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "headless",
+                    "proxy_server",
+                    "timeout_sec",
+                    "trigger_selectors",
+                    "auto_trigger",
+                    "output_dir",
+                    "browser_binary",
+                    "user_agent",
+                    "locale",
+                    "timezone_id",
+                }
+                and v is not None
+            }
+            return await self.solve_hcaptcha(target_url=target_url, **hc_kwargs)
         if provider == "turnstile":
             ts_kwargs = {
                 k: v

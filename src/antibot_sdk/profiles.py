@@ -109,6 +109,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "aliyun"
     if any(x in u or x in host for x in ("geetest", "gcaptcha4", "gt4.geetest")):
         return "geetest"
+    if any(x in u or x in host for x in ("hcaptcha", "h-captcha", "js.hcaptcha.com")):
+        return "hcaptcha"
     if any(x in u or x in host for x in ("turnstile", "challenges.cloudflare.com")):
         return "turnstile"
     if any(x in u or x in host for x in ("tencent", "gtimg", "turing.captcha", "tcaptcha")):
@@ -136,6 +138,13 @@ def list_profiles() -> dict[str, Any]:
                 "patterns": ["geetest", "gcaptcha4"],
                 "mode": "browser-hook-observer",
                 "successFields": ["lot_number", "captcha_output", "pass_token", "gen_time"],
+            }
+        },
+        "hcaptcha": {
+            "generic_widget": {
+                "patterns": ["hcaptcha", "h-captcha", "js.hcaptcha.com"],
+                "mode": "browser-hook-observer",
+                "successFields": ["h-captcha-response", "callback token"],
             }
         },
         "turnstile": {
