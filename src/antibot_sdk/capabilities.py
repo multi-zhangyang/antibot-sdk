@@ -59,6 +59,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "redeem body / Cap token",
         "scope": "Cap v1 seeded PoW 与 format-2 sha256-pow：本地 SHA-256 nonce 搜索，可输出 /redeem body 或直接 redeem token；不启动浏览器。",
     },
+    "pcaptcha": {
+        "provider": "pcaptcha",
+        "name": "P-Captcha",
+        "category": "solver",
+        "captcha_type": "quadratic_residue_pow",
+        "status": "alpha",
+        "output": "answer / validated token flow",
+        "scope": "P-Captcha QuadraticResidueProblem：解析 Woodall prime challenge，用模平方根直接求 answer，可提交 {id, answer}；不启动浏览器。",
+    },
     "geetest": {
         "provider": "geetest",
         "name": "GeeTest v4",

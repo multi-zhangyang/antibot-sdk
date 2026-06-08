@@ -35,6 +35,16 @@ from .providers.friendlycaptcha import (
     solve_friendly_puzzle,
 )
 from .providers.hcaptcha import is_hcaptcha_token, latest_hcaptcha_token
+from .providers.pcaptcha import (
+    PCaptchaChallenge,
+    PCaptchaSolution,
+    base64_to_bigint,
+    bigint_to_base64,
+    generate_pcaptcha_challenge_from_roots,
+    parse_pcaptcha_challenge,
+    solve_pcaptcha_challenge,
+    verify_pcaptcha_answer,
+)
 from .providers.recaptcha import is_recaptcha_token, latest_recaptcha_token
 from .providers.turnstile import is_turnstile_token, latest_turnstile_token
 from .providers.yidun import detect_yidun_slide_gap, latest_yidun_success
@@ -54,6 +64,8 @@ __all__ = [
     "FriendlyPuzzle",
     "FriendlySolution",
     "FailureClassifier",
+    "PCaptchaChallenge",
+    "PCaptchaSolution",
     "PolicyDecision",
     "SubmitFlow",
     "SuccessOracle",
@@ -63,6 +75,8 @@ __all__ = [
     "detect_geetest_slide_gap",
     "detect_ajcaptcha_block_gap",
     "detect_yidun_slide_gap",
+    "base64_to_bigint",
+    "bigint_to_base64",
     "build_ajcaptcha_point_json",
     "decrypt_ajcaptcha_text",
     "encrypt_ajcaptcha_text",
@@ -75,6 +89,10 @@ __all__ = [
     "solve_cap_challenges",
     "solve_cap_seeded",
     "verify_cap_solution",
+    "generate_pcaptcha_challenge_from_roots",
+    "parse_pcaptcha_challenge",
+    "solve_pcaptcha_challenge",
+    "verify_pcaptcha_answer",
     "friendly_difficulty_to_threshold",
     "parse_friendly_solution_payload",
     "solve_friendly_puzzle",

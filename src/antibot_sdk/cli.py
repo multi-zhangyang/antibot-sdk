@@ -132,6 +132,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "tencent",
             "friendlycaptcha",
             "cap",
+            "pcaptcha",
             "geetest",
             "yidun",
             "hcaptcha",
@@ -256,6 +257,20 @@ async def amain(argv: list[str] | None = None) -> int:
     cap.add_argument("--redeem-url")
     cap.add_argument("--redeem", action="store_true", help="POST solved body to /redeem and return final Cap token")
     cap.add_argument("--raw", action="store_true")
+
+    pc = solve_sub.add_parser("pcaptcha")
+    pc_source = pc.add_mutually_exclusive_group(required=True)
+    pc_source.add_argument("--challenge", help="inline P-Captcha raw challenge")
+    pc_source.add_argument("--challenge-json", help="inline JSON object, or @/path/to/challenge.json")
+    pc_source.add_argument("--challenge-file")
+    pc_source.add_argument("--challenge-url")
+    pc.add_argument("--id", dest="challenge_id", help="challenge id when the endpoint does not include it")
+    pc.add_argument("--validate-url")
+    pc.add_argument("--validate", action="store_true", help="POST {id, answer} to --validate-url")
+    pc.add_argument("--timeout", type=int, default=30)
+    pc.add_argument("--proxy")
+    pc.add_argument("--output-dir")
+    pc.add_argument("--raw", action="store_true")
 
     gt = solve_sub.add_parser("geetest")
     gt.add_argument("--url", dest="target_url", required=True)
@@ -439,6 +454,18 @@ async def amain(argv: list[str] | None = None) -> int:
     scap.add_argument("--output-json")
     scap.add_argument("--full", action="store_true")
 
+    spc = stress_sub.add_parser("pcaptcha")
+    spc.add_argument("--challenge-url", required=True)
+    spc.add_argument("--validate-url")
+    spc.add_argument("--validate", action="store_true")
+    spc.add_argument("--runs", type=int, default=10)
+    spc.add_argument("--concurrency", type=int, default=2)
+    spc.add_argument("--timeout", type=int, default=30)
+    spc.add_argument("--proxy")
+    spc.add_argument("--output-dir")
+    spc.add_argument("--output-json")
+    spc.add_argument("--full", action="store_true")
+
     sg = stress_sub.add_parser("geetest")
     sg.add_argument("--url", dest="target_url", required=True)
     sg.add_argument("--runs", type=int, default=3)
@@ -578,7 +605,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "proxy_server": args.proxy,
             "headless": headless,
         }
-        if provider in (None, "aliyun", "geetest", "yidun", "hcaptcha", "recaptcha", "turnstile", "cap"):
+        if provider in (None, "aliyun", "geetest", "yidun", "hcaptcha", "recaptcha", "turnstile", "cap", "pcaptcha"):
             common.update({
                 "site_profile": args.site_profile,
                 "output_dir": args.output_dir,
@@ -723,6 +750,21 @@ async def amain(argv: list[str] | None = None) -> int:
             start=args.start,
             max_attempts_per_challenge=args.max_attempts_per_challenge,
             workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "pcaptcha":
+        ret = await client.solve_pcaptcha(
+            challenge=args.challenge,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            challenge_id=args.challenge_id,
+            validate_url=args.validate_url,
+            validate=args.validate,
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
@@ -990,6 +1032,25 @@ async def amain(argv: list[str] | None = None) -> int:
                 redeem=args.redeem,
                 max_attempts_per_challenge=args.max_attempts_per_challenge,
                 workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "pcaptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="pcaptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_pcaptcha(
+                challenge_url=args.challenge_url,
+                validate_url=args.validate_url,
+                validate=args.validate,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,

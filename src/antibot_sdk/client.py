@@ -12,6 +12,7 @@ from .providers.cap import CapSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.hcaptcha import HCaptchaSolver
+from .providers.pcaptcha import PCaptchaSolver
 from .providers.recaptcha import ReCaptchaSolver
 from .providers.tencent import TencentCaptchaSolver
 from .providers.turnstile import TurnstileSolver
@@ -29,6 +30,7 @@ class AntibotClient:
         self.ajcaptcha = AJCaptchaSolver()
         self.altcha = AltchaSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
+        self.pcaptcha = PCaptchaSolver()
         self.tencent = TencentCaptchaSolver()
         self.aliyun = AliyunCaptchaSolver()
         self.geetest = GeeTestCaptchaSolver()
@@ -64,6 +66,9 @@ class AntibotClient:
 
     async def solve_friendlycaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.friendlycaptcha.solve(**kwargs)
+
+    async def solve_pcaptcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.pcaptcha.solve(**kwargs)
 
     async def solve_geetest(self, **kwargs: Any) -> CaptchaResult:
         return await self.geetest.solve(**kwargs)
@@ -185,6 +190,28 @@ class AntibotClient:
             }
             cap_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_cap(**cap_kwargs)
+        if provider == "pcaptcha":
+            pc_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "challenge_id",
+                    "validate_url",
+                    "validate",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            pc_kwargs.setdefault("challenge_url", target_url)
+            return await self.solve_pcaptcha(**pc_kwargs)
         if provider == "aliyun":
             return await self.solve_aliyun(target_url=target_url, **kwargs)
         if provider == "recaptcha":
