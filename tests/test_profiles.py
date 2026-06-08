@@ -27,6 +27,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://auro.network/api/pow/setup") == "auro"
     assert detect_provider_for_url("https://captcha.example/powcaptcha/challenge") == "powcaptcha"
     assert detect_provider_for_url("https://captcha.example/chpiopow/challenge") == "chpiopow"
+    assert detect_provider_for_url("https://captcha.example/kerberus/challenge?difficultyFactor=50") == "kerberus"
     assert detect_provider_for_url("https://api.privatecaptcha.com/puzzle") == "privatecaptcha"
     assert detect_provider_for_url("https://captcha.example/api/v1/challenge") == "portcullis"
     assert detect_provider_for_url("https://example.com") == "browser"
@@ -39,6 +40,7 @@ def test_generic_provider_detection():
     assert "buffer_reconstruction_pow" in list_profiles()["powcaptcha"]
     assert "encrypted_behavior_pow" in list_profiles()["auro"]
     assert "target_match_pow" in list_profiles()["chpiopow"]
+    assert "u128_score_pow" in list_profiles()["kerberus"]
     assert "compute_pow" in list_profiles()["privatecaptcha"]
     assert "argon2_pow" in list_profiles()["portcullis"]
 

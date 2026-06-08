@@ -15,6 +15,7 @@ from .providers.chpiopow import ChpioPowSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.hcaptcha import HCaptchaSolver
+from .providers.kerberus import KerberusSolver
 from .providers.mcaptcha import MCaptchaSolver
 from .providers.pcaptcha import PCaptchaSolver
 from .providers.powcaptcha import PowCaptchaSolver
@@ -52,6 +53,7 @@ class AntibotClient:
         self.geetest = GeeTestCaptchaSolver()
         self.turnstile = TurnstileSolver()
         self.hcaptcha = HCaptchaSolver()
+        self.kerberus = KerberusSolver()
         self.recaptcha = ReCaptchaSolver()
         self.yidun = YidunCaptchaSolver()
 
@@ -118,6 +120,9 @@ class AntibotClient:
 
     async def solve_hcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.hcaptcha.solve(**kwargs)
+
+    async def solve_kerberus(self, **kwargs: Any) -> CaptchaResult:
+        return await self.kerberus.solve(**kwargs)
 
     async def solve_recaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.recaptcha.solve(**kwargs)
@@ -320,6 +325,31 @@ class AntibotClient:
             }
             cp_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_chpiopow(**cp_kwargs)
+        if provider == "kerberus":
+            kerb_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "serialized_input",
+                    "input_file",
+                    "validate_url",
+                    "submit",
+                    "start",
+                    "max_attempts_per_salt",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            kerb_kwargs.setdefault("challenge_url", target_url)
+            return await self.solve_kerberus(**kerb_kwargs)
         if provider == "mcaptcha":
             mc_kwargs = {
                 k: v

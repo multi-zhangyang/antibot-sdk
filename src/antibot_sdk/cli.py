@@ -135,6 +135,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "friendlycaptcha",
             "cap",
             "chpiopow",
+            "kerberus",
             "mcaptcha",
             "pcaptcha",
             "powcaptcha",
@@ -330,6 +331,23 @@ async def amain(argv: list[str] | None = None) -> int:
     chpio.add_argument("--proxy")
     chpio.add_argument("--output-dir")
     chpio.add_argument("--raw", action="store_true")
+
+    kerb = solve_sub.add_parser("kerberus")
+    kerb_source = kerb.add_mutually_exclusive_group(required=True)
+    kerb_source.add_argument("--challenge-json", help="inline JSON object, or @/path/to/challenge.json")
+    kerb_source.add_argument("--challenge-file")
+    kerb_source.add_argument("--challenge-url")
+    kerb.add_argument("--serialized-input", help="Kerberus serializedInput")
+    kerb.add_argument("--input-file", help="read serializedInput from file")
+    kerb.add_argument("--validate-url")
+    kerb.add_argument("--submit", action="store_true", help="POST solution to --validate-url")
+    kerb.add_argument("--start", type=int, default=0)
+    kerb.add_argument("--max-attempts-per-salt", type=int, default=50_000_000)
+    kerb.add_argument("--workers", type=int, default=1)
+    kerb.add_argument("--timeout", type=int, default=60)
+    kerb.add_argument("--proxy")
+    kerb.add_argument("--output-dir")
+    kerb.add_argument("--raw", action="store_true")
 
     mc = solve_sub.add_parser("mcaptcha")
     mc_source = mc.add_mutually_exclusive_group(required=True)
@@ -697,6 +715,25 @@ async def amain(argv: list[str] | None = None) -> int:
     schpio.add_argument("--output-json")
     schpio.add_argument("--full", action="store_true")
 
+    skerb = stress_sub.add_parser("kerberus")
+    skerb_source = skerb.add_mutually_exclusive_group(required=True)
+    skerb_source.add_argument("--challenge-json")
+    skerb_source.add_argument("--challenge-file")
+    skerb_source.add_argument("--challenge-url")
+    skerb.add_argument("--serialized-input")
+    skerb.add_argument("--input-file")
+    skerb.add_argument("--validate-url")
+    skerb.add_argument("--submit", action="store_true")
+    skerb.add_argument("--runs", type=int, default=10)
+    skerb.add_argument("--concurrency", type=int, default=2)
+    skerb.add_argument("--timeout", type=int, default=60)
+    skerb.add_argument("--max-attempts-per-salt", type=int, default=50_000_000)
+    skerb.add_argument("--workers", type=int, default=1)
+    skerb.add_argument("--proxy")
+    skerb.add_argument("--output-dir")
+    skerb.add_argument("--output-json")
+    skerb.add_argument("--full", action="store_true")
+
     smc = stress_sub.add_parser("mcaptcha")
     smc_source = smc.add_mutually_exclusive_group(required=True)
     smc_source.add_argument("--config-url")
@@ -966,6 +1003,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "cap",
             "chpiopow",
             "auro",
+            "kerberus",
             "mcaptcha",
             "pcaptcha",
             "powcaptcha",
@@ -1131,6 +1169,24 @@ async def amain(argv: list[str] | None = None) -> int:
             submit=not args.no_submit,
             start=args.start,
             max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "kerberus":
+        ret = await client.solve_kerberus(
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            serialized_input=args.serialized_input,
+            input_file=args.input_file,
+            validate_url=args.validate_url,
+            submit=args.submit,
+            start=args.start,
+            max_attempts_per_salt=args.max_attempts_per_salt,
             workers=args.workers,
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
@@ -1594,6 +1650,31 @@ async def amain(argv: list[str] | None = None) -> int:
                 client_guid=args.client_guid,
                 submit=not args.no_submit,
                 max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "kerberus":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="kerberus",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_kerberus(
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                serialized_input=args.serialized_input,
+                input_file=args.input_file,
+                validate_url=args.validate_url,
+                submit=args.submit,
+                max_attempts_per_salt=args.max_attempts_per_salt,
                 workers=args.workers,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,

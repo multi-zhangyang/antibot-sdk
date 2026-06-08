@@ -86,6 +86,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "challenge solution body / redeemed token",
         "scope": "chpio/pow-captcha signed multi-challenge PoW：解析 signedData，复现 UTF-16LE SHA-256 签名与 SHA256(solution_le||nonce) target-bit 匹配，可提交 redeem；不启动浏览器。",
     },
+    "kerberus": {
+        "provider": "kerberus",
+        "name": "Kerberus",
+        "category": "solver",
+        "captcha_type": "u128_score_pow",
+        "status": "alpha",
+        "output": "Solution{id, nonces} / validated token",
+        "scope": "Kerberus 多盐 u128-score PoW：对每个 salt 预计算 SHA256(salt+serializedInput)，再搜索 SHA256(prefixHash||nonce_dec) 前 16 字节评分超过阈值，输出 nonces；不启动浏览器。",
+    },
     "mcaptcha": {
         "provider": "mcaptcha",
         "name": "mCaptcha",
