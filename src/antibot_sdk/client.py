@@ -19,6 +19,7 @@ from .providers.cryptopuzzle import CryptoPuzzleSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.gunslol import GunsLolSolver
+from .providers.hashguard import HashGuardSolver
 from .providers.hcaptcha import HCaptchaSolver
 from .providers.impost import ImpostSolver
 from .providers.kerberus import KerberusSolver
@@ -82,6 +83,7 @@ class AntibotClient:
         self.geetest = GeeTestCaptchaSolver()
         self.turnstile = TurnstileSolver()
         self.hcaptcha = HCaptchaSolver()
+        self.hashguard = HashGuardSolver()
         self.impost = ImpostSolver()
         self.kerberus = KerberusSolver()
         self.recaptcha = ReCaptchaSolver()
@@ -186,6 +188,9 @@ class AntibotClient:
 
     async def solve_gunslol(self, **kwargs: Any) -> CaptchaResult:
         return await self.gunslol.solve(**kwargs)
+
+    async def solve_hashguard(self, **kwargs: Any) -> CaptchaResult:
+        return await self.hashguard.solve(**kwargs)
 
     async def solve_impost(self, **kwargs: Any) -> CaptchaResult:
         return await self.impost.solve(**kwargs)
@@ -377,6 +382,60 @@ class AntibotClient:
             if not gl_kwargs.get("challenge_url") and not gl_kwargs.get("page_url"):
                 gl_kwargs["page_url"] = target_url
             return await self.solve_gunslol(**gl_kwargs)
+        if provider == "hashguard":
+            hg_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "route_prefix",
+                    "context",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "introspect_url",
+                    "submit",
+                    "introspect",
+                    "consume",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "min_solve_ms",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not hg_kwargs.get("base_url") and not hg_kwargs.get("challenge_url"):
+                if target_lower.rstrip("/").endswith("/pow/challenges"):
+                    hg_kwargs["challenge_url"] = target_url
+                    marker = "/pow/challenges"
+                    root = target_url[: target_lower.rindex(marker)]
+                    parts = root.rstrip("/").rsplit("/", 1)
+                    if parts and parts[-1] in {"v1", "v2"}:
+                        hg_kwargs.setdefault("route_prefix", parts[-1])
+                        hg_kwargs["base_url"] = parts[0]
+                    else:
+                        hg_kwargs["base_url"] = root
+                elif target_lower.rstrip("/").endswith("/pow/verifications"):
+                    hg_kwargs["verify_url"] = target_url
+                    marker = "/pow/verifications"
+                    root = target_url[: target_lower.rindex(marker)]
+                    parts = root.rstrip("/").rsplit("/", 1)
+                    if parts and parts[-1] in {"v1", "v2"}:
+                        hg_kwargs.setdefault("route_prefix", parts[-1])
+                        hg_kwargs["base_url"] = parts[0]
+                    else:
+                        hg_kwargs["base_url"] = root
+                else:
+                    hg_kwargs["base_url"] = target_url
+            return await self.solve_hashguard(**hg_kwargs)
         if provider == "cap":
             cap_kwargs = {
                 k: v

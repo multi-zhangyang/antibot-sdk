@@ -117,6 +117,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "auro"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
         return "gunslol"
+    if any(x in u or x in host for x in ("hashguard", "/pow/challenges", "/pow/verifications", "/pow/assertions/introspect")):
+        return "hashguard"
     if any(x in u or x in host for x in ("friendlycaptcha", "friendlycaptcha.com", "frc-captcha")):
         return "friendlycaptcha"
     if any(x in u or x in host for x in ("fcaptcha", "/api/pow/challenge")):
@@ -261,6 +263,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "seal-template-sha256-plus-blake3-protocol-solver",
                 "successFields": ["seal", "_oo"],
                 "endpoints": ["page containing const _gs_sets", "verify endpoint accepting {seal,_oo}"],
+            }
+        },
+        "hashguard": {
+            "jwt_proof_pow": {
+                "patterns": ["hashguard", "/pow/challenges", "/pow/verifications"],
+                "mode": "target-threshold-sha256-pow-plus-jwt-proof-token-solver",
+                "successFields": ["proofToken", "valid=true"],
+                "endpoints": ["POST /pow/challenges", "POST /pow/verifications", "POST /pow/assertions/introspect"],
             }
         },
         "cap": {

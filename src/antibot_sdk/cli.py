@@ -135,6 +135,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "friendlycaptcha",
             "fcaptcha",
             "gunslol",
+            "hashguard",
             "cap",
             "cryptopuzzle",
             "captxa",
@@ -522,6 +523,29 @@ async def amain(argv: list[str] | None = None) -> int:
     gl.add_argument("--proxy")
     gl.add_argument("--output-dir")
     gl.add_argument("--raw", action="store_true")
+
+    hg = solve_sub.add_parser("hashguard")
+    hg_source = hg.add_mutually_exclusive_group(required=True)
+    hg_source.add_argument("--base-url", help="HashGuard server root; infers /v1/pow/challenges and /v1/pow/verifications")
+    hg_source.add_argument("--challenge-json", help="inline {challengeId,seed,target} JSON, or @/path")
+    hg_source.add_argument("--challenge-file")
+    hg_source.add_argument("--challenge-url", help="POST endpoint returning HashGuard challenge")
+    hg.add_argument("--route-prefix", default="v1")
+    hg.add_argument("--context")
+    hg.add_argument("--verify-url")
+    hg.add_argument("--introspect-url")
+    hg.add_argument("--submit", action="store_true")
+    hg.add_argument("--introspect", action="store_true")
+    hg.add_argument("--no-consume", dest="consume", action="store_false", default=True)
+    hg.add_argument("--start", type=int, default=0)
+    hg.add_argument("--max-attempts", type=int, default=200_000_000)
+    hg.add_argument("--workers", type=int, default=1)
+    hg.add_argument("--timeout", type=int, default=60)
+    hg.add_argument("--min-solve-ms", type=int, default=0)
+    hg.add_argument("--proxy")
+    hg.add_argument("--output-dir")
+    hg.add_argument("--user-agent")
+    hg.add_argument("--raw", action="store_true")
 
     pc = solve_sub.add_parser("pcaptcha")
     pc_source = pc.add_mutually_exclusive_group(required=True)
@@ -1228,6 +1252,32 @@ async def amain(argv: list[str] | None = None) -> int:
     sgl.add_argument("--output-json")
     sgl.add_argument("--full", action="store_true")
 
+    shg = stress_sub.add_parser("hashguard")
+    shg_source = shg.add_mutually_exclusive_group(required=True)
+    shg_source.add_argument("--base-url")
+    shg_source.add_argument("--challenge-json")
+    shg_source.add_argument("--challenge-file")
+    shg_source.add_argument("--challenge-url")
+    shg.add_argument("--route-prefix", default="v1")
+    shg.add_argument("--context")
+    shg.add_argument("--verify-url")
+    shg.add_argument("--introspect-url")
+    shg.add_argument("--submit", action="store_true")
+    shg.add_argument("--introspect", action="store_true")
+    shg.add_argument("--no-consume", dest="consume", action="store_false", default=True)
+    shg.add_argument("--runs", type=int, default=10)
+    shg.add_argument("--concurrency", type=int, default=2)
+    shg.add_argument("--timeout", type=int, default=60)
+    shg.add_argument("--start", type=int, default=0)
+    shg.add_argument("--max-attempts", type=int, default=200_000_000)
+    shg.add_argument("--workers", type=int, default=1)
+    shg.add_argument("--min-solve-ms", type=int, default=0)
+    shg.add_argument("--proxy")
+    shg.add_argument("--output-dir")
+    shg.add_argument("--output-json")
+    shg.add_argument("--user-agent")
+    shg.add_argument("--full", action="store_true")
+
     spc = stress_sub.add_parser("pcaptcha")
     spc.add_argument("--challenge-url", required=True)
     spc.add_argument("--validate-url")
@@ -1667,6 +1717,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "chpiopow",
             "auro",
             "gunslol",
+            "hashguard",
             "impost",
             "kerberus",
             "mcaptcha",
@@ -2086,6 +2137,30 @@ async def amain(argv: list[str] | None = None) -> int:
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "hashguard":
+        ret = await client.solve_hashguard(
+            base_url=args.base_url,
+            route_prefix=args.route_prefix,
+            context=args.context,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            introspect_url=args.introspect_url,
+            submit=args.submit,
+            introspect=args.introspect,
+            consume=args.consume,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            min_solve_ms=args.min_solve_ms,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -2962,6 +3037,38 @@ async def amain(argv: list[str] | None = None) -> int:
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "hashguard":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="hashguard",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_hashguard(
+                base_url=args.base_url,
+                route_prefix=args.route_prefix,
+                context=args.context,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                introspect_url=args.introspect_url,
+                submit=args.submit,
+                introspect=args.introspect,
+                consume=args.consume,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                min_solve_ms=args.min_solve_ms,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
             ),
         )
         emit_stress(ret, full=args.full)

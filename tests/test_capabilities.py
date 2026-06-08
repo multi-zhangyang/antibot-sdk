@@ -20,6 +20,7 @@ def test_capability_matrix_product_boundary() -> None:
         "fcaptcha",
         "friendlycaptcha",
         "gunslol",
+        "hashguard",
         "cap",
         "cryptopuzzle",
         "captxa",
@@ -53,6 +54,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["fcaptcha"]["captcha_type"] == "signals_bound_pow"
     assert solvers["friendlycaptcha"]["captcha_type"] == "proof_of_work"
     assert solvers["gunslol"]["captcha_type"] == "seal_pow_blake3"
+    assert solvers["hashguard"]["captcha_type"] == "jwt_proof_pow"
     assert solvers["cap"]["captcha_type"] == "proof_of_work"
     assert solvers["cryptopuzzle"]["captcha_type"] == "rsw_time_lock_puzzle"
     assert solvers["captxa"]["captcha_type"] == "ja4_bound_pow"

@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -29,6 +29,7 @@
 - Kerberus：新增多盐 u128-score PoW solver，预计算 `SHA256(salt+serializedInput)`，搜索 `SHA256(prefixHash||nonce_dec)` 前 16 字节评分超过阈值，输出 `Solution{id, nonces}`，不启动浏览器。
 - PaulDotSH/pow-captcha：新增 bcrypt exact/prefix PoW solver，复现 `bcrypt::verify` 与 `bcrypt::hash_with_salt(salt[0:16])` 两条链路，输出 `CaptchaServerInfo` 风格 JSON，不启动浏览器。
 - guns.lol：新增 `_gs_sets` seal PoW solver，解析 `_2xa` 空位模板，枚举十六进制 seal 使 `SHA256(seal+_n+_org_ts)=o09`，再生成 BLAKE3 `_oo` 提交标签，不启动浏览器。
+- HashGuard：新增 target-threshold PoW + JWT proof token 协议 solver，复现 `SHA256(challengeId:seed:nonce) <= target`，提交 `/pow/verifications` 换 proofToken，并可选 `/pow/assertions/introspect`，不启动浏览器。
 - mCaptcha：新增 SHA-256 PoW 协议 solver，复现 Rust/JS 的 `bincode(String)+u128 score` 规则，获取 `/api/v1/pow/config` 后本地找 nonce，可提交 `/api/v1/pow/verify` 换 token，不启动浏览器。
 - Wicketkeeper：新增 EdDSA-JWT PoW 协议 solver，获取 `/v0/challenge` 后计算 `SHA256(challenge+nonce)` 前导零，可提交 `/v0/siteverify` 换 success JWT，不启动浏览器。
 - yourcaptcha：新增行为 signals + HMAC challenge + SHA-256 exact PoW 协议 solver，合成低风险 telemetry 获取低 `maxnumber`，搜索 `SHA256(salt+number)`，可提交 verify，不启动浏览器。
@@ -75,6 +76,7 @@
 | Kerberus | 协议 solver | `u128_score_pow` | alpha | `Solution{id, nonces}` / validated token |
 | PaulDotSH/pow-captcha | 协议 solver | `bcrypt_pow` | alpha | `CaptchaServerInfo` JSON / validated token |
 | guns.lol | 协议 solver | `seal_pow_blake3` | alpha | `{seal, _oo}` / validated token |
+| HashGuard | 协议 solver | `jwt_proof_pow` | alpha | proofToken JWT / introspection result |
 | mCaptcha | 协议 solver | `proof_of_work` | alpha | verify body / mCaptcha token |
 | Wicketkeeper | 协议 solver | `proof_of_work` | alpha | hidden-input solution / success JWT |
 | yourcaptcha | 协议 solver | `behavior_pow` | alpha | captcha payload / verified result |
@@ -1740,6 +1742,61 @@ async with AntibotClient() as client:
 
 ---
 
+### 20.1 HashGuard target-threshold PoW + JWT proofToken
+
+HashGuard 的客户端链路是典型的“挑战签发 → 本地阈值 PoW → proofToken JWT”协议：
+
+```text
+POST /v1/pow/challenges {context?}
+-> {challengeId, algorithm, seed, difficultyBits, target, issuedAt, expiresAt}
+
+hash = SHA256(challengeId + ":" + seed + ":" + nonce)
+pass = hash <= target   # 64 hex 字符串同长阈值比较
+
+POST /v1/pow/verifications {challengeId, nonce, clientMetrics:{solveTimeMs}}
+-> {proofToken, expiresAt}
+
+POST /v1/pow/assertions/introspect {proofToken, consume}
+-> {valid, subject, context, issuedAt, expiresAt}
+```
+
+SDK 当前支持：
+
+- 读取 fixture 或请求 `/pow/challenges`；
+- 从 `difficultyBits` 自动推导 target，或直接使用服务端 target；
+- 复现官方 client/WASM 的 `SHA256(challengeId:seed:nonce) <= target`；
+- 可多进程 worker 搜索；
+- 可提交 `/pow/verifications` 换 proofToken，并可选 introspect；
+- 不启动浏览器。
+
+命令示例：
+
+```bash
+antibot solve hashguard \
+  --base-url 'https://hashguard.example' \
+  --context 'login' \
+  --submit \
+  --introspect \
+  --timeout 60
+
+antibot solve hashguard \
+  --challenge-json '{"challengeId":"hg-fixture-1","seed":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","difficultyBits":12}' \
+  --timeout 5
+
+antibot stress hashguard \
+  --challenge-json '{"challengeId":"hg-fixture-1","seed":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","difficultyBits":12}' \
+  --runs 20 \
+  --concurrency 4
+```
+
+当前定位：
+
+- 这是协议层 PoW solver，不涉及文字/图片识别；
+- proofToken 是否单次可用由服务端 introspection/消费状态决定；
+- 真实服务可能按 IP/路由动态提高 `difficultyBits`，SDK 保留 `workers/max-attempts/min-solve-ms` 调参。
+
+---
+
 ### 21. P-Captcha QuadraticResidueProblem
 
 P-Captcha 比普通 hashcash 更有意思：服务端给出 Woodall prime `p` 下的一组二次剩余 `n = x² mod p`，浏览器 worker 用 Tonelli-Shanks 求模平方根并把答案串提交给服务端。SDK 当前把这条链路下沉成纯 Python 协议 solver。
@@ -2652,6 +2709,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - Kerberus / difficultyFactor / serializedInput 相关 URL -> `kerberus`
 - PaulDotSH / bcrypt_pow / paulpow 相关 URL -> `paulpow`
 - guns.lol / `_gs_sets` / `_2xa` 相关 URL -> `gunslol`
+- HashGuard / `/pow/challenges` / `/pow/verifications` 相关 URL -> `hashguard`
 - mCaptcha / `/api/v1/pow/config` 相关 URL -> `mcaptcha`
 - Wicketkeeper / `/v0/challenge` 相关 URL -> `wicketkeeper`
 - yourcaptcha / `/api/captcha/challenge` / `/api/captcha/verify` 相关 URL -> `yourcaptcha`
@@ -2945,6 +3003,11 @@ antibot solve gunslol --challenge-json '{"o09":"3ffcf8567b45ac19c1d6bf9e20b1770c
 antibot solve gunslol --page-url 'https://guns.lol/example' --verify-url 'https://target.example/verify' --submit
 antibot stress gunslol --challenge-json '{"o09":"3ffcf8567b45ac19c1d6bf9e20b1770ce1068f3dc409b87e2659d6a132dfcc0a","_n":"auR64ybDXa6A5eyEsLIqsRiNEcqEIOE2","_org_ts":"1777135187","_2xa":"oUAFJQw_BBsAAQIEA2blekXYbMz_Yzg4YTk4NzQzZDJjZmRjOGU1N2Y5MTE3ZGJjNGU4ZjZkOWU4NjU4MTBhZDBiY2Q1YTZmZDI2YTA1NDHTB1wf2McZRA"}' --runs 20 --concurrency 4
 
+# HashGuard
+antibot solve hashguard --base-url 'https://hashguard.example' --context 'login' --submit --introspect
+antibot solve hashguard --challenge-json '{"challengeId":"hg-fixture-1","seed":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","difficultyBits":12}' --timeout 5
+antibot stress hashguard --challenge-json '{"challengeId":"hg-fixture-1","seed":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","difficultyBits":12}' --runs 20 --concurrency 4
+
 # mCaptcha
 antibot solve mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key'
 antibot stress mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key' --runs 20
@@ -3033,7 +3096,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / FCaptcha / Cap / Captxa / Swetrix / Crovly / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / FCaptcha / Cap / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -3118,6 +3181,7 @@ src/antibot_sdk/
     swetrix.py              # Swetrix challenge:nonce SHA-256 PoW protocol solver
     crovly.py               # Crovly fingerprint/behavior-bound SHA-256 bit PoW solver
     chpiopow.py             # chpio/pow-captcha signed target-match PoW protocol solver
+    hashguard.py            # HashGuard target-threshold SHA-256 PoW + JWT proof-token solver
     mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
     wicketkeeper.py         # Wicketkeeper JWT PoW protocol solver
     yourcaptcha.py          # yourcaptcha behavioral signals + SHA-256 exact PoW protocol solver
@@ -3162,6 +3226,7 @@ tests/
   test_powreaction.py
   test_procaptcha.py
   test_tollbooth.py
+  test_hashguard.py
   test_yourcaptcha.py
   test_silentchallenge.py
   test_yidun_slide.py
@@ -3174,9 +3239,10 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 125 passed
+pytest: 127 passed
 Swetrix fixture/mock/live/stress: /generate + SHA256(challenge:nonce) PoW + /verify + /validate 验证通过
 Crovly fixture/mock/stress: /challenge + fingerprint/environment/behavior + SHA256(nonce+counter) bit-PoW + /verify 验证通过
+HashGuard fixture/mock/stress: /pow/challenges + SHA256(challengeId:seed:nonce)<=target + /pow/verifications + /pow/assertions/introspect 验证通过
 Captxa fixture/mock/stress: browser metrics + JA4-bound opaque token + SHA-256 PoW simple mode 验证通过
 FCaptcha fixture/mock/stress: signalsHash-bound PoW、本地 /api/pow/challenge + /api/verify 验证通过
 PoW Bot Deterrent fixture/mock/stress: scrypt-WASM PoW、本地 /GetChallenges + /Verify 验证通过

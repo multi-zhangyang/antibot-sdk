@@ -86,6 +86,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "{seal, _oo} / validated token",
         "scope": "guns.lol _gs_sets seal PoW：解析 _2xa 空位模板，枚举十六进制 seal 使 SHA256(seal+_n+_org_ts)=o09，再生成 BLAKE3 _oo 标签；不启动浏览器。",
     },
+    "hashguard": {
+        "provider": "hashguard",
+        "name": "HashGuard",
+        "category": "solver",
+        "captcha_type": "jwt_proof_pow",
+        "status": "alpha",
+        "output": "proofToken JWT / introspection result",
+        "scope": "HashGuard PoW CAPTCHA：请求 /pow/challenges，复现 SHA256(challengeId:seed:nonce) <= target 的阈值搜索，提交 /pow/verifications 换 ES256/JWT proofToken，可选 /pow/assertions/introspect；不启动浏览器。",
+    },
     "cap": {
         "provider": "cap",
         "name": "Cap / @cap.js",
