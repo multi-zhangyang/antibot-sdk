@@ -25,6 +25,7 @@ from .providers.powcaptcha import PowCaptchaSolver
 from .providers.privatecaptcha import PrivateCaptchaSolver
 from .providers.portcullis import PortcullisSolver
 from .providers.recaptcha import ReCaptchaSolver
+from .providers.silentchallenge import SilentChallengeSolver
 from .providers.tencent import TencentCaptchaSolver
 from .providers.turnstile import TurnstileSolver
 from .providers.yourcaptcha import YourCaptchaSolver
@@ -55,6 +56,7 @@ class AntibotClient:
         self.portcullis = PortcullisSolver()
         self.wicketkeeper = WicketkeeperSolver()
         self.yourcaptcha = YourCaptchaSolver()
+        self.silentchallenge = SilentChallengeSolver()
         self.tencent = TencentCaptchaSolver()
         self.aliyun = AliyunCaptchaSolver()
         self.geetest = GeeTestCaptchaSolver()
@@ -149,6 +151,9 @@ class AntibotClient:
 
     async def solve_yourcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.yourcaptcha.solve(**kwargs)
+
+    async def solve_silentchallenge(self, **kwargs: Any) -> CaptchaResult:
+        return await self.silentchallenge.solve(**kwargs)
 
     async def solve_auto(self, target_url: str, **kwargs: Any) -> BrowserResult | CaptchaResult:
         provider = kwargs.pop("provider", None) or detect_provider_for_url(target_url)
@@ -649,6 +654,40 @@ class AntibotClient:
                 else:
                     yc_kwargs["challenge_url"] = target_url
             return await self.solve_yourcaptcha(**yc_kwargs)
+        if provider == "silentchallenge":
+            sc_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "submit",
+                    "motion_json",
+                    "motion_file",
+                    "signals_json",
+                    "signals_file",
+                    "start",
+                    "max_attempts",
+                    "timeout_sec",
+                    "min_submit_ms",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            if not sc_kwargs.get("base_url") and not sc_kwargs.get("challenge_url"):
+                if target_url.rstrip("/").endswith("/challenge"):
+                    sc_kwargs["challenge_url"] = target_url
+                elif "/challenge/" in target_url and target_url.rstrip("/").endswith("/verify"):
+                    sc_kwargs["verify_url"] = target_url
+                else:
+                    sc_kwargs["base_url"] = target_url
+            return await self.solve_silentchallenge(**sc_kwargs)
         if provider == "aliyun":
             return await self.solve_aliyun(target_url=target_url, **kwargs)
         if provider == "recaptcha":

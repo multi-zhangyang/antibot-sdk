@@ -146,6 +146,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "portcullis",
             "wicketkeeper",
             "yourcaptcha",
+            "silentchallenge",
             "geetest",
             "yidun",
             "hcaptcha",
@@ -532,6 +533,26 @@ async def amain(argv: list[str] | None = None) -> int:
     yc.add_argument("--proxy")
     yc.add_argument("--output-dir")
     yc.add_argument("--raw", action="store_true")
+
+    sc = solve_sub.add_parser("silentchallenge")
+    sc_source = sc.add_mutually_exclusive_group(required=True)
+    sc_source.add_argument("--base-url", help="silent-challenge base URL")
+    sc_source.add_argument("--challenge-json", help="inline JSON challenge, or @/path")
+    sc_source.add_argument("--challenge-file")
+    sc_source.add_argument("--challenge-url", help="POST /challenge endpoint")
+    sc.add_argument("--verify-url", help="verify endpoint; supports {challengeId}")
+    sc.add_argument("--submit", action="store_true", help="POST solved payload to verify endpoint")
+    sc.add_argument("--motion-json", help="inline motion JSON, or @/path; default synthesizes human-like motion")
+    sc.add_argument("--motion-file")
+    sc.add_argument("--signals-json", help="inline navigator signals JSON, or @/path; default synthesizes low-risk signals")
+    sc.add_argument("--signals-file")
+    sc.add_argument("--start", type=int, default=0)
+    sc.add_argument("--max-attempts", type=int)
+    sc.add_argument("--timeout", type=int, default=60)
+    sc.add_argument("--min-submit-ms", type=int, default=60)
+    sc.add_argument("--proxy")
+    sc.add_argument("--output-dir")
+    sc.add_argument("--raw", action="store_true")
 
     gt = solve_sub.add_parser("geetest")
     gt.add_argument("--url", dest="target_url", required=True)
@@ -993,6 +1014,29 @@ async def amain(argv: list[str] | None = None) -> int:
     syc.add_argument("--output-json")
     syc.add_argument("--full", action="store_true")
 
+    ssc = stress_sub.add_parser("silentchallenge")
+    ssc_source = ssc.add_mutually_exclusive_group(required=True)
+    ssc_source.add_argument("--base-url")
+    ssc_source.add_argument("--challenge-json")
+    ssc_source.add_argument("--challenge-file")
+    ssc_source.add_argument("--challenge-url")
+    ssc.add_argument("--verify-url")
+    ssc.add_argument("--submit", action="store_true")
+    ssc.add_argument("--motion-json")
+    ssc.add_argument("--motion-file")
+    ssc.add_argument("--signals-json")
+    ssc.add_argument("--signals-file")
+    ssc.add_argument("--runs", type=int, default=10)
+    ssc.add_argument("--concurrency", type=int, default=2)
+    ssc.add_argument("--timeout", type=int, default=60)
+    ssc.add_argument("--min-submit-ms", type=int, default=60)
+    ssc.add_argument("--start", type=int, default=0)
+    ssc.add_argument("--max-attempts", type=int)
+    ssc.add_argument("--proxy")
+    ssc.add_argument("--output-dir")
+    ssc.add_argument("--output-json")
+    ssc.add_argument("--full", action="store_true")
+
     sg = stress_sub.add_parser("geetest")
     sg.add_argument("--url", dest="target_url", required=True)
     sg.add_argument("--runs", type=int, default=3)
@@ -1154,6 +1198,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "portcullis",
             "wicketkeeper",
             "yourcaptcha",
+            "silentchallenge",
             "anubis",
         ):
             common.update({
@@ -1577,6 +1622,27 @@ async def amain(argv: list[str] | None = None) -> int:
             start=args.start,
             max_attempts=args.max_attempts,
             timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "silentchallenge":
+        ret = await client.solve_silentchallenge(
+            base_url=args.base_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            submit=args.submit,
+            motion_json=args.motion_json,
+            motion_file=args.motion_file,
+            signals_json=args.signals_json,
+            signals_file=args.signals_file,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            timeout_sec=args.timeout,
+            min_submit_ms=args.min_submit_ms,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
         )
@@ -2207,6 +2273,35 @@ async def amain(argv: list[str] | None = None) -> int:
                 start=args.start,
                 max_attempts=args.max_attempts,
                 timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "silentchallenge":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="silentchallenge",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_silentchallenge(
+                base_url=args.base_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                submit=args.submit,
+                motion_json=args.motion_json,
+                motion_file=args.motion_file,
+                signals_json=args.signals_json,
+                signals_file=args.signals_file,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                timeout_sec=args.timeout,
+                min_submit_ms=args.min_submit_ms,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
             ),

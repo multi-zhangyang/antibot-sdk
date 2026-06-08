@@ -35,6 +35,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://api.privatecaptcha.com/puzzle") == "privatecaptcha"
     assert detect_provider_for_url("https://captcha.example/api/v1/challenge") == "portcullis"
     assert detect_provider_for_url("https://example.com/api/captcha/challenge") == "yourcaptcha"
+    assert detect_provider_for_url("https://captcha.example/silent-challenge") == "silentchallenge"
     assert detect_provider_for_url("https://example.com") == "browser"
     assert "qoder_signup" in list_profiles()["aliyun"]
     assert "generic_v4" in list_profiles()["geetest"]
@@ -52,6 +53,7 @@ def test_generic_provider_detection():
     assert "compute_pow" in list_profiles()["privatecaptcha"]
     assert "argon2_pow" in list_profiles()["portcullis"]
     assert "behavior_pow" in list_profiles()["yourcaptcha"]
+    assert "passive_pow" in list_profiles()["silentchallenge"]
 
 
 def test_vendored_upstream_snapshots_present():

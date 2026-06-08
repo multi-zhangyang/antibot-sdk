@@ -146,6 +146,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "wicketkeeper"
     if any(x in u or x in host for x in ("yourcaptcha", "/api/captcha/challenge", "/api/captcha/verify")):
         return "yourcaptcha"
+    if any(x in u or x in host for x in ("silent-challenge", "silentchallenge", "libcaptcha")):
+        return "silentchallenge"
     if any(x in u or x in host for x in ("geetest", "gcaptcha4", "gt4.geetest")):
         return "geetest"
     if any(x in u or x in host for x in ("yidun", "necaptcha", "dun.163.com", "c.dun.163.com")):
@@ -324,6 +326,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "synthetic-behavior-telemetry-plus-sha256-exact-pow-solver",
                 "successFields": ["captcha payload", "verified result"],
                 "endpoints": ["/api/captcha/challenge", "/api/captcha/verify"],
+            }
+        },
+        "silentchallenge": {
+            "passive_pow": {
+                "patterns": ["silent-challenge", "silentchallenge", "/challenge/:challengeId/verify"],
+                "mode": "synthetic-motion-navigator-attestation-plus-balloon-pow-solver",
+                "successFields": ["cleared", "token"],
+                "endpoints": ["/challenge", "/challenge/:challengeId/verify"],
             }
         },
         "yidun": {

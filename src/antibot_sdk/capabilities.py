@@ -185,6 +185,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "captcha payload / verified result",
         "scope": "yourcaptcha 行为 signals + HMAC challenge + SHA-256 exact PoW：合成低风险 telemetry 获取低 maxnumber，搜索 salt+number exact hash，可提交 verify；不启动浏览器。",
     },
+    "silentchallenge": {
+        "provider": "silentchallenge",
+        "name": "silent-challenge",
+        "category": "solver",
+        "captcha_type": "passive_pow",
+        "status": "alpha",
+        "output": "challenge verify body / signed token",
+        "scope": "silent-challenge motion/navigator attestation + SHA-256 balloon PoW：合成高分 motion 与 navigator signals，复现 memory-hard balloon hash 搜索 nonce，可提交 /challenge/:id/verify；不启动浏览器。",
+    },
     "geetest": {
         "provider": "geetest",
         "name": "GeeTest v4",

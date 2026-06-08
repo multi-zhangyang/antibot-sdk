@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -27,6 +27,7 @@
 - mCaptcha：新增 SHA-256 PoW 协议 solver，复现 Rust/JS 的 `bincode(String)+u128 score` 规则，获取 `/api/v1/pow/config` 后本地找 nonce，可提交 `/api/v1/pow/verify` 换 token，不启动浏览器。
 - Wicketkeeper：新增 EdDSA-JWT PoW 协议 solver，获取 `/v0/challenge` 后计算 `SHA256(challenge+nonce)` 前导零，可提交 `/v0/siteverify` 换 success JWT，不启动浏览器。
 - yourcaptcha：新增行为 signals + HMAC challenge + SHA-256 exact PoW 协议 solver，合成低风险 telemetry 获取低 `maxnumber`，搜索 `SHA256(salt+number)`，可提交 verify，不启动浏览器。
+- silent-challenge：新增 motion/navigator attestation + SHA-256 balloon memory-hard PoW 协议 solver，合成高分行为/环境 payload，搜索 balloon nonce，可提交 `/challenge/:id/verify`，不启动浏览器。
 - P-Captcha：新增 QuadraticResidueProblem 协议 solver，解析 Woodall prime challenge，用模平方根直接求 answer，可提交 `{id, answer}`，不启动浏览器。
 - pow_captcha：新增二进制 buffer reconstruction PoW solver，解析 serialized quiz、按 uncertainty ranges 做 mixed-radix 搜索，输出命中 SHA-256 的 answer，不启动浏览器。
 - GeeTest v4：从 observer 升级出滑动 solver alpha，抓取 bg/slice、CV 匹配缺口、生成拖动轨迹，并提取 `lot_number/captcha_output/pass_token/gen_time`。
@@ -62,6 +63,7 @@
 | mCaptcha | 协议 solver | `proof_of_work` | alpha | verify body / mCaptcha token |
 | Wicketkeeper | 协议 solver | `proof_of_work` | alpha | hidden-input solution / success JWT |
 | yourcaptcha | 协议 solver | `behavior_pow` | alpha | captcha payload / verified result |
+| silent-challenge | 协议 solver | `passive_pow` | alpha | challenge verify body / signed token |
 | P-Captcha | 协议 solver | `quadratic_residue_pow` | alpha | `answer` / `{id, answer}` |
 | pow_captcha | 协议 solver | `buffer_reconstruction_pow` | alpha | answer buffer / verify body |
 | GeeTest v4 | 真实 solver | `slider` | alpha | `pass_token/lot_number` |
@@ -1754,7 +1756,77 @@ async with AntibotClient() as client:
 
 ---
 
-### 26. GeeTest v4 / 极验
+### 26. silent-challenge 被动 attestation + balloon PoW
+
+silent-challenge 比普通 hashcash 更高级：它把 motion attestation、navigator attestation、QuickJS/WASM VM response 和 SHA-256 balloon PoW 合成一个被动挑战。SDK 当前做协议层可闭环部分：不启动浏览器，直接补 motion/navigator 环境，并复现 memory-hard balloon hash 搜索 nonce。
+
+关键点：
+
+- challenge endpoint：`POST /challenge`。
+- challenge 响应：`{challengeId, pow:{prefix,difficulty,spaceCost,timeCost,delta}, ttl}`。
+- PoW 不是普通 `SHA256(prefix+nonce)`，而是 balloon hash：
+
+```text
+input = prefix + String(nonce)
+buffer[0] = SHA256(u32le(counter=0) || input)
+填充 spaceCost 个 32-byte block
+按 timeCost/delta 做依赖混合
+要求最后 block 的 leading zero bits >= difficulty
+```
+
+- verify body 提交：`{nonce, motion, signals, vmResponse?}`。
+- SDK 默认不跑 QuickJS/WASM VM；利用默认权重下 motion + navigator + pow 已足够通过 combined threshold 的事实，提交高分 motion/navigator payload，`vmResponse` 保持缺失并在 flags 里暴露。
+- 如果目标部署强制 VM 单项阈值或自定义权重，当前版本会显示为验证失败，不伪装通过。
+
+命令示例：
+
+```bash
+antibot solve silentchallenge \
+  --base-url 'https://target.example' \
+  --submit
+```
+
+只解本地 challenge JSON，不请求网络：
+
+```bash
+antibot solve silentchallenge \
+  --challenge-json '{"challengeId":"...","pow":{"prefix":"...","difficulty":10,"spaceCost":512,"timeCost":1,"delta":3}}'
+```
+
+压测：
+
+```bash
+antibot stress silentchallenge \
+  --challenge-json '{"challengeId":"fixture-id","pow":{"prefix":"fixture-prefix-","difficulty":8,"spaceCost":8,"timeCost":1,"delta":3}}' \
+  --runs 20 \
+  --concurrency 4
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient, generate_silentchallenge_motion, generate_silentchallenge_signals
+
+async with AntibotClient() as client:
+    ret = await client.solve_silentchallenge(
+        base_url="https://target.example",
+        motion_json=generate_silentchallenge_motion(),
+        signals_json=generate_silentchallenge_signals(),
+        submit=True,
+    )
+    print(ret.ok, ret.ticket, ret.verify_code, ret.diagnostics.get("nonce"))
+```
+
+当前定位：
+
+- 这是 motion/navigator 补环境 + memory-hard PoW solver，不做浏览器模拟。
+- 已按 upstream `src/crypto.js` 的 counter、little-endian counter、big-endian digest index、`spaceCost/timeCost/delta` 混合顺序复现。
+- 默认 synthetic motion 在 upstream scorer 中为 human 档，navigator signals 为 trusted 档；默认 middleware 即使 `vmResponse` 缺失也能通过 combined threshold。
+- PoW 耗时主要由 `difficulty × spaceCost × timeCost × delta` 决定；VPS 上优先控制并发。
+
+---
+
+### 27. GeeTest v4 / 极验
 
 GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：能在官方 v4 slide demo 上完成图片定位、轨迹拖动和成功载荷提取。但这个能力还不是稳定通杀，真实站点仍会受风险策略、设备指纹、轨迹质量和出口 IP 影响。
 
@@ -1851,7 +1923,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 27. 网易易盾 / Yidun 滑动拼图
+### 28. 网易易盾 / Yidun 滑动拼图
 
 Yidun 现在保留 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
 
@@ -1922,7 +1994,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 28. 自动分发模式
+### 29. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
@@ -1943,6 +2015,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - mCaptcha / `/api/v1/pow/config` 相关 URL -> `mcaptcha`
 - Wicketkeeper / `/v0/challenge` 相关 URL -> `wicketkeeper`
 - yourcaptcha / `/api/captcha/challenge` / `/api/captcha/verify` 相关 URL -> `yourcaptcha`
+- silent-challenge / silentchallenge / libcaptcha 相关 URL -> `silentchallenge`
 - P-Captcha / QuadraticResidueProblem 相关 URL -> `pcaptcha`
 - pow_captcha / powcaptcha / takeTest 相关 URL -> `powcaptcha`
 - Tencent / TCaptcha 相关 URL -> `tencent`
@@ -1962,7 +2035,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 29. 代理格式
+### 30. 代理格式
 
 支持以下格式：
 
@@ -2239,6 +2312,10 @@ antibot stress wicketkeeper --base-url 'https://captcha.example' --runs 20
 antibot solve yourcaptcha --challenge-url 'https://target.example/api/captcha/challenge' --verify-url 'https://target.example/api/captcha/verify' --submit
 antibot stress yourcaptcha --challenge-json '{"algorithm":"SHA-256","challenge":"...","maxnumber":50000,"salt":"...","signature":"..."}' --runs 20 --concurrency 4
 
+# silent-challenge
+antibot solve silentchallenge --base-url 'https://target.example' --submit
+antibot stress silentchallenge --challenge-json '{"challengeId":"fixture-id","pow":{"prefix":"fixture-prefix-","difficulty":8,"spaceCost":8,"timeCost":1,"delta":3}}' --runs 20 --concurrency 4
+
 # P-Captcha
 antibot solve pcaptcha --challenge-url 'https://target.example/api/challenge'
 antibot solve pcaptcha --challenge-url 'https://target.example/api/challenge' --validate-url 'https://target.example/api/validate' --validate
@@ -2281,7 +2358,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / Cap / yourcaptcha / P-Captcha / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / Cap / yourcaptcha / silent-challenge / P-Captcha / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -2293,6 +2370,7 @@ anubis_run.json
 friendlycaptcha_run.json
 cap_run.json
 yourcaptcha_run.json
+silentchallenge_run.json
 pcaptcha_run.json
 geetest_slide_bg_N.png / geetest_slide_slice_N.png
 yidun_run.json / yidun_page.png / yidun_page.html
@@ -2353,6 +2431,7 @@ src/antibot_sdk/
     mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
     wicketkeeper.py         # Wicketkeeper JWT PoW protocol solver
     yourcaptcha.py          # yourcaptcha behavioral signals + SHA-256 exact PoW protocol solver
+    silentchallenge.py      # silent-challenge motion/navigator attestation + balloon PoW solver
     pcaptcha.py             # P-Captcha quadratic residue protocol solver
     powcaptcha.py           # pow_captcha buffer reconstruction PoW protocol solver
     geetest.py              # GeeTest v4 hook + slide solver alpha
@@ -2379,6 +2458,7 @@ tests/
   test_pcaptcha.py
   test_powcaptcha.py
   test_yourcaptcha.py
+  test_silentchallenge.py
   test_yidun_slide.py
 ```
 
@@ -2389,7 +2469,7 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 87 passed
+pytest: 91 passed
 node -c bridge.js/site_profiles.js/runner.js: passed
 uv build: success
 watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON
@@ -2556,6 +2636,16 @@ upstream src/server/challenge.ts / verify.ts / signals.ts：确认 HMAC(challeng
 本地 challenge-json stress 20 轮/concurrency=4：20/20。
 ```
 
+silent-challenge：
+
+```text
+upstream src/crypto.js：确认 balloon hash counter、u32LE counter、u32BE digest index、spaceCost/timeCost/delta 混合顺序。
+fixture input=fixture-prefix-269,space=8,time=1,delta=3 -> hash=008d7af48e4b4a31436732d1d9b78cfabbbc4ab8dc7c3a22d9e50d554cf2358a，leadingZeroBits=8。
+upstream createChallengeManager debug：synthetic motion score=0.72，navigator score=0.90，vmResponse 缺失时 combined=0.591，cleared=true，返回 signed token。
+本地 mock /challenge + /challenge/:id/verify：ok=true，成功返回 silent-token。
+本地 challenge-json stress 20 轮/concurrency=4：20/20。
+```
+
 P-Captcha：
 
 ```text
@@ -2612,6 +2702,7 @@ stress recaptcha mock 2 轮：2/2。
 - mCaptcha PoW 耗时主要由 `difficulty_factor`、nonce 命中位置和 worker 数决定；默认单 worker，压测时先控制并发避免把 VPS CPU 打满。
 - Wicketkeeper difficulty 是前导 0 nibble 个数，每 +1 平均搜索空间约乘 16；success JWT 只能由服务端 `/siteverify` 签发。
 - yourcaptcha 的主要优化点是 signals 风险分和 exact PoW 搜索空间；低风险 `maxnumber=50000` 很轻，高风险会升到 `10_000_000`，VPS 上压测先控制 `--concurrency`。
+- silent-challenge 的耗时主要来自 balloon PoW：`spaceCost=512,difficulty=10` 平均会比普通 SHA-256 慢很多；默认 VM response 不生成，若目标强制 VM 阈值则需要后续升级 VM bundle 解密/签名链路。
 - P-Captcha 当前不是暴力搜索，而是模平方根；耗时主要由 Woodall prime bit 数和 rounds 决定，`2xs` 约 761 bits，`3xl` 约 22974 bits。
 - pow_captcha 是 buffer reconstruction PoW；耗时取决于 uncertainty 个数、各自 base 的乘积 search_space、命中位置和 worker 数。VPS 上优先降并发，再考虑多 worker。
 - Yidun 的误差主要来自三类：浅色缺口的 `color_template` / 暗色缺口的 `shadow_*` 分支选择、front 图片相对 slider 的视觉偏移、以及轨迹/IP/设备指纹。
