@@ -119,6 +119,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "gunslol"
     if any(x in u or x in host for x in ("friendlycaptcha", "friendlycaptcha.com", "frc-captcha")):
         return "friendlycaptcha"
+    if any(x in u or x in host for x in ("fcaptcha", "/api/pow/challenge")):
+        return "fcaptcha"
     if any(x in u or x in host for x in ("trycap.dev", "cap.js", "cap-widget", "capjs")):
         return "cap"
     if any(
@@ -222,6 +224,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "friendly-pow-protocol-solver",
                 "successFields": ["frc-captcha-solution"],
                 "endpoints": ["/api/v1/puzzle"],
+            }
+        },
+        "fcaptcha": {
+            "signals_bound_pow": {
+                "patterns": ["fcaptcha", "/api/pow/challenge", "/api/verify"],
+                "mode": "behavior-environment-signals-hash-bound-pow-solver",
+                "successFields": ["token", "success"],
+                "endpoints": ["/api/pow/challenge", "/api/verify", "/api/score"],
             }
         },
         "gunslol": {

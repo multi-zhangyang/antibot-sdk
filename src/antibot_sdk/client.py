@@ -12,6 +12,7 @@ from .providers.auro import AuroSolver
 from .providers.browser import BrowserAutomation
 from .providers.cap import CapSolver
 from .providers.chpiopow import ChpioPowSolver
+from .providers.fcaptcha import FCaptchaSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.gunslol import GunsLolSolver
@@ -46,6 +47,7 @@ class AntibotClient:
         self.altcha = AltchaSolver()
         self.anubis = AnubisSolver()
         self.auro = AuroSolver()
+        self.fcaptcha = FCaptchaSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
         self.gunslol = GunsLolSolver()
         self.mcaptcha = MCaptchaSolver()
@@ -103,6 +105,9 @@ class AntibotClient:
 
     async def solve_friendlycaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.friendlycaptcha.solve(**kwargs)
+
+    async def solve_fcaptcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.fcaptcha.solve(**kwargs)
 
     async def solve_mcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.mcaptcha.solve(**kwargs)
@@ -688,6 +693,44 @@ class AntibotClient:
                 else:
                     sc_kwargs["base_url"] = target_url
             return await self.solve_silentchallenge(**sc_kwargs)
+        if provider == "fcaptcha":
+            fc_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "site_key",
+                    "submit",
+                    "score_endpoint",
+                    "signals_json",
+                    "signals_file",
+                    "start",
+                    "max_attempts",
+                    "timeout_sec",
+                    "min_submit_ms",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            if not fc_kwargs.get("base_url") and not fc_kwargs.get("challenge_url"):
+                if "/api/pow/challenge" in target_url:
+                    fc_kwargs["challenge_url"] = target_url
+                elif "/api/verify" in target_url or "/api/score" in target_url:
+                    fc_kwargs["verify_url"] = target_url
+                    marker = "/api/score" if "/api/score" in target_url else "/api/verify"
+                    fc_kwargs["base_url"] = target_url.split(marker, 1)[0]
+                    if marker == "/api/score":
+                        fc_kwargs["score_endpoint"] = True
+                else:
+                    fc_kwargs["base_url"] = target_url
+            return await self.solve_fcaptcha(**fc_kwargs)
         if provider == "aliyun":
             return await self.solve_aliyun(target_url=target_url, **kwargs)
         if provider == "recaptcha":

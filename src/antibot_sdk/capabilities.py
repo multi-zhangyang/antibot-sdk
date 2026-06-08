@@ -68,6 +68,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "frc-captcha-solution payload",
         "scope": "FriendlyCaptcha classic PoW：获取 puzzle，按 friendly-pow/blake2b 求解多段 nonce，输出隐藏表单字段 payload；不启动浏览器。",
     },
+    "fcaptcha": {
+        "provider": "fcaptcha",
+        "name": "FCaptcha",
+        "category": "solver",
+        "captcha_type": "signals_bound_pow",
+        "status": "alpha",
+        "output": "verify body / FCaptcha token",
+        "scope": "FCaptcha 行为/环境检测 + signalsHash 绑定 SHA-256 PoW：合成低风险 behavioral/environmental signals，按 JSON.stringify signalsHash 搜索 nonce，可提交 /api/verify 换 token；不启动浏览器。",
+    },
     "gunslol": {
         "provider": "gunslol",
         "name": "guns.lol",

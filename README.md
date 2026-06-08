@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -16,6 +16,7 @@
 - Anubis：新增 `fast/slow` PoW 协议 solver，解析 challenge 页面或 make-challenge JSON，计算 `SHA256(randomData+nonce)` 前导零，可生成 `pass-challenge` 参数或直接换取 auth cookie，不启动浏览器。
 - Auro.Network：新增 AES-GCM 行为数据 + PoW 协议 solver，获取 `/enckey`，生成鼠标 telemetry 并 AES-GCM 加密，提交 `/api/pow/setup` 后搜索 `SHA256(prefix+nonce)`，可 `/api/pow/validate`，不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
+- FCaptcha：新增 behavior/environment signals + `signalsHash` 绑定 SHA-256 PoW 协议 solver，补齐 `meta.challengeNonce`、canonical `signalsJson` 和最小提交耗时，可提交 `/api/verify` 换 token，不启动浏览器。
 - PrivateCaptcha：新增 compute puzzle 协议 solver，解析 `puzzle.signature`，复现 blake2b-256 threshold 多解 PoW 与 solutions metadata，输出 `private-captcha-solution` payload，不启动浏览器。
 - Portcullis：新增 Argon2id + SHA-256 双阶段 PoW 协议 solver，解析 signed challenge，计算内存硬化 base hash 后搜索 nonce，可提交 `/api/v1/verify` 换 `captcha_token`，不启动浏览器。
 - Cap / @cap.js：升级 SHA-256 PoW + RSW time-lock 协议 solver，支持 v1 seeded challenge、format-2 `sha256-pow` 和 `rsw`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
@@ -52,6 +53,7 @@
 | Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
 | Auro.Network | 协议 solver | `encrypted_behavior_pow` | alpha | validate body / Auro token |
 | FriendlyCaptcha | 协议 solver | `proof_of_work` | alpha | `frc-captcha-solution` payload |
+| FCaptcha | 协议 solver | `signals_bound_pow` | alpha | verify body / FCaptcha token |
 | PrivateCaptcha | 协议 solver | `compute_pow` | alpha | `private-captcha-solution` payload |
 | Portcullis | 协议 solver | `argon2_pow` | alpha | verify body / `captcha_token` |
 | Cap / @cap.js | 协议 solver | `proof_of_work` | alpha | `/redeem` body / Cap token |
@@ -885,6 +887,70 @@ async with AntibotClient() as client:
 - 这是 FriendlyCaptcha classic PoW solver，不是 hCaptcha/reCAPTCHA 那种图片挑战 solver。
 - 默认单 worker，`--workers` 可加速，但 VPS 上不建议盲目开太大。
 - 默认每段 solution 最多搜索 `10,000,000` 次，可用 `--max-attempts-per-solution` 调整。
+
+---
+
+### 12.1 FCaptcha signals-bound PoW
+
+FCaptcha 的核心不是图片识别，而是“行为/环境 signals + PoW 绑定”。浏览器 widget 会先生成 behavioral/environmental payload，再对紧凑 JSON 做哈希，把这个 `signalsHash` 拼进 PoW 输入：
+
+```text
+signalsJson = JSON.stringify(signals)
+signalsHash = SHA256(signalsJson)
+hash = SHA256(prefix + ":" + signalsHash + ":" + nonce)
+```
+
+SDK 当前把这条链路做成纯协议 solver：
+
+- `GET /api/pow/challenge?siteKey=...` 获取 `challengeId/prefix/difficulty/nonce/sig`。
+- 合成低风险 behavioral/environmental signals：
+  - 鼠标轨迹点数、抖动、方向变化、overshoot、点击精度；
+  - `navigator/platform/languages/plugins/window.chrome`；
+  - WebGL/Canvas/WebRTC/Speech/Fonts/Permissions/DOMRect 等环境字段。
+- `meta.challengeNonce` 必须等于服务端 challenge 里的 `nonce`，否则会被判定 signals 没绑定本次 challenge。
+- 以 canonical `signalsJson` 计算 `signalsHash`，再搜索 PoW nonce。
+- 服务端有不可伪造的 `serverElapsed < 1500ms` 检查，所以 CLI/SDK 默认 `--min-submit-ms 1600`。
+- 可提交 `/api/verify` 或 `/api/score`，成功后返回 FCaptcha token。
+
+只解 challenge，不提交：
+
+```bash
+antibot solve fcaptcha \
+  --challenge-json '{"challengeId":"fc-1","prefix":"fc-1:1700000000000:2","difficulty":2,"nonce":"server-nonce","siteKey":"site-key"}' \
+  --site-key site-key \
+  --raw
+```
+
+完整协议闭环：
+
+```bash
+antibot solve fcaptcha \
+  --base-url 'https://captcha.example' \
+  --site-key site-key \
+  --submit \
+  --min-submit-ms 1600 \
+  --raw
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_fcaptcha(
+        base_url="https://captcha.example",
+        site_key="site-key",
+        submit=True,
+    )
+    print(ret.ok, ret.ticket, ret.verify_code)
+```
+
+当前定位：
+
+- 这是 behavior/environment signalsHash-bound PoW solver，不启动浏览器，适合 VPS/headless 受限环境。
+- `signalsJson` 一旦改变，`signalsHash` 和 PoW 都必须重算；不能先解 PoW 再改 signals。
+- 若真实部署接入 JA4/TLS 指纹、强 IP reputation 或高 difficulty，SDK 仍能输出正确客户端提交体，但成功率会受网络出口和服务端策略影响。
 
 ---
 
@@ -2004,6 +2070,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - Anubis / `.within.website/x/cmd/anubis` 相关 URL -> `anubis`
 - Auro.Network / `/api/pow/setup` / `/api/pow/validate` 相关 URL -> `auro`
 - FriendlyCaptcha / `frc-captcha` 相关 URL -> `friendlycaptcha`
+- FCaptcha / `/api/pow/challenge` / `/api/verify` 相关 URL -> `fcaptcha`
 - PrivateCaptcha / private-captcha / api.privatecaptcha.com 相关 URL -> `privatecaptcha`
 - Portcullis / pow-captcha / `/api/v1/challenge` 相关 URL -> `portcullis`
 - Cap / trycap / cap-widget 相关 URL -> `cap`
@@ -2358,7 +2425,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / Cap / yourcaptcha / silent-challenge / P-Captcha / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / FCaptcha / Cap / yourcaptcha / silent-challenge / P-Captcha / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -2368,6 +2435,7 @@ ajcaptcha_run.json / ajcaptcha_original.png / ajcaptcha_jigsaw.png
 altcha_run.json
 anubis_run.json
 friendlycaptcha_run.json
+fcaptcha_run.json
 cap_run.json
 yourcaptcha_run.json
 silentchallenge_run.json
@@ -2424,6 +2492,7 @@ src/antibot_sdk/
     anubis.py               # Anubis SHA-256 PoW protocol solver
     auro.py                 # Auro AES-GCM mouse telemetry + SHA-256 PoW protocol solver
     friendlycaptcha.py      # FriendlyCaptcha classic PoW protocol solver
+    fcaptcha.py             # FCaptcha behavior/environment signalsHash-bound PoW solver
     privatecaptcha.py       # PrivateCaptcha blake2b compute PoW protocol solver
     portcullis.py           # Portcullis Argon2id + SHA-256 PoW protocol solver
     cap.py                  # Cap/@cap.js SHA-256 PoW protocol solver
@@ -2452,6 +2521,7 @@ tests/
   test_altcha.py
   test_anubis.py
   test_friendlycaptcha.py
+  test_fcaptcha.py
   test_privatecaptcha.py
   test_portcullis.py
   test_cap.py
@@ -2469,7 +2539,8 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 91 passed
+pytest: 95 passed
+FCaptcha fixture/mock/stress: signalsHash-bound PoW、本地 /api/pow/challenge + /api/verify 验证通过
 node -c bridge.js/site_profiles.js/runner.js: passed
 uv build: success
 watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON

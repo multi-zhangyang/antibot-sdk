@@ -133,6 +133,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "aliyun",
             "tencent",
             "friendlycaptcha",
+            "fcaptcha",
             "gunslol",
             "cap",
             "chpiopow",
@@ -299,6 +300,26 @@ async def amain(argv: list[str] | None = None) -> int:
     frc.add_argument("--output-dir")
     frc.add_argument("--frc-client", default="js-0.9.19")
     frc.add_argument("--raw", action="store_true")
+
+    fc = solve_sub.add_parser("fcaptcha")
+    fc_source = fc.add_mutually_exclusive_group(required=True)
+    fc_source.add_argument("--base-url", help="FCaptcha server origin; infers /api/pow/challenge and /api/verify")
+    fc_source.add_argument("--challenge-json", help="inline challenge JSON, or @/path")
+    fc_source.add_argument("--challenge-file")
+    fc_source.add_argument("--challenge-url", help="FCaptcha /api/pow/challenge endpoint")
+    fc.add_argument("--verify-url", help="FCaptcha /api/verify or /api/score endpoint")
+    fc.add_argument("--site-key", default="default")
+    fc.add_argument("--submit", action="store_true", help="POST solved body to verify endpoint")
+    fc.add_argument("--score-endpoint", action="store_true", help="derive /api/score instead of /api/verify when --base-url is used")
+    fc.add_argument("--signals-json", help="inline signals JSON, or @/path; default synthesizes low-risk signals")
+    fc.add_argument("--signals-file")
+    fc.add_argument("--start", type=int, default=0)
+    fc.add_argument("--max-attempts", type=int)
+    fc.add_argument("--timeout", type=int, default=60)
+    fc.add_argument("--min-submit-ms", type=int, default=1600)
+    fc.add_argument("--proxy")
+    fc.add_argument("--output-dir")
+    fc.add_argument("--raw", action="store_true")
 
     cap = solve_sub.add_parser("cap")
     cap_source = cap.add_mutually_exclusive_group(required=True)
@@ -768,6 +789,29 @@ async def amain(argv: list[str] | None = None) -> int:
     sfrc.add_argument("--output-json")
     sfrc.add_argument("--full", action="store_true")
 
+    sfc = stress_sub.add_parser("fcaptcha")
+    sfc_source = sfc.add_mutually_exclusive_group(required=True)
+    sfc_source.add_argument("--base-url")
+    sfc_source.add_argument("--challenge-json")
+    sfc_source.add_argument("--challenge-file")
+    sfc_source.add_argument("--challenge-url")
+    sfc.add_argument("--verify-url")
+    sfc.add_argument("--site-key", default="default")
+    sfc.add_argument("--submit", action="store_true")
+    sfc.add_argument("--score-endpoint", action="store_true")
+    sfc.add_argument("--signals-json")
+    sfc.add_argument("--signals-file")
+    sfc.add_argument("--runs", type=int, default=10)
+    sfc.add_argument("--concurrency", type=int, default=2)
+    sfc.add_argument("--timeout", type=int, default=60)
+    sfc.add_argument("--min-submit-ms", type=int, default=1600)
+    sfc.add_argument("--start", type=int, default=0)
+    sfc.add_argument("--max-attempts", type=int)
+    sfc.add_argument("--proxy")
+    sfc.add_argument("--output-dir")
+    sfc.add_argument("--output-json")
+    sfc.add_argument("--full", action="store_true")
+
     scap = stress_sub.add_parser("cap")
     scap_source = scap.add_mutually_exclusive_group(required=True)
     scap_source.add_argument("--challenge-json")
@@ -1185,6 +1229,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "recaptcha",
             "turnstile",
             "cap",
+            "fcaptcha",
             "chpiopow",
             "auro",
             "gunslol",
@@ -1411,6 +1456,27 @@ async def amain(argv: list[str] | None = None) -> int:
             proxy_server=args.proxy,
             output_dir=args.output_dir,
             frc_client=args.frc_client,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "fcaptcha":
+        ret = await client.solve_fcaptcha(
+            base_url=args.base_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            site_key=args.site_key,
+            submit=args.submit,
+            score_endpoint=args.score_endpoint,
+            signals_json=args.signals_json,
+            signals_file=args.signals_file,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            timeout_sec=args.timeout,
+            min_submit_ms=args.min_submit_ms,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -1996,6 +2062,35 @@ async def amain(argv: list[str] | None = None) -> int:
                 max_attempts_per_solution=args.max_attempts_per_solution,
                 workers=args.workers,
                 timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "fcaptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="fcaptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + max(3, int(args.min_submit_ms / 1000) + 2),
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_fcaptcha(
+                base_url=args.base_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                site_key=args.site_key,
+                submit=args.submit,
+                score_endpoint=args.score_endpoint,
+                signals_json=args.signals_json,
+                signals_file=args.signals_file,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                timeout_sec=args.timeout,
+                min_submit_ms=args.min_submit_ms,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
             ),
