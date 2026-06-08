@@ -22,6 +22,7 @@ DEFAULT_CHALLENGE_DIFFICULTY = 4
 MAX_CHALLENGE_COUNT = 1000
 MAX_CHALLENGE_SIZE = 256
 MAX_CHALLENGE_DIFFICULTY = 16
+MAX_RSW_T = 1_000_000
 DEFAULT_MAX_ATTEMPTS_PER_CHALLENGE = 10_000_000
 FNV1A_OFFSET_BASIS = 2166136261
 FNV1A_PRIME = 16777619
@@ -35,10 +36,24 @@ class CapChallenge:
 
 
 @dataclass(slots=True)
+class CapRswChallenge:
+    N: str
+    x: str
+    t: int
+    protocol: str = "rsw"
+
+
+@dataclass(slots=True)
+class CapUnsupportedChallenge:
+    protocol: str
+    payload: dict[str, Any] | None = None
+
+
+@dataclass(slots=True)
 class CapSolution:
     token: str | None
-    challenges: list[CapChallenge]
-    solutions: list[int] | list[dict[str, int]]
+    challenges: list[CapChallenge | CapRswChallenge]
+    solutions: list[int] | list[dict[str, Any]]
     format: int = 1
     took_ms: int = 0
     checked: int = 0
@@ -139,6 +154,64 @@ def cap_pow_matches(hash_bytes: bytes, target: str) -> bool:
 
 def verify_cap_solution(salt: str, target: str, nonce: int | str) -> bool:
     return cap_pow_matches(cap_hash_bytes(salt, nonce), target)
+
+
+def cap_rsw_solution_hex(
+    N: int | str,
+    x: int | str,
+    t: int,
+    *,
+    timeout_sec: int | float | None = None,
+) -> str | None:
+    """Solve Cap format-2 RSW time-lock puzzle by repeated modular squaring.
+
+    The widget fallback does exactly this:
+    `for i in range(t): y = (y * y) % N`, then submits `{y: y.toString(16)}`.
+    """
+
+    challenge = CapRswChallenge(
+        N=_normalize_hex(N, "N"),
+        x=_normalize_hex(x, "x"),
+        t=_validate_rsw_t(t),
+    )
+    y, _diag = solve_cap_rsw(challenge, timeout_sec=timeout_sec)
+    return y
+
+
+def verify_cap_rsw_solution(
+    N: int | str,
+    x: int | str,
+    t: int,
+    y: int | str,
+    *,
+    timeout_sec: int | float | None = None,
+) -> bool:
+    solved = cap_rsw_solution_hex(N, x, t, timeout_sec=timeout_sec)
+    if solved is None:
+        return False
+    return _normalize_rsw_y(solved) == _normalize_rsw_y(y)
+
+
+def solve_cap_rsw(
+    challenge: CapRswChallenge | dict[str, Any],
+    *,
+    timeout_sec: int | float | None = None,
+    deadline: float | None = None,
+) -> tuple[str | None, dict[str, Any]]:
+    started = time.monotonic()
+    item = _coerce_rsw_challenge(challenge)
+    modulus = int(item.N, 16)
+    y = int(item.x, 16) % modulus
+    if modulus <= 1:
+        raise ValueError("Cap RSW N must be > 1")
+    deadline = deadline or (started + float(timeout_sec) if timeout_sec else None)
+    # Same cadence as Cap widget JS fallback: ~50 progress slices.
+    check_every = max(64, item.t // 50)
+    for step in range(item.t):
+        if deadline is not None and step and step % check_every == 0 and time.monotonic() >= deadline:
+            return None, _cap_diag(started, step, 0, "timeout")
+        y = (y * y) % modulus
+    return format(y, "x"), _cap_diag(started, item.t, 1, None)
 
 
 def solve_cap_pow(
@@ -258,7 +331,62 @@ def solve_cap_seeded(
     )
 
 
-def parse_cap_challenge_response(data: Any) -> tuple[str | None, int, list[CapChallenge], bool]:
+def solve_cap_format2_challenges(
+    challenges: Iterable[CapChallenge | CapRswChallenge],
+    *,
+    start: int = 0,
+    max_attempts_per_challenge: int = DEFAULT_MAX_ATTEMPTS_PER_CHALLENGE,
+    workers: int = 1,
+    timeout_sec: int | float | None = None,
+) -> tuple[list[dict[str, Any]] | None, dict[str, Any]]:
+    items = list(challenges)
+    if all(isinstance(ch, CapChallenge) and ch.protocol == "sha256-pow" for ch in items):
+        nonces, diag = solve_cap_challenges(
+            items,
+            start=start,
+            max_attempts_per_challenge=max_attempts_per_challenge,
+            workers=workers,
+            timeout_sec=timeout_sec,
+        )
+        if nonces is None:
+            return None, diag
+        return [{"nonce": int(n)} for n in nonces], diag
+
+    started = time.monotonic()
+    deadline = started + float(timeout_sec) if timeout_sec else None
+    checked_total = 0
+    solutions: list[dict[str, Any]] = []
+    for idx, ch in enumerate(items):
+        if deadline is not None and time.monotonic() >= deadline:
+            return None, _cap_diag(started, checked_total, idx, "timeout")
+        if isinstance(ch, CapChallenge) and ch.protocol == "sha256-pow":
+            nonce, checked = solve_cap_pow(
+                ch.salt,
+                ch.target,
+                start=start,
+                max_attempts=max_attempts_per_challenge,
+                deadline=deadline,
+            )
+            checked_total += checked
+            if nonce is None:
+                reason = "timeout" if deadline is not None and time.monotonic() >= deadline else "not_found"
+                return None, _cap_diag(started, checked_total, idx, reason)
+            solutions.append({"nonce": int(nonce)})
+        elif isinstance(ch, CapRswChallenge):
+            y_hex, diag = solve_cap_rsw(ch, deadline=deadline)
+            checked_total += int(diag.get("checked", 0))
+            if y_hex is None:
+                return None, _cap_diag(started, checked_total, idx, diag.get("error") or "timeout")
+            solutions.append({"y": y_hex})
+        else:
+            protocol = getattr(ch, "protocol", "unknown")
+            return None, _cap_diag(started, checked_total, len(solutions), f"unsupported:{protocol}")
+    return solutions, _cap_diag(started, checked_total, len(solutions), None)
+
+
+def parse_cap_challenge_response(
+    data: Any,
+) -> tuple[str | None, int, list[CapChallenge | CapRswChallenge | CapUnsupportedChallenge], bool]:
     """Return (token, format, challenges, has_unsupported_protocol)."""
 
     if isinstance(data, list):
@@ -274,22 +402,19 @@ def parse_cap_challenge_response(data: Any) -> tuple[str | None, int, list[CapCh
         entries = data.get("challenges")
         if not isinstance(entries, list):
             raise ValueError("Cap format=2 requires challenges list")
-        challenges: list[CapChallenge] = []
+        challenges: list[CapChallenge | CapRswChallenge | CapUnsupportedChallenge] = []
         unsupported = False
         for entry in entries:
             if not isinstance(entry, dict):
                 raise ValueError("Cap format=2 challenge entry must be object")
             proto = str(entry.get("protocol") or "")
             if proto != "sha256-pow":
-                unsupported = True
-                payload = entry.get("payload") if isinstance(entry.get("payload"), dict) else {}
-                challenges.append(
-                    CapChallenge(
-                        salt=str(payload.get("salt") or ""),
-                        target=str(payload.get("target") or ""),
-                        protocol=proto or "unknown",
-                    )
-                )
+                if proto == "rsw":
+                    challenges.append(_coerce_rsw_challenge(entry))
+                else:
+                    unsupported = True
+                    payload = entry.get("payload") if isinstance(entry.get("payload"), dict) else {}
+                    challenges.append(CapUnsupportedChallenge(protocol=proto or "unknown", payload=payload))
                 continue
             payload = entry.get("payload")
             if not isinstance(payload, dict):
@@ -360,6 +485,47 @@ def _coerce_challenge(value: CapChallenge | tuple[str, str] | list[str] | dict[s
     if isinstance(value, (tuple, list)) and len(value) >= 2:
         return CapChallenge(salt=str(value[0]), target=str(value[1]))
     raise ValueError(f"invalid Cap challenge item: {value!r}")
+
+
+def _coerce_rsw_challenge(value: CapRswChallenge | dict[str, Any]) -> CapRswChallenge:
+    if isinstance(value, CapRswChallenge):
+        return value
+    if not isinstance(value, dict):
+        raise ValueError(f"invalid Cap RSW challenge item: {value!r}")
+    payload = value.get("payload") if isinstance(value.get("payload"), dict) else value
+    return CapRswChallenge(
+        N=_normalize_hex(payload.get("N"), "N"),
+        x=_normalize_hex(payload.get("x"), "x"),
+        t=_validate_rsw_t(payload.get("t")),
+    )
+
+
+def _normalize_hex(value: Any, name: str) -> str:
+    if isinstance(value, int):
+        if value < 0:
+            raise ValueError(f"Cap RSW {name} must be non-negative")
+        text = format(value, "x")
+    else:
+        text = str(value or "").strip().lower()
+        if text.startswith("0x"):
+            text = text[2:]
+    if not text or not _is_hex(text):
+        raise ValueError(f"Cap RSW {name} must be hex")
+    return text.lstrip("0") or "0"
+
+
+def _normalize_rsw_y(value: Any) -> str:
+    return _normalize_hex(value, "y")
+
+
+def _validate_rsw_t(value: Any) -> int:
+    try:
+        t = int(value)
+    except Exception as e:
+        raise ValueError("Cap RSW t must be an integer") from e
+    if t < 0 or t > MAX_RSW_T:
+        raise ValueError(f"Cap RSW t must be 0..{MAX_RSW_T}")
+    return t
 
 
 def _cap_diag(started: float, checked: int, solved_count: int, error: str | None) -> dict[str, Any]:
@@ -434,10 +600,10 @@ def _redact_cap_response(data: Any) -> Any:
 class CapSolver:
     """Cap/@cap.js proof-of-work protocol solver.
 
-    This provider mirrors Cap v1 seeded SHA-256 PoW and format-2 `sha256-pow`
-    challenge lists.  It deliberately does not launch a browser and marks RSW /
-    instrumentation-only challenges unsupported instead of pretending to solve
-    them.
+    This provider mirrors Cap v1 seeded SHA-256 PoW, format-2 `sha256-pow`,
+    and format-2 `rsw` time-lock puzzles. It deliberately does not launch a
+    browser and marks instrumentation-only challenges unsupported instead of
+    pretending to solve browser telemetry.
     """
 
     async def solve(self, **kwargs: Any) -> CaptchaResult:
@@ -531,39 +697,71 @@ class CapSolver:
                 raw["challenge"] = _redact_cap_response(data)
                 return finish(ok=False)
 
-            parsed_token, fmt, challenges, unsupported = parse_cap_challenge_response(data)
+            parsed_token, fmt, parsed_challenges, unsupported = parse_cap_challenge_response(data)
             if unsupported:
-                unsupported_protocols = sorted({ch.protocol for ch in challenges if ch.protocol != "sha256-pow"})
+                unsupported_protocols = sorted(
+                    {
+                        ch.protocol
+                        for ch in parsed_challenges
+                        if isinstance(ch, CapUnsupportedChallenge)
+                        or ch.protocol not in {"sha256-pow", "rsw"}
+                    }
+                )
                 errors.append(f"unsupported Cap format-2 protocols: {', '.join(unsupported_protocols)}")
                 diagnostics["unsupported_protocols"] = unsupported_protocols
                 raw["challenge"] = _redact_cap_response(data)
                 return finish(ok=False)
 
+            challenges = [ch for ch in parsed_challenges if isinstance(ch, (CapChallenge, CapRswChallenge))]
+            protocols = [ch.protocol for ch in challenges]
             raw["challenge"] = _redact_cap_response(data)
             diagnostics.update(
                 {
                     "format": fmt,
                     "challenge_count": len(challenges),
-                    "target_lengths": sorted({len(ch.target) for ch in challenges}),
+                    "protocols": protocols,
+                    "target_lengths": sorted(
+                        {len(ch.target) for ch in challenges if isinstance(ch, CapChallenge)}
+                    ),
+                    "rsw_t": [ch.t for ch in challenges if isinstance(ch, CapRswChallenge)],
                     "token_prefix": parsed_token[:12] if parsed_token else None,
                 }
             )
             solve_started = time.monotonic()
-            nonces, solve_diag = solve_cap_challenges(
-                challenges,
-                start=start,
-                max_attempts_per_challenge=max_attempts_per_challenge,
-                workers=workers,
-                timeout_sec=timeout_sec,
-            )
+            if fmt == 2:
+                fmt2_solutions, solve_diag = solve_cap_format2_challenges(
+                    challenges,
+                    start=start,
+                    max_attempts_per_challenge=max_attempts_per_challenge,
+                    workers=workers,
+                    timeout_sec=timeout_sec,
+                )
+                nonces = [
+                    int(sol["nonce"])
+                    for sol in (fmt2_solutions or [])
+                    if isinstance(sol, dict) and "nonce" in sol
+                ]
+            else:
+                nonces, solve_diag = solve_cap_challenges(
+                    challenges,
+                    start=start,
+                    max_attempts_per_challenge=max_attempts_per_challenge,
+                    workers=workers,
+                    timeout_sec=timeout_sec,
+                )
+                fmt2_solutions = None
             diagnostics.update({f"solve_{k}": v for k, v in solve_diag.items()})
-            if nonces is None:
+            if fmt == 2 and fmt2_solutions is None:
+                err = solve_diag.get("error") or "not_found"
+                errors.append(f"Cap solve failed: {err}")
+                return finish(ok=False)
+            if fmt != 2 and nonces is None:
                 err = solve_diag.get("error") or "not_found"
                 errors.append(f"Cap solve failed: {err}")
                 return finish(ok=False)
 
             if fmt == 2:
-                solutions: list[int] | list[dict[str, int]] = [{"nonce": int(n)} for n in nonces]
+                solutions: list[int] | list[dict[str, Any]] = fmt2_solutions or []
             else:
                 solutions = [int(n) for n in nonces]
             solution = CapSolution(

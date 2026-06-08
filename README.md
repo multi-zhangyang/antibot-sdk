@@ -18,7 +18,7 @@
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
 - PrivateCaptcha：新增 compute puzzle 协议 solver，解析 `puzzle.signature`，复现 blake2b-256 threshold 多解 PoW 与 solutions metadata，输出 `private-captcha-solution` payload，不启动浏览器。
 - Portcullis：新增 Argon2id + SHA-256 双阶段 PoW 协议 solver，解析 signed challenge，计算内存硬化 base hash 后搜索 nonce，可提交 `/api/v1/verify` 换 `captcha_token`，不启动浏览器。
-- Cap / @cap.js：新增 SHA-256 PoW 协议 solver，支持 v1 seeded challenge 与 format-2 `sha256-pow`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
+- Cap / @cap.js：升级 SHA-256 PoW + RSW time-lock 协议 solver，支持 v1 seeded challenge、format-2 `sha256-pow` 和 `rsw`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
 - chpio/pow-captcha：新增 signed multi-challenge target-match PoW solver，复现 `signedData` 的 UTF-16LE SHA-256 签名与 `SHA256(solution_le||nonce)` target bit 匹配，可提交 redeem，不启动浏览器。
 - Impost：新增 Zig/WASM Argon2id PoW solver，复现 `t=3,m=8192KiB,p=1` 的内存硬化 hash，支持 `leading_zeroes` 与 `target_number` 两种策略，输出 `{challenge, nonce}`，不启动浏览器。
 - Kerberus：新增多盐 u128-score PoW solver，预计算 `SHA256(salt+serializedInput)`，搜索 `SHA256(prefixHash||nonce_dec)` 前 16 字节评分超过阈值，输出 `Solution{id, nonces}`，不启动浏览器。
@@ -1048,12 +1048,13 @@ async with AntibotClient() as client:
 
 ### 15. Cap / @cap.js PoW
 
-Cap 是 self-hosted CAPTCHA 方向里比较适合 SDK 化的一类：核心是 SHA-256 proof-of-work。SDK 当前只做协议层可验证的部分，不启动浏览器。
+Cap 是 self-hosted CAPTCHA 方向里比较适合 SDK 化的一类：老链路是 SHA-256 proof-of-work，新链路加入了 format-2 RSW time-lock puzzle。SDK 当前只做协议层可验证的部分，不启动浏览器。
 
 支持两种主流形态：
 
 - v1 seeded challenge：服务端返回 `token` 和 `challenge: {c, s, d}`，SDK 按 Cap PRNG 生成每个 `salt/target` 并搜索 nonce。
 - format-2 `sha256-pow`：服务端直接返回 `challenges: [{protocol:"sha256-pow", payload:{salt,target}}]`，SDK 逐个求解并输出 `{nonce}`。
+- format-2 `rsw`：服务端返回 `payload:{N,x,t}`，SDK 执行顺序型 modular squaring：`y = x; repeat t: y = y*y mod N`，输出 `{y}`。
 
 输出有两种：
 
@@ -1109,8 +1110,8 @@ async with AntibotClient() as client:
 
 当前定位：
 
-- 支持 Cap v1 seeded SHA-256 PoW 与 format-2 `sha256-pow`。
-- format-2 的 `rsw`、`instrumentation` 不伪装成已解决；遇到时会明确返回 unsupported diagnostics。
+- 支持 Cap v1 seeded SHA-256 PoW、format-2 `sha256-pow` 与 format-2 `rsw` time-lock puzzle。
+- format-2 的 `instrumentation` 不伪装成已解决；遇到时会明确返回 unsupported diagnostics。
 - 默认单 worker，适合 VPS；高 `d` 或高 `c` 时再显式调 `--workers` 和 `--timeout`。
 
 ---
@@ -2129,6 +2130,7 @@ antibot stress portcullis --base-url 'https://captcha.example' --sitekey 'pk_tes
 antibot solve cap --api-endpoint 'https://target.example/cap/'
 antibot solve cap --token 'challenge token' --c 50 --s 32 --d 4
 antibot stress cap --api-endpoint 'https://target.example/cap/' --runs 50 --concurrency 5
+antibot solve cap --challenge-json '{"token":"format-two-rsw-token","format":2,"challenges":[{"protocol":"rsw","payload":{"N":"5b","x":"05","t":10}}]}'
 
 # chpio/pow-captcha
 antibot solve chpiopow --challenge-json '{"magic":"2104f639-ba1b-48f3-9443-889128163f5a","challenges":[["AQI=","AwQF"]],"difficultyBits":18}' --max-attempts-per-challenge 100000
@@ -2433,10 +2435,12 @@ Cap / @cap.js：
 Cap PRNG/FNV 与 upstream core/src/prng.js 交叉校验。
 官方 core generateChallenge/validateChallenge v1：Python solve body 被 validateChallenge 接受。
 官方 core format-2 sha256-pow：Python solutions=[{nonce:...}] 被 validateChallenge 接受。
+官方 core/src/rsw.js 与 docs/guide/rsw.md：确认 RSW client solve = repeated modular squaring，widget submit `{y}`。
 本地 v1 seeded challenge + /redeem：ok=true，成功返回 Cap token。
 本地 format-2 sha256-pow + /redeem：ok=true，成功返回 Cap token。
-本地 Cap stress 30 轮/concurrency=5：30/30，avg≈54.1ms，p95≈81ms。
-unsupported 协议回归：format-2 rsw 明确返回 unsupported_protocols。
+本地 format-2 rsw + sha256-pow + /redeem：ok=true，成功返回 Cap token，fixture `{N=0x5b,x=0x05,t=10}` -> `y=4f`。
+本地 Cap RSW fixture stress 20 轮/concurrency=4：20/20。
+unsupported 协议回归：format-2 instrumentation 明确返回 unsupported_protocols。
 ```
 
 chpio/pow-captcha：
@@ -2516,7 +2520,7 @@ stress recaptcha mock 2 轮：2/2。
 - FriendlyCaptcha classic 也是 PoW；耗时主要由 difficulty、solution count、命中位置和 worker 数决定。默认 `10,000,000` 次/段 solution 上限，真实站点不够时调 `--max-attempts-per-solution`。
 - PrivateCaptcha compute puzzle 的 difficulty 每 +8 平均搜索空间约乘 2，solutionsCount 常是多解；先控制 `--concurrency`，再按 CPU 调 `--workers`。
 - Portcullis 多了 Argon2id 内存成本，`m_cost` 默认可到 19456 KiB；压测时先用低 concurrency，避免 VPS 内存抖动。
-- Cap PoW 耗时主要由 `c/s/d`、format-2 target 长度、命中位置和 worker 数决定；遇到 `rsw/instrumentation` 时不要硬解，当前版本会按 unsupported 返回。
+- Cap PoW 耗时主要由 `c/s/d`、format-2 target 长度、命中位置和 worker 数决定；RSW 耗时由 `t` 和模数位数决定，是顺序型 time-lock，不能像 SHA-256 那样简单靠 worker 横向切开；遇到 `instrumentation` 时当前版本按 unsupported 返回。
 - chpio/pow-captcha 是 target-match PoW；difficultyBits 每 +1 平均搜索空间约乘 2，challengeCount 越多 CPU 越重，VPS 上优先降 `--concurrency`。
 - mCaptcha PoW 耗时主要由 `difficulty_factor`、nonce 命中位置和 worker 数决定；默认单 worker，压测时先控制并发避免把 VPS CPU 打满。
 - Wicketkeeper difficulty 是前导 0 nibble 个数，每 +1 平均搜索空间约乘 16；success JWT 只能由服务端 `/siteverify` 签发。

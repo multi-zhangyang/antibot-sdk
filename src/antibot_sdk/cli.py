@@ -732,6 +732,8 @@ async def amain(argv: list[str] | None = None) -> int:
 
     scap = stress_sub.add_parser("cap")
     scap_source = scap.add_mutually_exclusive_group(required=True)
+    scap_source.add_argument("--challenge-json")
+    scap_source.add_argument("--challenge-file")
     scap_source.add_argument("--challenge-url")
     scap_source.add_argument("--api-endpoint", help="Cap API endpoint prefix; infers /challenge and /redeem")
     scap.add_argument("--runs", type=int, default=10)
@@ -1889,6 +1891,8 @@ async def amain(argv: list[str] | None = None) -> int:
             per_run_timeout=args.timeout + 5,
             output_json=args.output_json,
             run_once=lambda i: client.solve_cap(
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
                 challenge_url=args.challenge_url,
                 api_endpoint=args.api_endpoint,
                 redeem_url=args.redeem_url,

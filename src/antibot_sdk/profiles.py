@@ -231,8 +231,8 @@ def list_profiles() -> dict[str, Any]:
         "cap": {
             "sha256_pow": {
                 "patterns": ["trycap.dev", "cap.js", "cap-widget", "capjs"],
-                "mode": "cap-sha256-pow-protocol-solver",
-                "successFields": ["/redeem body", "Cap token"],
+                "mode": "cap-sha256-pow-plus-rsw-time-lock-protocol-solver",
+                "successFields": ["/redeem body", "Cap token", "RSW {y}"],
                 "endpoints": ["/challenge", "/redeem"],
             }
         },
