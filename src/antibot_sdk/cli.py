@@ -138,6 +138,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "cap",
             "cryptopuzzle",
             "captxa",
+            "crovly",
             "chpiopow",
             "impost",
             "kerberus",
@@ -389,6 +390,38 @@ async def amain(argv: list[str] | None = None) -> int:
     cx.add_argument("--user-agent")
     cx.add_argument("--timezone", default="America/New_York")
     cx.add_argument("--raw", action="store_true")
+
+    crv = solve_sub.add_parser("crovly")
+    crv_source = crv.add_mutually_exclusive_group(required=True)
+    crv_source.add_argument("--api-url", default="https://api.crovly.com", help="Crovly API root; infers /challenge and /verify")
+    crv_source.add_argument("--challenge-json", help="inline {nonce,difficulty} JSON, or @/path")
+    crv_source.add_argument("--challenge-file")
+    crv_source.add_argument("--challenge-url", help="Crovly /challenge endpoint")
+    crv.add_argument("--edge-url", default="https://edge.crovly.com")
+    crv.add_argument("--verify-url", help="Crovly /verify endpoint")
+    crv.add_argument("--site-key")
+    crv.add_argument("--submit", action="store_true")
+    crv.add_argument("--fingerprint-hash")
+    crv.add_argument("--fingerprint-json", help="inline fingerprintHash/profile JSON, or @/path")
+    crv.add_argument("--fingerprint-file")
+    crv.add_argument("--profile-json", help="inline synthetic browser profile JSON, or @/path")
+    crv.add_argument("--profile-file")
+    crv.add_argument("--environment-json", help="inline environment signals JSON, or @/path")
+    crv.add_argument("--environment-file")
+    crv.add_argument("--behavior-json", help="inline behavior stats JSON, or @/path")
+    crv.add_argument("--behavior-file")
+    crv.add_argument("--hold-json", help="inline hold-challenge stats JSON, or @/path")
+    crv.add_argument("--hold-file")
+    crv.add_argument("--start", type=int, default=0)
+    crv.add_argument("--max-attempts", type=int, default=2**32)
+    crv.add_argument("--workers", type=int, default=1)
+    crv.add_argument("--timeout", type=int, default=60)
+    crv.add_argument("--min-submit-ms", type=int, default=0)
+    crv.add_argument("--min-solve-ms", type=int, default=0)
+    crv.add_argument("--proxy")
+    crv.add_argument("--output-dir")
+    crv.add_argument("--user-agent")
+    crv.add_argument("--raw", action="store_true")
 
     chpio = solve_sub.add_parser("chpiopow")
     chpio_source = chpio.add_mutually_exclusive_group(required=True)
@@ -1051,6 +1084,41 @@ async def amain(argv: list[str] | None = None) -> int:
     scx.add_argument("--output-json")
     scx.add_argument("--full", action="store_true")
 
+    scrv = stress_sub.add_parser("crovly")
+    scrv_source = scrv.add_mutually_exclusive_group(required=True)
+    scrv_source.add_argument("--api-url")
+    scrv_source.add_argument("--challenge-json")
+    scrv_source.add_argument("--challenge-file")
+    scrv_source.add_argument("--challenge-url")
+    scrv.add_argument("--edge-url", default="https://edge.crovly.com")
+    scrv.add_argument("--verify-url")
+    scrv.add_argument("--site-key")
+    scrv.add_argument("--submit", action="store_true")
+    scrv.add_argument("--fingerprint-hash")
+    scrv.add_argument("--fingerprint-json")
+    scrv.add_argument("--fingerprint-file")
+    scrv.add_argument("--profile-json")
+    scrv.add_argument("--profile-file")
+    scrv.add_argument("--environment-json")
+    scrv.add_argument("--environment-file")
+    scrv.add_argument("--behavior-json")
+    scrv.add_argument("--behavior-file")
+    scrv.add_argument("--hold-json")
+    scrv.add_argument("--hold-file")
+    scrv.add_argument("--runs", type=int, default=10)
+    scrv.add_argument("--concurrency", type=int, default=2)
+    scrv.add_argument("--timeout", type=int, default=60)
+    scrv.add_argument("--start", type=int, default=0)
+    scrv.add_argument("--max-attempts", type=int, default=2**32)
+    scrv.add_argument("--workers", type=int, default=1)
+    scrv.add_argument("--min-submit-ms", type=int, default=0)
+    scrv.add_argument("--min-solve-ms", type=int, default=0)
+    scrv.add_argument("--proxy")
+    scrv.add_argument("--output-dir")
+    scrv.add_argument("--output-json")
+    scrv.add_argument("--user-agent")
+    scrv.add_argument("--full", action="store_true")
+
     schpio = stress_sub.add_parser("chpiopow")
     schpio_source = schpio.add_mutually_exclusive_group(required=True)
     schpio_source.add_argument("--challenge-json")
@@ -1594,6 +1662,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "cap",
             "cryptopuzzle",
             "captxa",
+            "crovly",
             "fcaptcha",
             "chpiopow",
             "auro",
@@ -1912,6 +1981,39 @@ async def amain(argv: list[str] | None = None) -> int:
             output_dir=args.output_dir,
             user_agent=args.user_agent,
             timezone_id=args.timezone,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "crovly":
+        ret = await client.solve_crovly(
+            site_key=args.site_key,
+            api_url=args.api_url,
+            edge_url=args.edge_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            submit=args.submit,
+            fingerprint_hash=args.fingerprint_hash,
+            fingerprint_json=args.fingerprint_json,
+            fingerprint_file=args.fingerprint_file,
+            profile_json=args.profile_json,
+            profile_file=args.profile_file,
+            environment_json=args.environment_json,
+            environment_file=args.environment_file,
+            behavior_json=args.behavior_json,
+            behavior_file=args.behavior_file,
+            hold_json=args.hold_json,
+            hold_file=args.hold_file,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            min_submit_ms=args.min_submit_ms,
+            min_solve_ms=args.min_solve_ms,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -2722,6 +2824,47 @@ async def amain(argv: list[str] | None = None) -> int:
                 output_dir=str(root / f"run_{i}") if root else None,
                 user_agent=args.user_agent,
                 timezone_id=args.timezone,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "crovly":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="crovly",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_crovly(
+                site_key=args.site_key,
+                api_url=args.api_url,
+                edge_url=args.edge_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                submit=args.submit,
+                fingerprint_hash=args.fingerprint_hash,
+                fingerprint_json=args.fingerprint_json,
+                fingerprint_file=args.fingerprint_file,
+                profile_json=args.profile_json,
+                profile_file=args.profile_file,
+                environment_json=args.environment_json,
+                environment_file=args.environment_file,
+                behavior_json=args.behavior_json,
+                behavior_file=args.behavior_file,
+                hold_json=args.hold_json,
+                hold_file=args.hold_file,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                min_submit_ms=args.min_submit_ms,
+                min_solve_ms=args.min_solve_ms,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
             ),
         )
         emit_stress(ret, full=args.full)

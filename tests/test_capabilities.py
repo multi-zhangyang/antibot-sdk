@@ -23,6 +23,7 @@ def test_capability_matrix_product_boundary() -> None:
         "cap",
         "cryptopuzzle",
         "captxa",
+        "crovly",
         "chpiopow",
         "impost",
         "kerberus",
@@ -55,6 +56,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["cap"]["captcha_type"] == "proof_of_work"
     assert solvers["cryptopuzzle"]["captcha_type"] == "rsw_time_lock_puzzle"
     assert solvers["captxa"]["captcha_type"] == "ja4_bound_pow"
+    assert solvers["crovly"]["captcha_type"] == "fingerprint_behavior_pow"
     assert solvers["chpiopow"]["captcha_type"] == "target_match_pow"
     assert solvers["impost"]["captcha_type"] == "argon2id_pow"
     assert solvers["kerberus"]["captcha_type"] == "u128_score_pow"

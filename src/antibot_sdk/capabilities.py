@@ -113,6 +113,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "solve body / X-Captcha-Token",
         "scope": "Captxa simple mode：补 browser metrics 通过环境预检，解析 opaque challenge_token 与 pow_challenge，复现 SHA256(pow32||nonce_le64) leading-zero PoW，可提交 /solve/simp；不启动浏览器。",
     },
+    "crovly": {
+        "provider": "crovly",
+        "name": "Crovly",
+        "category": "solver",
+        "captcha_type": "fingerprint_behavior_pow",
+        "status": "alpha",
+        "output": "verify body / Crovly token",
+        "scope": "Crovly widget 协议 solver：复现 SHA256(nonce+counter) 前导 bit PoW，合成 fingerprintHash、environment 与行为统计，按 X-Site-Key 提交 /verify 换 token；不启动浏览器。",
+    },
     "chpiopow": {
         "provider": "chpiopow",
         "name": "chpio/pow-captcha",

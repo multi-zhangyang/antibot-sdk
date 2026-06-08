@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -23,6 +23,7 @@
 - crypto-puzzle：新增 RSW time-lock puzzle solver，解析 archive，顺序 repeated-squaring 恢复 AES-GCM/PBKDF2 secret，解出 message/token，可提交 verify，不启动浏览器。
 - Captxa：新增 simple mode browser metrics + JA4-bound opaque token + SHA-256 PoW 协议 solver，补低风险环境字段，复现 `SHA256(pow32||nonce_le64)` leading-zero，可提交 `/solve/simp` 换 `X-Captcha-Token`，不启动浏览器。
 - Swetrix CAPTCHA：新增 privacy CAPTCHA 协议 solver，解析 `/generate` 的 `challenge+difficulty`，复现 `SHA256(challenge+":"+nonce)` 前导十六进制零 PoW，可提交 `/verify` 换 token，并可选 `/validate` 服务端校验，不启动浏览器。
+- Crovly：新增 fingerprintHash + environment + behavior 绑定的 PoW 协议 solver，复现 widget 的 `SHA256(nonce+counter)` 前导 bit 搜索，按 `X-Site-Key` 提交 `/verify` 换 token，不启动浏览器。
 - chpio/pow-captcha：新增 signed multi-challenge target-match PoW solver，复现 `signedData` 的 UTF-16LE SHA-256 签名与 `SHA256(solution_le||nonce)` target bit 匹配，可提交 redeem，不启动浏览器。
 - Impost：新增 Zig/WASM Argon2id PoW solver，复现 `t=3,m=8192KiB,p=1` 的内存硬化 hash，支持 `leading_zeroes` 与 `target_number` 两种策略，输出 `{challenge, nonce}`，不启动浏览器。
 - Kerberus：新增多盐 u128-score PoW solver，预计算 `SHA256(salt+serializedInput)`，搜索 `SHA256(prefixHash||nonce_dec)` 前 16 字节评分超过阈值，输出 `Solution{id, nonces}`，不启动浏览器。
@@ -68,6 +69,7 @@
 | crypto-puzzle | 协议 solver | `rsw_time_lock_puzzle` | alpha | decrypted message/token |
 | Captxa | 协议 solver | `ja4_bound_pow` | alpha | solve body / `X-Captcha-Token` |
 | Swetrix CAPTCHA | 协议 solver | `swetrix_pow` | alpha | verify body / Swetrix token |
+| Crovly | 协议 solver | `fingerprint_behavior_pow` | alpha | verify body / Crovly token |
 | chpio/pow-captcha | 协议 solver | `target_match_pow` | alpha | challenge solution body / redeemed token |
 | Impost | 协议 solver | `argon2id_pow` | alpha | `{challenge, nonce}` / validated message |
 | Kerberus | 协议 solver | `u128_score_pow` | alpha | `Solution{id, nonces}` / validated token |
@@ -1388,6 +1390,61 @@ antibot solve swetrix \
 
 ---
 
+### 15.3 Crovly fingerprint/behavior-bound PoW
+
+Crovly widget 的客户端链路不是图片识别，而是三段绑定：
+
+```text
+GET  /challenge  Header: X-Site-Key
+-> {nonce, difficulty, badge?, color?, size?}
+
+counter = first uint32 where leadingZeroBits(SHA256(nonce + counter)) >= difficulty
+fingerprintHash = SHA256(canvas|webgl|audio|screen|timezone|language|platform|deviceMemory|hardwareConcurrency)
+environment = {webdriver, chromeAbsent, noPlugins, swiftShader, notificationDenied, zeroScreen, noLanguages}
+behavior = {mm, md, mdc, msv, kc, kdv, sc, sdc, tc, el, mac, mte, kte, ...hold?}
+
+POST /verify Header: X-Site-Key
+{nonce, counter, solveTimeMs, fingerprintHash, environment, behavior}
+-> {passed, token, expiresAt?}
+```
+
+SDK 当前支持：
+
+- 复现 widget worker 的 `SHA256(nonce+counter)`，按 **前导 bit** 判断 difficulty；
+- 默认生成低风险 `fingerprintHash/environment/behavior`，不依赖 headless browser；
+- 支持覆盖 fingerprint/profile/environment/behavior/hold signals，方便接真实采集器；
+- 可从 `/challenge` 拉取、读取 fixture，或提交 `/verify` 换 token；
+- 可多进程 worker 搜索，并提供 `min-submit-ms/min-solve-ms` 调整时序；
+- VPS/headless 受限时仍可纯 HTTP 运行，不启动浏览器。
+
+命令示例：
+
+```bash
+antibot solve crovly \
+  --api-url 'https://api.crovly.com' \
+  --site-key 'crvl_site_xxx' \
+  --submit \
+  --timeout 60
+
+antibot solve crovly \
+  --challenge-json '{"nonce":"crovly-fixture","difficulty":12}' \
+  --timeout 5 \
+  --raw
+
+antibot stress crovly \
+  --challenge-json '{"nonce":"crovly-fixture","difficulty":12}' \
+  --runs 20 \
+  --concurrency 4
+```
+
+当前定位：
+
+- 这是协议 solver，不是文字点选/语义识图 solver；
+- 真实站点如果把 fingerprint、行为、IP reputation 和站点会话强绑定，可能需要接入站点侧采集到的 profile/signals；
+- SDK 已把最核心的 challenge/PoW/verify body 打通，后续优化重点是 profile 采样池、时序建模和失败反馈自适应。
+
+---
+
 ### 16. chpio/pow-captcha Target-match PoW
 
 chpio/pow-captcha 不是“前导零 hashcash”，而是服务端一次发多个 `(nonce,target)` 任务：客户端枚举 8 字节 little-endian `solution`，直到 `SHA256(solution_le_8 || nonce_bytes)` 的前 `difficultyBits` 位和 `target` 对齐。challenge 外层用 `signedData` 包住，签名规则是 `SHA256(UTF16LE(data_json + ":" + secret))`。
@@ -2589,6 +2646,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - crypto-puzzle / cryptopuzzle / time-lock-puzzle 相关 URL -> `cryptopuzzle`
 - Captxa / `/challenge/simp` / `/solve/simp` 相关 URL -> `captxa`
 - Swetrix CAPTCHA / `swetrixcaptcha` / `/v1/captcha/generate` 相关 URL -> `swetrix`
+- Crovly / `get.crovly.com/widget.js` / `api.crovly.com/challenge` 相关 URL -> `crovly`
 - chpio / chpiopow / signedData magic 相关 URL -> `chpiopow`
 - Impost / impost-captcha 相关 URL -> `impost`
 - Kerberus / difficultyFactor / serializedInput 相关 URL -> `kerberus`
@@ -2938,6 +2996,11 @@ antibot solve tollbooth --challenge-url 'https://target.example/protected' --sub
 antibot solve tollbooth --challenge-json '{"id":"tb-fixture","data":"tollbooth-fixture","difficulty":8,"spaceCost":8,"timeCost":1,"delta":1}' --timeout 5
 antibot stress tollbooth --challenge-url 'https://target.example/protected' --submit --runs 10 --concurrency 2
 
+# Crovly
+antibot solve crovly --api-url 'https://api.crovly.com' --site-key 'crvl_site_xxx' --submit --timeout 60
+antibot solve crovly --challenge-json '{"nonce":"crovly-fixture","difficulty":12}' --timeout 5
+antibot stress crovly --challenge-json '{"nonce":"crovly-fixture","difficulty":12}' --runs 20 --concurrency 4
+
 # Submit verification，证明 token 是否真过页面流程
 antibot verify recaptcha --url 'https://target.example/form' --captcha-json /tmp/recaptcha-run/recaptcha_run.json --submit '#submit' --success '.ok' --failure '.captcha-error'
 antibot verify hcaptcha --url 'https://target.example/form' --token 'P1_xxx' --submit '#submit' --success '.ok'
@@ -2970,7 +3033,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / FCaptcha / Cap / Captxa / Swetrix / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / FCaptcha / Cap / Captxa / Swetrix / Crovly / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -3053,6 +3116,7 @@ src/antibot_sdk/
     cryptopuzzle.py         # crypto-puzzle RSW time-lock archive solver
     captxa.py               # Captxa browser metrics + JA4-bound SHA-256 PoW solver
     swetrix.py              # Swetrix challenge:nonce SHA-256 PoW protocol solver
+    crovly.py               # Crovly fingerprint/behavior-bound SHA-256 bit PoW solver
     chpiopow.py             # chpio/pow-captcha signed target-match PoW protocol solver
     mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
     wicketkeeper.py         # Wicketkeeper JWT PoW protocol solver
@@ -3090,6 +3154,7 @@ tests/
   test_cryptopuzzle.py
   test_captxa.py
   test_swetrix.py
+  test_crovly.py
   test_pcaptcha.py
   test_powcaptcha.py
   test_powbot.py
@@ -3109,8 +3174,9 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 105 passed
+pytest: 125 passed
 Swetrix fixture/mock/live/stress: /generate + SHA256(challenge:nonce) PoW + /verify + /validate 验证通过
+Crovly fixture/mock/stress: /challenge + fingerprint/environment/behavior + SHA256(nonce+counter) bit-PoW + /verify 验证通过
 Captxa fixture/mock/stress: browser metrics + JA4-bound opaque token + SHA-256 PoW simple mode 验证通过
 FCaptcha fixture/mock/stress: signalsHash-bound PoW、本地 /api/pow/challenge + /api/verify 验证通过
 PoW Bot Deterrent fixture/mock/stress: scrypt-WASM PoW、本地 /GetChallenges + /Verify 验证通过

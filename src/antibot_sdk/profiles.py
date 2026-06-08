@@ -127,6 +127,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "cryptopuzzle"
     if any(x in u or x in host for x in ("captxa", "/challenge/simp", "/solve/simp")):
         return "captxa"
+    if any(x in u or x in host for x in ("crovly", "get.crovly.com", "api.crovly.com", "edge.crovly.com")):
+        return "crovly"
     if any(
         x in u or x in host
         for x in ("chpio", "2104f639-ba1b-48f3-9443-889128163f5a", "/chpiopow/")
@@ -283,6 +285,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "browser-metrics-plus-ja4-bound-sha256-pow-solver",
                 "successFields": ["X-Captcha-Token", "valid=true"],
                 "endpoints": ["/challenge/simp", "/solve/simp", "/api/validate"],
+            }
+        },
+        "crovly": {
+            "fingerprint_behavior_pow": {
+                "patterns": ["crovly", "get.crovly.com/widget.js", "api.crovly.com/challenge"],
+                "mode": "fingerprint-hash-plus-behavior-telemetry-sha256-bit-pow-solver",
+                "successFields": ["passed=true", "token"],
+                "endpoints": ["GET /challenge", "POST /verify"],
             }
         },
         "chpiopow": {

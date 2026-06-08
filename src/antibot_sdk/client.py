@@ -13,6 +13,7 @@ from .providers.browser import BrowserAutomation
 from .providers.cap import CapSolver
 from .providers.captxa import CaptxaSolver
 from .providers.chpiopow import ChpioPowSolver
+from .providers.crovly import CrovlySolver
 from .providers.fcaptcha import FCaptchaSolver
 from .providers.cryptopuzzle import CryptoPuzzleSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
@@ -52,6 +53,7 @@ class AntibotClient:
         self.cap = CapSolver()
         self.captxa = CaptxaSolver()
         self.chpiopow = ChpioPowSolver()
+        self.crovly = CrovlySolver()
         self.ajcaptcha = AJCaptchaSolver()
         self.altcha = AltchaSolver()
         self.anubis = AnubisSolver()
@@ -112,6 +114,9 @@ class AntibotClient:
 
     async def solve_chpiopow(self, **kwargs: Any) -> CaptchaResult:
         return await self.chpiopow.solve(**kwargs)
+
+    async def solve_crovly(self, **kwargs: Any) -> CaptchaResult:
+        return await self.crovly.solve(**kwargs)
 
     async def solve_altcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.altcha.solve(**kwargs)
@@ -469,6 +474,55 @@ class AntibotClient:
                 else:
                     captxa_kwargs["base_url"] = target_url
             return await self.solve_captxa(**captxa_kwargs)
+        if provider == "crovly":
+            crovly_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "site_key",
+                    "api_url",
+                    "edge_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "submit",
+                    "fingerprint_hash",
+                    "fingerprint_json",
+                    "fingerprint_file",
+                    "profile_json",
+                    "profile_file",
+                    "environment_json",
+                    "environment_file",
+                    "behavior_json",
+                    "behavior_file",
+                    "hold_json",
+                    "hold_file",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "min_submit_ms",
+                    "min_solve_ms",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not crovly_kwargs.get("api_url") and not crovly_kwargs.get("challenge_url"):
+                if target_lower.rstrip("/").endswith("/challenge"):
+                    crovly_kwargs["challenge_url"] = target_url
+                    crovly_kwargs["api_url"] = target_url[: target_lower.rindex("/challenge")]
+                elif target_lower.rstrip("/").endswith("/verify"):
+                    crovly_kwargs["verify_url"] = target_url
+                    crovly_kwargs["api_url"] = target_url[: target_lower.rindex("/verify")]
+                else:
+                    crovly_kwargs["api_url"] = target_url
+            return await self.solve_crovly(**crovly_kwargs)
         if provider == "chpiopow":
             cp_kwargs = {
                 k: v
