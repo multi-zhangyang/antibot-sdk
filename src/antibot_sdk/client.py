@@ -7,6 +7,7 @@ from .profiles import detect_provider_for_url
 from .providers.aliyun import AliyunCaptchaSolver
 from .providers.ajcaptcha import AJCaptchaSolver
 from .providers.altcha import AltchaSolver
+from .providers.anubis import AnubisSolver
 from .providers.browser import BrowserAutomation
 from .providers.cap import CapSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
@@ -29,6 +30,7 @@ class AntibotClient:
         self.cap = CapSolver()
         self.ajcaptcha = AJCaptchaSolver()
         self.altcha = AltchaSolver()
+        self.anubis = AnubisSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
         self.pcaptcha = PCaptchaSolver()
         self.tencent = TencentCaptchaSolver()
@@ -63,6 +65,9 @@ class AntibotClient:
 
     async def solve_altcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.altcha.solve(**kwargs)
+
+    async def solve_anubis(self, **kwargs: Any) -> CaptchaResult:
+        return await self.anubis.solve(**kwargs)
 
     async def solve_friendlycaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.friendlycaptcha.solve(**kwargs)
@@ -140,6 +145,36 @@ class AntibotClient:
             }
             altcha_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_altcha(**altcha_kwargs)
+        if provider == "anubis":
+            anubis_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "page_url",
+                    "base_url",
+                    "pass_url",
+                    "redir",
+                    "difficulty",
+                    "algorithm",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "submit",
+                    "ensure_test_cookie",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            anubis_kwargs.setdefault("page_url", target_url)
+            return await self.solve_anubis(**anubis_kwargs)
         if provider == "friendlycaptcha":
             frc_kwargs = {
                 k: v

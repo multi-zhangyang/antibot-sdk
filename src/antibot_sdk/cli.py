@@ -128,6 +128,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "auto",
             "ajcaptcha",
             "altcha",
+            "anubis",
             "aliyun",
             "tencent",
             "friendlycaptcha",
@@ -223,6 +224,28 @@ async def amain(argv: list[str] | None = None) -> int:
     alt.add_argument("--include-took", action="store_true")
     alt.add_argument("--mode", choices=["form", "m2m"], default="form")
     alt.add_argument("--raw", action="store_true")
+
+    anu = solve_sub.add_parser("anubis")
+    anu_source = anu.add_mutually_exclusive_group(required=True)
+    anu_source.add_argument("--challenge", help="inline Anubis randomData, JSON object, or challenge HTML")
+    anu_source.add_argument("--challenge-json", help="inline JSON object, or @/path/to/challenge.json")
+    anu_source.add_argument("--challenge-file")
+    anu_source.add_argument("--challenge-url", help="Anubis make-challenge JSON endpoint")
+    anu_source.add_argument("--page-url", help="Anubis challenge page with anubis_challenge JSONScript")
+    anu_source.add_argument("--base-url", help="target base URL; infers Anubis API endpoints")
+    anu.add_argument("--pass-url")
+    anu.add_argument("--redir", default="/")
+    anu.add_argument("--difficulty", type=int)
+    anu.add_argument("--algorithm", default="fast")
+    anu.add_argument("--start", type=int, default=0)
+    anu.add_argument("--max-attempts", type=int, default=50_000_000)
+    anu.add_argument("--workers", type=int, default=1)
+    anu.add_argument("--timeout", type=int, default=30)
+    anu.add_argument("--submit", action="store_true", help="GET pass-challenge and return auth cookie when available")
+    anu.add_argument("--no-ensure-test-cookie", action="store_true")
+    anu.add_argument("--proxy")
+    anu.add_argument("--output-dir")
+    anu.add_argument("--raw", action="store_true")
 
     frc = solve_sub.add_parser("friendlycaptcha")
     frc_source = frc.add_mutually_exclusive_group(required=True)
@@ -425,6 +448,26 @@ async def amain(argv: list[str] | None = None) -> int:
     salt.add_argument("--output-json")
     salt.add_argument("--full", action="store_true")
 
+    sanu = stress_sub.add_parser("anubis")
+    sanu_source = sanu.add_mutually_exclusive_group(required=True)
+    sanu_source.add_argument("--challenge-url")
+    sanu_source.add_argument("--page-url")
+    sanu_source.add_argument("--base-url")
+    sanu.add_argument("--pass-url")
+    sanu.add_argument("--redir", default="/")
+    sanu.add_argument("--difficulty", type=int)
+    sanu.add_argument("--algorithm", default="fast")
+    sanu.add_argument("--runs", type=int, default=10)
+    sanu.add_argument("--concurrency", type=int, default=2)
+    sanu.add_argument("--timeout", type=int, default=30)
+    sanu.add_argument("--max-attempts", type=int, default=50_000_000)
+    sanu.add_argument("--workers", type=int, default=1)
+    sanu.add_argument("--submit", action="store_true")
+    sanu.add_argument("--proxy")
+    sanu.add_argument("--output-dir")
+    sanu.add_argument("--output-json")
+    sanu.add_argument("--full", action="store_true")
+
     sfrc = stress_sub.add_parser("friendlycaptcha")
     sfrc.add_argument("--puzzle-url", required=True)
     sfrc.add_argument("--sitekey")
@@ -605,7 +648,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "proxy_server": args.proxy,
             "headless": headless,
         }
-        if provider in (None, "aliyun", "geetest", "yidun", "hcaptcha", "recaptcha", "turnstile", "cap", "pcaptcha"):
+        if provider in (None, "aliyun", "geetest", "yidun", "hcaptcha", "recaptcha", "turnstile", "cap", "pcaptcha", "anubis"):
             common.update({
                 "site_profile": args.site_profile,
                 "output_dir": args.output_dir,
@@ -717,6 +760,29 @@ async def amain(argv: list[str] | None = None) -> int:
             output_dir=args.output_dir,
             include_took=args.include_took,
             mode=args.mode,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "anubis":
+        ret = await client.solve_anubis(
+            challenge=args.challenge,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            page_url=args.page_url,
+            base_url=args.base_url,
+            pass_url=args.pass_url,
+            redir=args.redir,
+            difficulty=args.difficulty,
+            algorithm=args.algorithm,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            submit=args.submit,
+            ensure_test_cookie=not args.no_ensure_test_cookie,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -991,6 +1057,32 @@ async def amain(argv: list[str] | None = None) -> int:
                 max_number=args.max_number,
                 workers=args.workers,
                 timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "anubis":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="anubis",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_anubis(
+                challenge_url=args.challenge_url,
+                page_url=args.page_url,
+                base_url=args.base_url,
+                pass_url=args.pass_url,
+                redir=args.redir,
+                difficulty=args.difficulty,
+                algorithm=args.algorithm,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                submit=args.submit,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
             ),

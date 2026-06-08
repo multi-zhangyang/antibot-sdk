@@ -111,6 +111,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "ajcaptcha"
     if any(x in u or x in host for x in ("altcha", "altcha.org")):
         return "altcha"
+    if any(x in u or x in host for x in ("anubis", ".within.website/x/cmd/anubis", "techaro.lol-anubis")):
+        return "anubis"
     if any(x in u or x in host for x in ("friendlycaptcha", "friendlycaptcha.com", "frc-captcha")):
         return "friendlycaptcha"
     if any(x in u or x in host for x in ("trycap.dev", "cap.js", "cap-widget", "capjs")):
@@ -167,6 +169,14 @@ def list_profiles() -> dict[str, Any]:
                 "patterns": ["altcha", "altcha.org"],
                 "mode": "proof-of-work-protocol-solver",
                 "successFields": ["altcha base64 payload", "Authorization: Altcha ..."],
+            }
+        },
+        "anubis": {
+            "generic_pow": {
+                "patterns": ["anubis", ".within.website/x/cmd/anubis", "techaro.lol-anubis"],
+                "mode": "anubis-sha256-pow-protocol-solver",
+                "successFields": ["pass-challenge params", "Anubis auth cookie"],
+                "endpoints": ["/make-challenge", "/pass-challenge"],
             }
         },
         "friendlycaptcha": {

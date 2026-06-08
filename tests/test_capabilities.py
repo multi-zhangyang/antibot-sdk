@@ -15,6 +15,7 @@ def test_capability_matrix_product_boundary() -> None:
         "aliyun",
         "ajcaptcha",
         "altcha",
+        "anubis",
         "friendlycaptcha",
         "cap",
         "pcaptcha",
@@ -24,6 +25,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["tencent"]["captcha_type"] == "slider"
     assert solvers["ajcaptcha"]["captcha_type"] == "slider_protocol"
     assert solvers["altcha"]["captcha_type"] == "proof_of_work"
+    assert solvers["anubis"]["captcha_type"] == "proof_of_work"
     assert solvers["friendlycaptcha"]["captcha_type"] == "proof_of_work"
     assert solvers["cap"]["captcha_type"] == "proof_of_work"
     assert solvers["pcaptcha"]["captcha_type"] == "quadratic_residue_pow"

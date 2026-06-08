@@ -17,6 +17,14 @@ from .providers.altcha import (
     parse_altcha_payload_b64,
     solve_altcha_challenge,
 )
+from .providers.anubis import (
+    AnubisChallenge,
+    AnubisSolution,
+    anubis_hash_hex,
+    parse_anubis_challenge,
+    solve_anubis_challenge,
+    verify_anubis_solution,
+)
 from .providers.cap import (
     CapChallenge,
     CapSolution,
@@ -59,6 +67,8 @@ __all__ = [
     "CaptchaResult",
     "AltchaChallenge",
     "AltchaSolution",
+    "AnubisChallenge",
+    "AnubisSolution",
     "CapChallenge",
     "CapSolution",
     "FriendlyPuzzle",
@@ -83,6 +93,10 @@ __all__ = [
     "altcha_hash_hex",
     "parse_altcha_payload_b64",
     "solve_altcha_challenge",
+    "anubis_hash_hex",
+    "parse_anubis_challenge",
+    "solve_anubis_challenge",
+    "verify_anubis_solution",
     "cap_hash_hex",
     "cap_pow_matches",
     "cap_seeded_challenges",

@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / FriendlyCaptcha PoW / Cap PoW / P-Captcha 二次剩余 PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / FriendlyCaptcha PoW / Cap PoW / P-Captcha 二次剩余 PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -13,6 +13,7 @@
 - Aliyun Captcha：封装阿里云滑块的 Node/Puppeteer runner、站点 profile、attempt/session retry、错误归一、artifact 保留。
 - AJ-Captcha / Anji：新增纯 HTTP 协议 solver，走 `/captcha/get` 图像缺口定位、AES `pointJson`、`/captcha/check`，输出二次校验用的 `captchaVerification`，不启动浏览器。
 - ALTCHA：新增 PoW 协议 solver，解析 challenge / `WWW-Authenticate: Altcha ...`，计算 number，输出表单 base64 payload 或 M2M Authorization header，不启动浏览器。
+- Anubis：新增 `fast/slow` PoW 协议 solver，解析 challenge 页面或 make-challenge JSON，计算 `SHA256(randomData+nonce)` 前导零，可生成 `pass-challenge` 参数或直接换取 auth cookie，不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
 - Cap / @cap.js：新增 SHA-256 PoW 协议 solver，支持 v1 seeded challenge 与 format-2 `sha256-pow`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
 - P-Captcha：新增 QuadraticResidueProblem 协议 solver，解析 Woodall prime challenge，用模平方根直接求 answer，可提交 `{id, answer}`，不启动浏览器。
@@ -35,6 +36,7 @@
 | Aliyun Captcha | 真实 solver | `slider` | primary | `VerifyCode` / artifacts |
 | AJ-Captcha / Anji | 协议 solver | `slider_protocol` | alpha | `captchaVerification/token` |
 | ALTCHA | 协议 solver | `proof_of_work` | alpha | base64 payload / Authorization header |
+| Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
 | FriendlyCaptcha | 协议 solver | `proof_of_work` | alpha | `frc-captcha-solution` payload |
 | Cap / @cap.js | 协议 solver | `proof_of_work` | alpha | `/redeem` body / Cap token |
 | P-Captcha | 协议 solver | `quadratic_residue_pow` | alpha | `answer` / `{id, answer}` |
@@ -658,7 +660,83 @@ async with AntibotClient() as client:
 
 ---
 
-### 10. FriendlyCaptcha classic PoW
+### 10. Anubis PoW
+
+Anubis 是现在不少站点用来挡 AI 抓取/自动化访问的自托管 PoW 网关。它的核心不是图片验证码，而是浏览器执行 JS worker：寻找一个 `nonce`，使得：
+
+```text
+SHA256(randomData + nonce).hex().startswith("0" * difficulty)
+```
+
+SDK 现在把这条链路做成纯协议 solver：
+
+- 可解析 challenge 页面里的 `anubis_challenge` JSONScript。
+- 可解析 devel/test 或反代暴露的 `make-challenge` JSON：`rules/challenge/id`。
+- 支持 `fast/slow` 两个当前等价的 SHA-256 PoW 方法。
+- 输出：
+  - 不 submit：`pass-challenge` 所需参数 JSON。
+  - `--submit`：GET `/pass-challenge`，返回 Anubis auth cookie。
+- 自动处理 Anubis 的 cookie-check 辅助 cookie；不启动浏览器。
+
+命令示例：
+
+```bash
+antibot solve anubis \
+  --page-url 'https://target.example/path-with-anubis' \
+  --submit
+```
+
+直接使用 API prefix：
+
+```bash
+antibot solve anubis \
+  --base-url 'https://target.example' \
+  --redir '/' \
+  --submit
+```
+
+只解 PoW，不提交：
+
+```bash
+antibot solve anubis \
+  --challenge 'randomDataHex' \
+  --difficulty 4
+```
+
+压测：
+
+```bash
+antibot stress anubis \
+  --base-url 'https://target.example' \
+  --submit \
+  --runs 30 \
+  --concurrency 5 \
+  --timeout 30
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_anubis(
+        page_url="https://target.example/path-with-anubis",
+        submit=True,
+        timeout_sec=30,
+    )
+    print(ret.ok, ret.ticket, ret.verify_code)
+```
+
+当前定位：
+
+- 这是协议层 PoW solver，不是打开页面跑 JS worker。
+- 已和 Anubis 官方 Go test fixture 对齐：`SHA256("hunter"+"0")`。
+- 难度越高平均搜索空间越大：difficulty=4 约 16^4 次量级。VPS 上默认单 worker，可显式调 `--workers`。
+
+---
+
+### 11. FriendlyCaptcha classic PoW
 
 FriendlyCaptcha classic 的核心不是图片识别，而是 `friendly-pow`：服务端返回一个 signed puzzle，浏览器 widget 在 worker/WASM 里计算多个 8 字节 nonce，最后把结果写入隐藏字段 `frc-captcha-solution`。
 
@@ -730,7 +808,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 11. Cap / @cap.js PoW
+### 12. Cap / @cap.js PoW
 
 Cap 是 self-hosted CAPTCHA 方向里比较适合 SDK 化的一类：核心是 SHA-256 proof-of-work。SDK 当前只做协议层可验证的部分，不启动浏览器。
 
@@ -799,7 +877,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 12. P-Captcha QuadraticResidueProblem
+### 13. P-Captcha QuadraticResidueProblem
 
 P-Captcha 比普通 hashcash 更有意思：服务端给出 Woodall prime `p` 下的一组二次剩余 `n = x² mod p`，浏览器 worker 用 Tonelli-Shanks 求模平方根并把答案串提交给服务端。SDK 当前把这条链路下沉成纯 Python 协议 solver。
 
@@ -878,7 +956,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 13. GeeTest v4 / 极验
+### 14. GeeTest v4 / 极验
 
 GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：能在官方 v4 slide demo 上完成图片定位、轨迹拖动和成功载荷提取。但这个能力还不是稳定通杀，真实站点仍会受风险策略、设备指纹、轨迹质量和出口 IP 影响。
 
@@ -975,7 +1053,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 14. 网易易盾 / Yidun 滑动拼图
+### 15. 网易易盾 / Yidun 滑动拼图
 
 Yidun 现在保留 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
 
@@ -1046,13 +1124,14 @@ async with AntibotClient() as client:
 
 ---
 
-### 15. 自动分发模式
+### 16. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
 - Qoder / Aliyun 相关 URL -> `aliyun`
 - AJ-Captcha / Anji / `/captcha/get` 相关 URL -> `ajcaptcha`
 - ALTCHA 相关 URL -> `altcha`
+- Anubis / `.within.website/x/cmd/anubis` 相关 URL -> `anubis`
 - FriendlyCaptcha / `frc-captcha` 相关 URL -> `friendlycaptcha`
 - Cap / trycap / cap-widget 相关 URL -> `cap`
 - P-Captcha / QuadraticResidueProblem 相关 URL -> `pcaptcha`
@@ -1073,7 +1152,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 16. 代理格式
+### 17. 代理格式
 
 支持以下格式：
 
@@ -1159,6 +1238,13 @@ async def main():
             output_dir="/tmp/recaptcha-run",
         )
         print(recaptcha.ok, recaptcha.ticket, recaptcha.diagnostics.get("action"))
+
+        anubis = await client.solve_anubis(
+            page_url="https://target.example/path-with-anubis",
+            submit=True,
+            timeout_sec=30,
+        )
+        print(anubis.ok, anubis.ticket, anubis.verify_code)
 
         cap = await client.solve_cap(
             api_endpoint="https://target.example/cap/",
@@ -1256,6 +1342,11 @@ antibot stress ajcaptcha --base-url 'http://127.0.0.1:18080' --runs 50 --concurr
 antibot solve altcha --challenge-url 'https://target.example/altcha/challenge'
 antibot stress altcha --challenge-url 'https://target.example/altcha/challenge' --runs 50 --concurrency 5
 
+# Anubis
+antibot solve anubis --page-url 'https://target.example/path-with-anubis' --submit
+antibot solve anubis --challenge 'randomDataHex' --difficulty 4
+antibot stress anubis --base-url 'https://target.example' --submit --runs 30 --concurrency 5
+
 # FriendlyCaptcha
 antibot solve friendlycaptcha --puzzle-url 'https://api.friendlycaptcha.com/api/v1/puzzle' --sitekey 'FCxxxxx'
 antibot stress friendlycaptcha --puzzle-url 'https://api.friendlycaptcha.com/api/v1/puzzle' --sitekey 'FCxxxxx' --runs 20
@@ -1302,7 +1393,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / FriendlyCaptcha / Cap / P-Captcha / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / Cap / P-Captcha / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -1310,6 +1401,7 @@ turnstile_page.png / hcaptcha_page.png / recaptcha_page.png / geetest_page.png
 turnstile_page.html / hcaptcha_page.html / recaptcha_page.html / geetest_page.html
 ajcaptcha_run.json / ajcaptcha_original.png / ajcaptcha_jigsaw.png
 altcha_run.json
+anubis_run.json
 friendlycaptcha_run.json
 cap_run.json
 pcaptcha_run.json
@@ -1362,6 +1454,7 @@ src/antibot_sdk/
     aliyun.py               # Aliyun provider adapter
     ajcaptcha.py            # AJ-Captcha blockPuzzle protocol solver
     altcha.py               # ALTCHA PoW protocol solver
+    anubis.py               # Anubis SHA-256 PoW protocol solver
     friendlycaptcha.py      # FriendlyCaptcha classic PoW protocol solver
     cap.py                  # Cap/@cap.js SHA-256 PoW protocol solver
     pcaptcha.py             # P-Captcha quadratic residue protocol solver
@@ -1381,6 +1474,7 @@ tests/
   test_verification.py
   test_ajcaptcha.py
   test_altcha.py
+  test_anubis.py
   test_friendlycaptcha.py
   test_cap.py
   test_pcaptcha.py
@@ -1394,7 +1488,7 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 41 passed
+pytest: 45 passed
 node -c bridge.js/site_profiles.js/runner.js: passed
 uv build: success
 watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON
@@ -1463,6 +1557,15 @@ M2M header 解析：WWW-Authenticate -> AltchaChallenge -> Authorization header�
 固定 SHA-256 challenge：成功定位 number，并可反解 payload JSON。
 ```
 
+Anubis：
+
+```text
+官方 Go fixture：SHA256("hunter"+"0") = 2652bd...0500e，difficulty=0 命中。
+HTML JSONScript 解析：anubis_challenge/anubis_base_prefix 回归通过。
+本地 make-challenge + pass-challenge：ok=true，成功返回 auth cookie。
+本地 Anubis stress 30 轮/concurrency=5：30/30，avg≈41.3ms，p95≈227ms。
+```
+
 FriendlyCaptcha：
 
 ```text
@@ -1519,6 +1622,7 @@ stress recaptcha mock 2 轮：2/2。
 - Qoder/Aliyun 的 `F001` 常和出口 IP / session reputation / 当前页面状态有关。
 - AJ-Captcha 的主要误差来自白色描边过弱、服务端自定义模板/尺寸、以及干扰图与真实模板相似；优先调 `--min-score`、保存 `ajcaptcha_original.png / ajcaptcha_jigsaw.png` 复盘。
 - ALTCHA 是 PoW，不是识图；耗时主要由 `maxnumber`、命中位置和 `workers` 决定。VPS 上默认单 worker，避免把 CPU 打满。
+- Anubis 是 SHA-256 前导零 PoW；difficulty 每加 1，平均搜索空间约乘 16。页面解析和提交 cookie 是协议闭环，但高 difficulty 仍会吃 CPU。
 - FriendlyCaptcha classic 也是 PoW；耗时主要由 difficulty、solution count、命中位置和 worker 数决定。默认 `10,000,000` 次/段 solution 上限，真实站点不够时调 `--max-attempts-per-solution`。
 - Cap PoW 耗时主要由 `c/s/d`、format-2 target 长度、命中位置和 worker 数决定；遇到 `rsw/instrumentation` 时不要硬解，当前版本会按 unsupported 返回。
 - P-Captcha 当前不是暴力搜索，而是模平方根；耗时主要由 Woodall prime bit 数和 rounds 决定，`2xs` 约 761 bits，`3xl` 约 22974 bits。

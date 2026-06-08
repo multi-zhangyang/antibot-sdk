@@ -41,6 +41,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "base64 payload / Authorization header",
         "scope": "ALTCHA v1 PoW：解析 challenge 或 WWW-Authenticate，计算 number，输出表单 payload 或 M2M Authorization header；不启动浏览器。",
     },
+    "anubis": {
+        "provider": "anubis",
+        "name": "Anubis",
+        "category": "solver",
+        "captcha_type": "proof_of_work",
+        "status": "alpha",
+        "output": "pass-challenge params / auth cookie",
+        "scope": "Anubis fast/slow PoW：解析页面或 make-challenge JSON，计算 SHA256(randomData+nonce) 前导零，生成 pass-challenge 参数，可提交换 cookie；不启动浏览器。",
+    },
     "friendlycaptcha": {
         "provider": "friendlycaptcha",
         "name": "FriendlyCaptcha",
