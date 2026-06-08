@@ -129,6 +129,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "ajcaptcha",
             "altcha",
             "anubis",
+            "auro",
             "aliyun",
             "tencent",
             "friendlycaptcha",
@@ -252,6 +253,32 @@ async def amain(argv: list[str] | None = None) -> int:
     anu.add_argument("--proxy")
     anu.add_argument("--output-dir")
     anu.add_argument("--raw", action="store_true")
+
+    auro = solve_sub.add_parser("auro")
+    auro_source = auro.add_mutually_exclusive_group(required=False)
+    auro_source.add_argument("--challenge-json", help="inline {'prefix','difficulty'}, or @/path")
+    auro_source.add_argument("--challenge-file")
+    auro_source.add_argument("--prefix", help="inline PoW prefix; requires --difficulty")
+    auro.add_argument("--difficulty", type=int)
+    auro.add_argument("--base-url", default="https://auro.network")
+    auro.add_argument("--enckey-url")
+    auro.add_argument("--setup-url")
+    auro.add_argument("--validate-url")
+    auro.add_argument("--key-b64", help="inline AES-GCM key for local fixtures; otherwise fetch /enckey")
+    auro.add_argument("--mouse-json", help="inline mouse point list, or @/path")
+    auro.add_argument("--mouse-file")
+    auro.add_argument("--mouse-points", type=int, default=50)
+    auro.add_argument("--mouse-seed")
+    auro.add_argument("--iv-b64")
+    auro.add_argument("--client-guid")
+    auro.add_argument("--no-submit", action="store_true", help="skip /api/pow/validate after solving")
+    auro.add_argument("--start", type=int, default=0)
+    auro.add_argument("--max-attempts", type=int, default=50_000_000)
+    auro.add_argument("--workers", type=int, default=1)
+    auro.add_argument("--timeout", type=int, default=60)
+    auro.add_argument("--proxy")
+    auro.add_argument("--output-dir")
+    auro.add_argument("--raw", action="store_true")
 
     frc = solve_sub.add_parser("friendlycaptcha")
     frc_source = frc.add_mutually_exclusive_group(required=True)
@@ -595,6 +622,34 @@ async def amain(argv: list[str] | None = None) -> int:
     sanu.add_argument("--output-json")
     sanu.add_argument("--full", action="store_true")
 
+    sauro = stress_sub.add_parser("auro")
+    sauro_source = sauro.add_mutually_exclusive_group(required=False)
+    sauro_source.add_argument("--challenge-json")
+    sauro_source.add_argument("--challenge-file")
+    sauro_source.add_argument("--prefix")
+    sauro.add_argument("--difficulty", type=int)
+    sauro.add_argument("--base-url", default="https://auro.network")
+    sauro.add_argument("--enckey-url")
+    sauro.add_argument("--setup-url")
+    sauro.add_argument("--validate-url")
+    sauro.add_argument("--key-b64")
+    sauro.add_argument("--mouse-json")
+    sauro.add_argument("--mouse-file")
+    sauro.add_argument("--mouse-points", type=int, default=50)
+    sauro.add_argument("--mouse-seed")
+    sauro.add_argument("--iv-b64")
+    sauro.add_argument("--client-guid")
+    sauro.add_argument("--no-submit", action="store_true")
+    sauro.add_argument("--runs", type=int, default=10)
+    sauro.add_argument("--concurrency", type=int, default=2)
+    sauro.add_argument("--timeout", type=int, default=60)
+    sauro.add_argument("--max-attempts", type=int, default=50_000_000)
+    sauro.add_argument("--workers", type=int, default=1)
+    sauro.add_argument("--proxy")
+    sauro.add_argument("--output-dir")
+    sauro.add_argument("--output-json")
+    sauro.add_argument("--full", action="store_true")
+
     sfrc = stress_sub.add_parser("friendlycaptcha")
     sfrc.add_argument("--puzzle-url", required=True)
     sfrc.add_argument("--sitekey")
@@ -910,6 +965,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "turnstile",
             "cap",
             "chpiopow",
+            "auro",
             "mcaptcha",
             "pcaptcha",
             "powcaptcha",
@@ -1050,6 +1106,33 @@ async def amain(argv: list[str] | None = None) -> int:
             timeout_sec=args.timeout,
             submit=args.submit,
             ensure_test_cookie=not args.no_ensure_test_cookie,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "auro":
+        ret = await client.solve_auro(
+            base_url=args.base_url,
+            enckey_url=args.enckey_url,
+            setup_url=args.setup_url,
+            validate_url=args.validate_url,
+            key_b64=args.key_b64,
+            prefix=args.prefix,
+            difficulty=args.difficulty,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            mouse_json=args.mouse_json,
+            mouse_file=args.mouse_file,
+            mouse_points=args.mouse_points,
+            mouse_seed=args.mouse_seed,
+            iv_b64=args.iv_b64,
+            client_guid=args.client_guid,
+            submit=not args.no_submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
         )
@@ -1479,6 +1562,40 @@ async def amain(argv: list[str] | None = None) -> int:
                 workers=args.workers,
                 timeout_sec=args.timeout,
                 submit=args.submit,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "auro":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="auro",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_auro(
+                base_url=args.base_url,
+                enckey_url=args.enckey_url,
+                setup_url=args.setup_url,
+                validate_url=args.validate_url,
+                key_b64=args.key_b64,
+                prefix=args.prefix,
+                difficulty=args.difficulty,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                mouse_json=args.mouse_json,
+                mouse_file=args.mouse_file,
+                mouse_points=args.mouse_points,
+                mouse_seed=args.mouse_seed,
+                iv_b64=args.iv_b64,
+                client_guid=args.client_guid,
+                submit=not args.no_submit,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
             ),

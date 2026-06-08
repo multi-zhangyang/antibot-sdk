@@ -50,6 +50,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "pass-challenge params / auth cookie",
         "scope": "Anubis fast/slow PoW：解析页面或 make-challenge JSON，计算 SHA256(randomData+nonce) 前导零，生成 pass-challenge 参数，可提交换 cookie；不启动浏览器。",
     },
+    "auro": {
+        "provider": "auro",
+        "name": "Auro.Network",
+        "category": "solver",
+        "captcha_type": "encrypted_behavior_pow",
+        "status": "alpha",
+        "output": "validate body / Auro token",
+        "scope": "Auro.Network AES-GCM 行为数据 + SHA-256 PoW：获取 enckey，生成鼠标轨迹并 AES-GCM 加密，提交 setup 拿 prefix/difficulty，搜索 nonce 后 validate；不启动浏览器。",
+    },
     "friendlycaptcha": {
         "provider": "friendlycaptcha",
         "name": "FriendlyCaptcha",

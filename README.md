@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / FriendlyCaptcha PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / chpio pow-captcha Target PoW / mCaptcha PoW / Wicketkeeper JWT PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / chpio pow-captcha Target PoW / mCaptcha PoW / Wicketkeeper JWT PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -14,6 +14,7 @@
 - AJ-Captcha / Anji：新增纯 HTTP 协议 solver，走 `/captcha/get` 图像缺口定位、AES `pointJson`、`/captcha/check`，输出二次校验用的 `captchaVerification`，不启动浏览器。
 - ALTCHA：新增 PoW 协议 solver，解析 challenge / `WWW-Authenticate: Altcha ...`，计算 number，输出表单 base64 payload 或 M2M Authorization header，不启动浏览器。
 - Anubis：新增 `fast/slow` PoW 协议 solver，解析 challenge 页面或 make-challenge JSON，计算 `SHA256(randomData+nonce)` 前导零，可生成 `pass-challenge` 参数或直接换取 auth cookie，不启动浏览器。
+- Auro.Network：新增 AES-GCM 行为数据 + PoW 协议 solver，获取 `/enckey`，生成鼠标 telemetry 并 AES-GCM 加密，提交 `/api/pow/setup` 后搜索 `SHA256(prefix+nonce)`，可 `/api/pow/validate`，不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
 - PrivateCaptcha：新增 compute puzzle 协议 solver，解析 `puzzle.signature`，复现 blake2b-256 threshold 多解 PoW 与 solutions metadata，输出 `private-captcha-solution` payload，不启动浏览器。
 - Portcullis：新增 Argon2id + SHA-256 双阶段 PoW 协议 solver，解析 signed challenge，计算内存硬化 base hash 后搜索 nonce，可提交 `/api/v1/verify` 换 `captcha_token`，不启动浏览器。
@@ -43,6 +44,7 @@
 | AJ-Captcha / Anji | 协议 solver | `slider_protocol` | alpha | `captchaVerification/token` |
 | ALTCHA | 协议 solver | `proof_of_work` | alpha | base64 payload / Authorization header |
 | Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
+| Auro.Network | 协议 solver | `encrypted_behavior_pow` | alpha | validate body / Auro token |
 | FriendlyCaptcha | 协议 solver | `proof_of_work` | alpha | `frc-captcha-solution` payload |
 | PrivateCaptcha | 协议 solver | `compute_pow` | alpha | `private-captcha-solution` payload |
 | Portcullis | 协议 solver | `argon2_pow` | alpha | verify body / `captcha_token` |
@@ -748,7 +750,61 @@ async with AntibotClient() as client:
 
 ---
 
-### 11. FriendlyCaptcha classic PoW
+### 11. Auro.Network AES-GCM 行为 PoW
+
+Auro.Network 这一类比普通 hashcash 多一层“环境数据加密”：前端先用 `x-client` 拉 `/enckey`，把鼠标轨迹 JSON 用 AES-GCM 加密后作为 multipart 字段 `mouse + iv` 提交到 `/api/pow/setup`，服务端再返回 `prefix/difficulty`，最后客户端搜索 `SHA256(prefix + nonce)` 的前导 0 hex，并把 `{prefix, nonce}` 交给 `/api/pow/validate`。
+
+关键点：
+
+- `client_guid`：贯穿 `/enckey`、`/api/pow/setup`、`/api/pow/validate` 的 `x-client`。
+- 鼠标 telemetry：紧凑 JSON，形如 `[{"x":199,"y":51,"t":...}, ...]`。
+- 加密：AES-GCM，12 字节 IV，输出 `base64(ciphertext || tag)`；multipart 字段名为 `mouse` 和 `iv`。
+- PoW：`hash = SHA256((prefix + decimal_nonce).utf8).hexdigest()`。
+- 通过条件：`hash.startswith("0" * difficulty)`，difficulty 是 hex nibble 数。
+- 不启动浏览器；可以直接从 endpoint 拉 key/setup，也可以传 fixture 的 `--challenge-json` 只解 PoW。
+
+命令示例：
+
+```bash
+antibot solve auro   --base-url 'https://auro.network'   --timeout 60
+```
+
+只解 PoW fixture：
+
+```bash
+antibot solve auro   --challenge-json '{"prefix":"prefix-","difficulty":3}'   --no-submit   --max-attempts 10000
+```
+
+压测：
+
+```bash
+antibot stress auro   --challenge-json '{"prefix":"prefix-","difficulty":3}'   --no-submit   --runs 20   --concurrency 4
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_auro(
+        challenge_json={"prefix": "prefix-", "difficulty": 3},
+        submit=False,
+        max_attempts=10_000,
+    )
+    print(ret.ok, ret.ticket, ret.diagnostics.get("nonce"))
+```
+
+当前定位：
+
+- 这是协议层“行为 telemetry 加密 + PoW”solver，不是滑块/浏览器模拟。
+- 已复现本地逆向材料里的 `/enckey -> AES-GCM(mouse,iv) -> /api/pow/setup -> SHA256(prefix+nonce) -> /api/pow/validate` 链路。
+- Auro live 域名当前在 VPS 上 DNS 解析失败，因此 live evidence 暂缺；SDK 用本地 mock 完整闭环验证，真实端恢复后可直接用 `--base-url` 复测。
+- difficulty 每 +1 平均搜索空间约乘 16；VPS 上先降 `--concurrency`，再按需调 `--workers`。
+
+---
+
+### 12. FriendlyCaptcha classic PoW
 
 FriendlyCaptcha classic 的核心不是图片识别，而是 `friendly-pow`：服务端返回一个 signed puzzle，浏览器 widget 在 worker/WASM 里计算多个 8 字节 nonce，最后把结果写入隐藏字段 `frc-captcha-solution`。
 
@@ -820,7 +876,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 12. PrivateCaptcha Compute PoW
+### 13. PrivateCaptcha Compute PoW
 
 PrivateCaptcha 是 self-hosted compute puzzle：前端从 `/puzzle?sitekey=...` 拉到 `puzzle.signature`，worker 对 puzzle bytes 做 blake2b-256 PoW，最后把 `solutions.puzzle.signature` 放进隐藏字段 `private-captcha-solution`。SDK 当前把这条链路做成纯协议 solver。
 
@@ -906,7 +962,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 13. Portcullis Argon2id + SHA-256 PoW
+### 14. Portcullis Argon2id + SHA-256 PoW
 
 Portcullis 是更硬一点的 PoW CAPTCHA：不是直接对 nonce 做 hash，而是先对 challenge 做一次 Argon2id 内存硬化，得到 32 字节 `base_hash`，再在内循环里搜索 `SHA256(base_hash || nonce_le_8)` 的前导零 bit。challenge 本身带 HMAC-SHA256 签名，客户端解题后原样回传 challenge/sig/nonce，服务端 `/api/v1/verify` 换 `captcha_token`。
 
@@ -982,7 +1038,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 14. Cap / @cap.js PoW
+### 15. Cap / @cap.js PoW
 
 Cap 是 self-hosted CAPTCHA 方向里比较适合 SDK 化的一类：核心是 SHA-256 proof-of-work。SDK 当前只做协议层可验证的部分，不启动浏览器。
 
@@ -1051,7 +1107,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 15. chpio/pow-captcha Target-match PoW
+### 16. chpio/pow-captcha Target-match PoW
 
 chpio/pow-captcha 不是“前导零 hashcash”，而是服务端一次发多个 `(nonce,target)` 任务：客户端枚举 8 字节 little-endian `solution`，直到 `SHA256(solution_le_8 || nonce_bytes)` 的前 `difficultyBits` 位和 `target` 对齐。challenge 外层用 `signedData` 包住，签名规则是 `SHA256(UTF16LE(data_json + ":" + secret))`。
 
@@ -1108,7 +1164,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 16. P-Captcha QuadraticResidueProblem
+### 17. P-Captcha QuadraticResidueProblem
 
 P-Captcha 比普通 hashcash 更有意思：服务端给出 Woodall prime `p` 下的一组二次剩余 `n = x² mod p`，浏览器 worker 用 Tonelli-Shanks 求模平方根并把答案串提交给服务端。SDK 当前把这条链路下沉成纯 Python 协议 solver。
 
@@ -1187,7 +1243,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 17. pow_captcha Buffer Reconstruction PoW
+### 18. pow_captcha Buffer Reconstruction PoW
 
 pow_captcha 不是普通前导零 hashcash，而是把“正确 buffer 的 SHA-256、当前被污染 buffer、每个不确定字节的取值范围”序列化到 quiz 里。前端 `takeTest`/WASM 会按 mixed-radix 方式枚举这些不确定字节，直到 `SHA256(candidate_buffer)` 命中目标 hash。SDK 当前把这条链路复现成纯 Python 协议 solver。
 
@@ -1250,7 +1306,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 18. mCaptcha PoW
+### 19. mCaptcha PoW
 
 mCaptcha 是 self-hosted PoW CAPTCHA。浏览器 widget 的流程是：`POST /api/v1/pow/config` 取 `string/difficulty_factor/salt`，本地搜索 nonce，再 `POST /api/v1/pow/verify` 换取服务端 token。SDK 当前把这条链路做成纯协议 solver。
 
@@ -1322,7 +1378,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 19. Wicketkeeper JWT PoW
+### 20. Wicketkeeper JWT PoW
 
 Wicketkeeper 是 self-hosted PoW CAPTCHA：服务端签发 EdDSA JWT challenge，前端 worker 搜索 nonce，后端 `/v0/siteverify` 校验 JWT、PoW 和 replay 状态后返回 success JWT。SDK 当前把这条链路做成纯协议 solver。
 
@@ -1382,7 +1438,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 20. GeeTest v4 / 极验
+### 21. GeeTest v4 / 极验
 
 GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：能在官方 v4 slide demo 上完成图片定位、轨迹拖动和成功载荷提取。但这个能力还不是稳定通杀，真实站点仍会受风险策略、设备指纹、轨迹质量和出口 IP 影响。
 
@@ -1479,7 +1535,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 21. 网易易盾 / Yidun 滑动拼图
+### 22. 网易易盾 / Yidun 滑动拼图
 
 Yidun 现在保留 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
 
@@ -1550,7 +1606,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 22. 自动分发模式
+### 23. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
@@ -1558,6 +1614,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - AJ-Captcha / Anji / `/captcha/get` 相关 URL -> `ajcaptcha`
 - ALTCHA 相关 URL -> `altcha`
 - Anubis / `.within.website/x/cmd/anubis` 相关 URL -> `anubis`
+- Auro.Network / `/api/pow/setup` / `/api/pow/validate` 相关 URL -> `auro`
 - FriendlyCaptcha / `frc-captcha` 相关 URL -> `friendlycaptcha`
 - PrivateCaptcha / private-captcha / api.privatecaptcha.com 相关 URL -> `privatecaptcha`
 - Portcullis / pow-captcha / `/api/v1/challenge` 相关 URL -> `portcullis`
@@ -1584,7 +1641,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 23. 代理格式
+### 24. 代理格式
 
 支持以下格式：
 
@@ -1799,6 +1856,11 @@ antibot solve anubis --page-url 'https://target.example/path-with-anubis' --subm
 antibot solve anubis --challenge 'randomDataHex' --difficulty 4
 antibot stress anubis --base-url 'https://target.example' --submit --runs 30 --concurrency 5
 
+# Auro.Network
+antibot solve auro --base-url 'https://auro.network'
+antibot solve auro --challenge-json '{"prefix":"prefix-","difficulty":3}' --no-submit --max-attempts 10000
+antibot stress auro --challenge-json '{"prefix":"prefix-","difficulty":3}' --no-submit --runs 20 --concurrency 4
+
 # FriendlyCaptcha
 antibot solve friendlycaptcha --puzzle-url 'https://api.friendlycaptcha.com/api/v1/puzzle' --sitekey 'FCxxxxx'
 antibot stress friendlycaptcha --puzzle-url 'https://api.friendlycaptcha.com/api/v1/puzzle' --sitekey 'FCxxxxx' --runs 20
@@ -1935,6 +1997,7 @@ src/antibot_sdk/
     ajcaptcha.py            # AJ-Captcha blockPuzzle protocol solver
     altcha.py               # ALTCHA PoW protocol solver
     anubis.py               # Anubis SHA-256 PoW protocol solver
+    auro.py                 # Auro AES-GCM mouse telemetry + SHA-256 PoW protocol solver
     friendlycaptcha.py      # FriendlyCaptcha classic PoW protocol solver
     privatecaptcha.py       # PrivateCaptcha blake2b compute PoW protocol solver
     portcullis.py           # Portcullis Argon2id + SHA-256 PoW protocol solver
@@ -2055,6 +2118,17 @@ HTML JSONScript 解析：anubis_challenge/anubis_base_prefix 回归通过。
 本地 Anubis stress 30 轮/concurrency=5：30/30，avg≈41.3ms，p95≈227ms。
 ```
 
+Auro.Network：
+
+```text
+ptraced_Auro.Network/solver.py：确认 /enckey、AES-GCM mouse+iv、/api/pow/setup、SHA256(prefix+nonce)、/api/pow/validate 链路。
+AES-GCM fixture：32-byte key + 12-byte IV，Python 加密输出可 decrypt_and_verify 回原始紧凑 mouse JSON。
+PoW fixture：prefix=prefix-,difficulty=3 -> nonce=822，hash=000db5e4c4065ac7540a4c5ccc65613467f0fe1601501c21308322d8a737a449。
+本地 mock /enckey + /api/pow/setup + /api/pow/validate：ok=true，成功返回 auro-token。
+本地 Auro fixture stress 20 轮/concurrency=4：20/20，avg≈13.8ms，p95≈24ms。
+live DNS evidence gap：当前 VPS 对 auro.network 解析失败，未写入为“官方 live 通过”。
+```
+
 FriendlyCaptcha：
 
 ```text
@@ -2168,6 +2242,7 @@ stress recaptcha mock 2 轮：2/2。
 - AJ-Captcha 的主要误差来自白色描边过弱、服务端自定义模板/尺寸、以及干扰图与真实模板相似；优先调 `--min-score`、保存 `ajcaptcha_original.png / ajcaptcha_jigsaw.png` 复盘。
 - ALTCHA 是 PoW，不是识图；耗时主要由 `maxnumber`、命中位置和 `workers` 决定。VPS 上默认单 worker，避免把 CPU 打满。
 - Anubis 是 SHA-256 前导零 PoW；difficulty 每加 1，平均搜索空间约乘 16。页面解析和提交 cookie 是协议闭环，但高 difficulty 仍会吃 CPU。
+- Auro.Network 多一层 AES-GCM 行为 telemetry；如果只给 `prefix/difficulty` 就是纯 PoW，如果走完整 `/enckey -> setup -> validate`，要保证 `x-client` 全程一致。
 - FriendlyCaptcha classic 也是 PoW；耗时主要由 difficulty、solution count、命中位置和 worker 数决定。默认 `10,000,000` 次/段 solution 上限，真实站点不够时调 `--max-attempts-per-solution`。
 - PrivateCaptcha compute puzzle 的 difficulty 每 +8 平均搜索空间约乘 2，solutionsCount 常是多解；先控制 `--concurrency`，再按 CPU 调 `--workers`。
 - Portcullis 多了 Argon2id 内存成本，`m_cost` 默认可到 19456 KiB；压测时先用低 concurrency，避免 VPS 内存抖动。

@@ -8,6 +8,7 @@ from .providers.aliyun import AliyunCaptchaSolver
 from .providers.ajcaptcha import AJCaptchaSolver
 from .providers.altcha import AltchaSolver
 from .providers.anubis import AnubisSolver
+from .providers.auro import AuroSolver
 from .providers.browser import BrowserAutomation
 from .providers.cap import CapSolver
 from .providers.chpiopow import ChpioPowSolver
@@ -38,6 +39,7 @@ class AntibotClient:
         self.ajcaptcha = AJCaptchaSolver()
         self.altcha = AltchaSolver()
         self.anubis = AnubisSolver()
+        self.auro = AuroSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
         self.mcaptcha = MCaptchaSolver()
         self.pcaptcha = PCaptchaSolver()
@@ -83,6 +85,9 @@ class AntibotClient:
 
     async def solve_anubis(self, **kwargs: Any) -> CaptchaResult:
         return await self.anubis.solve(**kwargs)
+
+    async def solve_auro(self, **kwargs: Any) -> CaptchaResult:
+        return await self.auro.solve(**kwargs)
 
     async def solve_friendlycaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.friendlycaptcha.solve(**kwargs)
@@ -205,6 +210,41 @@ class AntibotClient:
             }
             anubis_kwargs.setdefault("page_url", target_url)
             return await self.solve_anubis(**anubis_kwargs)
+        if provider == "auro":
+            auro_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "enckey_url",
+                    "setup_url",
+                    "validate_url",
+                    "key_b64",
+                    "prefix",
+                    "difficulty",
+                    "challenge_json",
+                    "challenge_file",
+                    "mouse_json",
+                    "mouse_file",
+                    "mouse_points",
+                    "mouse_seed",
+                    "iv_b64",
+                    "client_guid",
+                    "submit",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            if not auro_kwargs.get("base_url") and not auro_kwargs.get("enckey_url"):
+                auro_kwargs["base_url"] = target_url
+            return await self.solve_auro(**auro_kwargs)
         if provider == "friendlycaptcha":
             frc_kwargs = {
                 k: v

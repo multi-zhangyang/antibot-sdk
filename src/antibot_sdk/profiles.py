@@ -113,6 +113,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "altcha"
     if any(x in u or x in host for x in ("anubis", ".within.website/x/cmd/anubis", "techaro.lol-anubis")):
         return "anubis"
+    if any(x in u or x in host for x in ("auro.network", "auro-captcha", "/api/pow/setup", "/api/pow/validate")):
+        return "auro"
     if any(x in u or x in host for x in ("friendlycaptcha", "friendlycaptcha.com", "frc-captcha")):
         return "friendlycaptcha"
     if any(x in u or x in host for x in ("trycap.dev", "cap.js", "cap-widget", "capjs")):
@@ -192,6 +194,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "anubis-sha256-pow-protocol-solver",
                 "successFields": ["pass-challenge params", "Anubis auth cookie"],
                 "endpoints": ["/make-challenge", "/pass-challenge"],
+            }
+        },
+        "auro": {
+            "encrypted_behavior_pow": {
+                "patterns": ["auro.network", "auro-captcha", "/api/pow/setup", "/api/pow/validate"],
+                "mode": "aes-gcm-mouse-telemetry-plus-sha256-pow-protocol-solver",
+                "successFields": ["validate body", "Auro token/status"],
+                "endpoints": ["/enckey", "/api/pow/setup", "/api/pow/validate"],
             }
         },
         "friendlycaptcha": {
