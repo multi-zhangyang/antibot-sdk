@@ -238,6 +238,11 @@ async def amain(argv: list[str] | None = None) -> int:
     alt.add_argument("--start", type=int, default=0)
     alt.add_argument("--workers", type=int, default=1)
     alt.add_argument("--timeout", type=int, default=30)
+    alt.add_argument("--v2-strategy", choices=["auto", "verify-compatible", "prefix"], default="auto")
+    alt.add_argument("--counter-mode", choices=["uint32", "string"], default="uint32")
+    alt.add_argument("--hmac-algorithm", default="SHA-256", choices=["SHA-256", "SHA-384", "SHA-512"])
+    alt.add_argument("--hmac-signature-secret")
+    alt.add_argument("--hmac-key-signature-secret")
     alt.add_argument("--proxy")
     alt.add_argument("--output-dir")
     alt.add_argument("--include-took", action="store_true")
@@ -824,6 +829,11 @@ async def amain(argv: list[str] | None = None) -> int:
     salt.add_argument("--timeout", type=int, default=30)
     salt.add_argument("--max-number", type=int)
     salt.add_argument("--workers", type=int, default=1)
+    salt.add_argument("--v2-strategy", choices=["auto", "verify-compatible", "prefix"], default="auto")
+    salt.add_argument("--counter-mode", choices=["uint32", "string"], default="uint32")
+    salt.add_argument("--hmac-algorithm", default="SHA-256", choices=["SHA-256", "SHA-384", "SHA-512"])
+    salt.add_argument("--hmac-signature-secret")
+    salt.add_argument("--hmac-key-signature-secret")
     salt.add_argument("--proxy")
     salt.add_argument("--output-dir")
     salt.add_argument("--output-json")
@@ -1569,6 +1579,11 @@ async def amain(argv: list[str] | None = None) -> int:
             start=args.start,
             workers=args.workers,
             timeout_sec=args.timeout,
+            v2_strategy=args.v2_strategy,
+            counter_mode=args.counter_mode,
+            hmac_algorithm=args.hmac_algorithm,
+            hmac_signature_secret=args.hmac_signature_secret,
+            hmac_key_signature_secret=args.hmac_key_signature_secret,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
             include_took=args.include_took,
@@ -2252,6 +2267,11 @@ async def amain(argv: list[str] | None = None) -> int:
                 max_number=args.max_number,
                 workers=args.workers,
                 timeout_sec=args.timeout,
+                v2_strategy=args.v2_strategy,
+                counter_mode=args.counter_mode,
+                hmac_algorithm=args.hmac_algorithm,
+                hmac_signature_secret=args.hmac_signature_secret,
+                hmac_key_signature_secret=args.hmac_key_signature_secret,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
             ),

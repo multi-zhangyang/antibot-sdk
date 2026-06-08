@@ -3,23 +3,27 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import hmac
 import json
 import math
 import re
 import time
-from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, TimeoutError as FuturesTimeout, as_completed, wait
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import requests
+from argon2 import low_level as argon2_low_level
 
 from ..models import CaptchaResult
 from ..proxy import parse_proxy, redacted_proxy
 
 DEFAULT_MAX_NUMBER = 1_000_000
 DEFAULT_ALGORITHM = "SHA-256"
+DEFAULT_V2_MAX_COUNTER = 1_000_000
+DEFAULT_V2_STRATEGY = "auto"
 
 _ALGO_MAP = {
     "sha": "sha1",
@@ -80,6 +84,62 @@ class AltchaSolution:
         return "Altcha " + ", ".join(parts)
 
 
+@dataclass(slots=True)
+class AltchaV2Challenge:
+    parameters: dict[str, Any]
+    signature: str | None = None
+
+    @property
+    def algorithm(self) -> str:
+        return str(self.parameters.get("algorithm") or "")
+
+    @property
+    def key_prefix(self) -> str:
+        return str(self.parameters.get("keyPrefix") or "")
+
+    @property
+    def key_signature(self) -> str | None:
+        value = self.parameters.get("keySignature")
+        return str(value) if value not in (None, "") else None
+
+    @property
+    def cost(self) -> int:
+        return int(self.parameters.get("cost") or 1)
+
+    @property
+    def key_length(self) -> int:
+        return int(self.parameters.get("keyLength") or _default_v2_key_length(self.algorithm))
+
+    def to_payload(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"parameters": dict(self.parameters)}
+        if self.signature:
+            out["signature"] = self.signature
+        return out
+
+
+@dataclass(slots=True)
+class AltchaV2Solution:
+    challenge: AltchaV2Challenge
+    counter: int
+    derived_key: str
+    took_ms: int
+    checked: int
+    strategy: str
+    prefix_matched: bool
+
+    def solution_payload(self) -> dict[str, Any]:
+        return {"counter": self.counter, "derivedKey": self.derived_key, "time": self.took_ms}
+
+    def payload(self) -> dict[str, Any]:
+        return {"challenge": self.challenge.to_payload(), "solution": self.solution_payload()}
+
+    def payload_json(self) -> str:
+        return json.dumps(self.payload(), ensure_ascii=False, separators=(",", ":"))
+
+    def payload_b64(self) -> str:
+        return base64.b64encode(self.payload_json().encode("utf-8")).decode("ascii")
+
+
 def normalize_altcha_algorithm(algorithm: str | None) -> str:
     raw = (algorithm or DEFAULT_ALGORITHM).strip()
     key = raw.lower().replace("_", "-")
@@ -101,6 +161,384 @@ def altcha_hash_hex(salt: str, number: int, algorithm: str | None = None) -> str
     h = hashlib.new(normalize_altcha_algorithm(algorithm))
     h.update(f"{salt}{int(number)}".encode("utf-8"))
     return h.hexdigest()
+
+
+def is_altcha_v2_challenge(value: Any) -> bool:
+    data = value.get("challenge") if isinstance(value, dict) and isinstance(value.get("challenge"), dict) else value
+    return isinstance(data, dict) and isinstance(data.get("parameters"), dict)
+
+
+def parse_altcha_v2_challenge(value: AltchaV2Challenge | dict[str, Any] | str) -> AltchaV2Challenge:
+    if isinstance(value, AltchaV2Challenge):
+        _validate_altcha_v2_parameters(value.parameters)
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            raise ValueError("ALTCHA v2 challenge is empty")
+        if text.startswith("@"):
+            return parse_altcha_v2_challenge(Path(text[1:]).read_text(encoding="utf-8"))
+        return parse_altcha_v2_challenge(json.loads(text))
+    if not isinstance(value, dict):
+        raise ValueError("ALTCHA v2 challenge must be an object")
+    data = value.get("challenge") if isinstance(value.get("challenge"), dict) else value
+    if not isinstance(data.get("parameters"), dict):
+        raise ValueError("ALTCHA v2 challenge requires parameters")
+    parameters = _normalize_altcha_v2_parameters(dict(data["parameters"]))
+    signature = data.get("signature")
+    return AltchaV2Challenge(parameters=parameters, signature=str(signature) if signature else None)
+
+
+def altcha_v2_password_bytes(nonce_hex: str, counter: int, *, counter_mode: str = "uint32") -> bytes:
+    nonce = bytes.fromhex(str(nonce_hex))
+    value = int(counter)
+    if value < 0:
+        raise ValueError("ALTCHA v2 counter must be >= 0")
+    if counter_mode == "string":
+        return nonce + str(value).encode("utf-8")
+    if counter_mode != "uint32":
+        raise ValueError("ALTCHA v2 counter_mode must be uint32 or string")
+    if value > 0xFFFFFFFF:
+        raise ValueError("ALTCHA v2 uint32 counter exceeds 2^32-1")
+    return nonce + value.to_bytes(4, "big", signed=False)
+
+
+def altcha_v2_derive_key_bytes(
+    challenge: AltchaV2Challenge | dict[str, Any] | str,
+    counter: int,
+    *,
+    counter_mode: str = "uint32",
+) -> bytes:
+    item = parse_altcha_v2_challenge(challenge)
+    params = item.parameters
+    salt = bytes.fromhex(str(params["salt"]))
+    password = altcha_v2_password_bytes(str(params["nonce"]), counter, counter_mode=counter_mode)
+    return _altcha_v2_derive_key_from_password(params, salt, password)
+
+
+def altcha_v2_derive_key_hex(
+    challenge: AltchaV2Challenge | dict[str, Any] | str,
+    counter: int,
+    *,
+    counter_mode: str = "uint32",
+) -> str:
+    return altcha_v2_derive_key_bytes(challenge, counter, counter_mode=counter_mode).hex()
+
+
+def altcha_v2_key_matches_prefix(derived_key_hex: str, key_prefix: str) -> bool:
+    prefix = str(key_prefix or "").lower()
+    if not prefix:
+        return True
+    return str(derived_key_hex).lower().startswith(prefix)
+
+
+def solve_altcha_v2_challenge(
+    challenge: AltchaV2Challenge | dict[str, Any] | str,
+    *,
+    start: int = 0,
+    max_counter: int | None = DEFAULT_V2_MAX_COUNTER,
+    workers: int = 1,
+    timeout_sec: int | float | None = 90,
+    counter_mode: str = "uint32",
+    strategy: str = DEFAULT_V2_STRATEGY,
+    hmac_algorithm: str = "SHA-256",
+    hmac_key_signature_secret: str | None = None,
+) -> AltchaV2Solution | None:
+    item = parse_altcha_v2_challenge(challenge)
+    strategy = _normalize_v2_strategy(strategy)
+    started = time.monotonic()
+    start = max(0, int(start))
+    upper = start + DEFAULT_V2_MAX_COUNTER if max_counter is None else int(max_counter)
+    if upper < start:
+        raise ValueError("ALTCHA v2 max_counter must be >= start")
+    workers = max(1, int(workers or 1))
+
+    # ALTCHA v2's upstream verifySolution() re-derives and compares the exact
+    # supplied derivedKey when no keySignature is present; it does not re-check
+    # keyPrefix in that branch. This verify-compatible path therefore avoids a
+    # pointless prefix brute force for the common signed probabilistic challenge.
+    if strategy in {"auto", "verify-compatible"} and not item.key_signature:
+        derived_hex = altcha_v2_derive_key_hex(item, start, counter_mode=counter_mode)
+        return AltchaV2Solution(
+            challenge=item,
+            counter=start,
+            derived_key=derived_hex,
+            took_ms=int((time.monotonic() - started) * 1000),
+            checked=1,
+            strategy="verify-compatible",
+            prefix_matched=altcha_v2_key_matches_prefix(derived_hex, item.key_prefix),
+        )
+
+    deadline = time.monotonic() + float(timeout_sec) if timeout_sec else None
+    if workers <= 1 or upper - start < 64:
+        counter, derived_hex, checked, prefix_matched = _solve_altcha_v2_range(
+            item,
+            start,
+            upper,
+            deadline,
+            counter_mode,
+            hmac_algorithm,
+            hmac_key_signature_secret,
+        )
+        if counter is None or derived_hex is None:
+            return None
+        return AltchaV2Solution(
+            challenge=item,
+            counter=counter,
+            derived_key=derived_hex,
+            took_ms=int((time.monotonic() - started) * 1000),
+            checked=checked,
+            strategy="prefix",
+            prefix_matched=bool(prefix_matched),
+        )
+
+    span = upper - start + 1
+    chunk = math.ceil(span / workers)
+    checked_total = 0
+    pool = ProcessPoolExecutor(max_workers=workers)
+    futures = {}
+    for idx in range(workers):
+        lo = start + idx * chunk
+        hi = min(upper, lo + chunk - 1)
+        if lo > upper:
+            break
+        futures[
+            pool.submit(
+                _solve_altcha_v2_range,
+                item,
+                lo,
+                hi,
+                deadline,
+                counter_mode,
+                hmac_algorithm,
+                hmac_key_signature_secret,
+            )
+        ] = idx
+    try:
+        wait_timeout = None if deadline is None else max(0.0, deadline - time.monotonic())
+        for fut in as_completed(futures, timeout=wait_timeout):
+            counter, derived_hex, checked, prefix_matched = fut.result()
+            checked_total += checked
+            if counter is not None and derived_hex is not None:
+                for other in futures:
+                    other.cancel()
+                pool.shutdown(wait=False, cancel_futures=True)
+                return AltchaV2Solution(
+                    challenge=item,
+                    counter=counter,
+                    derived_key=derived_hex,
+                    took_ms=int((time.monotonic() - started) * 1000),
+                    checked=checked_total,
+                    strategy="prefix",
+                    prefix_matched=bool(prefix_matched),
+                )
+    except FuturesTimeout:
+        pool.shutdown(wait=False, cancel_futures=True)
+        return None
+    except Exception:
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
+    else:
+        pool.shutdown(wait=True, cancel_futures=True)
+    return None
+
+
+def verify_altcha_v2_solution(
+    challenge: AltchaV2Challenge | dict[str, Any] | str,
+    solution: AltchaV2Solution | dict[str, Any],
+    *,
+    counter_mode: str = "uint32",
+    hmac_algorithm: str = "SHA-256",
+    hmac_signature_secret: str | None = None,
+    hmac_key_signature_secret: str | None = None,
+    enforce_key_prefix: bool = False,
+    now: int | None = None,
+) -> bool:
+    try:
+        item = parse_altcha_v2_challenge(challenge)
+        if isinstance(solution, AltchaV2Solution):
+            counter = solution.counter
+            derived_hex = solution.derived_key.lower()
+        else:
+            data = solution.get("solution") if isinstance(solution.get("solution"), dict) else solution
+            counter = int(data.get("counter"))
+            derived_hex = str(data.get("derivedKey") or data.get("derived_key") or "").lower()
+        exp = item.parameters.get("expiresAt")
+        if exp is not None and int(exp) < int(now or time.time()):
+            return False
+        if item.signature and hmac_signature_secret is not None:
+            expected = altcha_v2_hmac_hex(
+                _canonical_json(item.parameters).encode("utf-8"),
+                hmac_signature_secret,
+                hmac_algorithm,
+            )
+            if not hmac.compare_digest(expected, item.signature.lower()):
+                return False
+        if item.key_signature and hmac_key_signature_secret is not None:
+            expected_key_sig = altcha_v2_hmac_hex(bytes.fromhex(derived_hex), hmac_key_signature_secret, hmac_algorithm)
+            if not hmac.compare_digest(expected_key_sig, item.key_signature.lower()):
+                return False
+            return not enforce_key_prefix or altcha_v2_key_matches_prefix(derived_hex, item.key_prefix)
+        expected_derived = altcha_v2_derive_key_hex(item, counter, counter_mode=counter_mode)
+        if not hmac.compare_digest(expected_derived, derived_hex):
+            return False
+        return not enforce_key_prefix or altcha_v2_key_matches_prefix(derived_hex, item.key_prefix)
+    except Exception:
+        return False
+
+
+def altcha_v2_hmac_hex(data: bytes | str, secret: str, algorithm: str = "SHA-256") -> str:
+    digest = _hmac_digest_name(algorithm)
+    raw = data.encode("utf-8") if isinstance(data, str) else bytes(data)
+    return hmac.new(secret.encode("utf-8"), raw, digest).hexdigest()
+
+
+def _solve_altcha_v2_range(
+    item: AltchaV2Challenge,
+    start: int,
+    end_inclusive: int,
+    deadline: float | None,
+    counter_mode: str,
+    hmac_algorithm: str,
+    hmac_key_signature_secret: str | None,
+) -> tuple[int | None, str | None, int, bool]:
+    salt = bytes.fromhex(str(item.parameters["salt"]))
+    checked = 0
+    for counter in range(max(0, int(start)), max(0, int(end_inclusive)) + 1):
+        if deadline is not None and checked and checked % 10 == 0 and time.monotonic() >= deadline:
+            return None, None, checked, False
+        password = altcha_v2_password_bytes(str(item.parameters["nonce"]), counter, counter_mode=counter_mode)
+        derived = _altcha_v2_derive_key_from_password(item.parameters, salt, password)
+        derived_hex = derived.hex()
+        checked += 1
+        prefix_matched = altcha_v2_key_matches_prefix(derived_hex, item.key_prefix)
+        if item.key_signature and hmac_key_signature_secret:
+            key_sig = altcha_v2_hmac_hex(derived, hmac_key_signature_secret, hmac_algorithm)
+            if hmac.compare_digest(key_sig, item.key_signature.lower()):
+                return counter, derived_hex, checked, prefix_matched
+        elif prefix_matched:
+            return counter, derived_hex, checked, True
+    return None, None, checked, False
+
+
+def _altcha_v2_derive_key_from_password(params: dict[str, Any], salt: bytes, password: bytes) -> bytes:
+    algorithm = str(params.get("algorithm") or "").upper()
+    cost = max(1, int(params.get("cost") or 1))
+    key_length = max(1, int(params.get("keyLength") or _default_v2_key_length(algorithm)))
+    if algorithm.startswith("PBKDF2/"):
+        digest = _pbkdf2_digest_name(algorithm)
+        return hashlib.pbkdf2_hmac(digest, password, salt, cost, dklen=key_length)
+    if algorithm in {"SHA-256", "SHA-384", "SHA-512"}:
+        data = salt + password
+        derived = b""
+        for i in range(cost):
+            derived = hashlib.new(_sha_digest_name(algorithm), data if i == 0 else derived).digest()[:key_length]
+        return derived
+    if algorithm == "SCRYPT":
+        n = cost
+        r = int(params.get("memoryCost") or 8)
+        p = int(params.get("parallelism") or 1)
+        return hashlib.scrypt(password, salt=salt, n=n, r=r, p=p, dklen=key_length, maxmem=2_147_483_647)
+    if algorithm == "ARGON2ID":
+        return argon2_low_level.hash_secret_raw(
+            secret=password,
+            salt=salt,
+            time_cost=cost,
+            memory_cost=int(params.get("memoryCost") or 16_384),
+            parallelism=int(params.get("parallelism") or 1),
+            hash_len=key_length,
+            type=argon2_low_level.Type.ID,
+        )
+    raise ValueError(f"unsupported ALTCHA v2 algorithm: {algorithm!r}")
+
+
+def _normalize_altcha_v2_parameters(parameters: dict[str, Any]) -> dict[str, Any]:
+    params = dict(parameters)
+    algorithm = str(params.get("algorithm") or "").upper()
+    if algorithm.startswith("PBKDF2/"):
+        algorithm = "PBKDF2/" + algorithm.split("/", 1)[1].replace("_", "-")
+    params["algorithm"] = algorithm
+    if "keyLength" not in params or params.get("keyLength") in (None, ""):
+        params["keyLength"] = _default_v2_key_length(algorithm)
+    if "cost" not in params or params.get("cost") in (None, ""):
+        params["cost"] = 1
+    _validate_altcha_v2_parameters(params)
+    return params
+
+
+def _validate_altcha_v2_parameters(params: dict[str, Any]) -> None:
+    required = ("algorithm", "nonce", "salt", "cost", "keyLength", "keyPrefix")
+    missing = [k for k in required if k not in params or params.get(k) is None]
+    if missing:
+        raise ValueError(f"ALTCHA v2 parameters missing fields: {', '.join(missing)}")
+    bytes.fromhex(str(params["nonce"]))
+    bytes.fromhex(str(params["salt"]))
+    prefix = str(params.get("keyPrefix") or "")
+    if prefix and not re.fullmatch(r"[0-9a-fA-F]+", prefix):
+        raise ValueError("ALTCHA v2 keyPrefix must be hex")
+    key_sig = params.get("keySignature")
+    if key_sig and not re.fullmatch(r"[0-9a-fA-F]+", str(key_sig)):
+        raise ValueError("ALTCHA v2 keySignature must be hex")
+    _altcha_v2_supported_algorithm(str(params["algorithm"]))
+    if int(params["cost"]) < 1 or int(params["keyLength"]) < 1:
+        raise ValueError("ALTCHA v2 cost/keyLength must be positive")
+
+
+def _altcha_v2_supported_algorithm(algorithm: str) -> str:
+    alg = str(algorithm).upper()
+    if alg in {"SHA-256", "SHA-384", "SHA-512", "SCRYPT", "ARGON2ID"}:
+        return alg
+    if alg in {"PBKDF2/SHA-256", "PBKDF2/SHA-384", "PBKDF2/SHA-512"}:
+        return alg
+    raise ValueError(f"unsupported ALTCHA v2 algorithm: {algorithm!r}")
+
+
+def _default_v2_key_length(algorithm: str) -> int:
+    alg = str(algorithm).upper()
+    if alg.endswith("SHA-512"):
+        return 64
+    if alg.endswith("SHA-384"):
+        return 48
+    return 32
+
+
+def _pbkdf2_digest_name(algorithm: str) -> str:
+    tail = str(algorithm).upper().split("/", 1)[-1]
+    return _sha_digest_name(tail)
+
+
+def _sha_digest_name(algorithm: str) -> str:
+    alg = str(algorithm).upper().replace("_", "-")
+    if alg == "SHA-256":
+        return "sha256"
+    if alg == "SHA-384":
+        return "sha384"
+    if alg == "SHA-512":
+        return "sha512"
+    raise ValueError(f"unsupported SHA algorithm: {algorithm!r}")
+
+
+def _hmac_digest_name(algorithm: str) -> str:
+    return _sha_digest_name(algorithm)
+
+
+def _normalize_v2_strategy(strategy: str | None) -> str:
+    value = (strategy or DEFAULT_V2_STRATEGY).strip().lower().replace("_", "-")
+    if value not in {"auto", "verify-compatible", "prefix"}:
+        raise ValueError("ALTCHA v2 strategy must be auto, verify-compatible or prefix")
+    return value
+
+
+def _canonical_json(obj: Any) -> str:
+    return json.dumps(_sort_json_keys(obj), ensure_ascii=False, separators=(",", ":"))
+
+
+def _sort_json_keys(obj: Any) -> Any:
+    if isinstance(obj, dict):
+        return {k: _sort_json_keys(obj[k]) for k in sorted(obj)}
+    if isinstance(obj, list):
+        return [_sort_json_keys(x) for x in obj]
+    return obj
 
 
 def _solve_range(
@@ -347,6 +785,11 @@ class AltchaSolver:
         start: int = 0,
         workers: int = 1,
         timeout_sec: int = 30,
+        v2_strategy: str = DEFAULT_V2_STRATEGY,
+        counter_mode: str = "uint32",
+        hmac_algorithm: str = "SHA-256",
+        hmac_signature_secret: str | None = None,
+        hmac_key_signature_secret: str | None = None,
         proxy_server: str | None = None,
         output_dir: str | None = None,
         include_took: bool = False,
@@ -393,7 +836,8 @@ class AltchaSolver:
             )
 
         try:
-            challenge_obj: AltchaChallenge
+            data: dict[str, Any] | None = None
+            challenge_obj: AltchaChallenge | None = None
             if www_authenticate:
                 challenge_obj = challenge_from_altcha_header(
                     www_authenticate,
@@ -401,7 +845,6 @@ class AltchaSolver:
                 )
                 raw["challengeSource"] = "www_authenticate"
             else:
-                data: dict[str, Any] | None
                 if isinstance(challenge_json, dict):
                     data = challenge_json
                 else:
@@ -422,12 +865,76 @@ class AltchaSolver:
                     if not isinstance(data, dict):
                         raise ValueError("challenge response is not a JSON object")
                     raw["challengeSource"] = "url"
-                challenge_obj = parse_altcha_challenge(data)
 
+            if data is not None and is_altcha_v2_challenge(data):
+                v2_challenge = parse_altcha_v2_challenge(data)
+                upper = int(max_number if max_number is not None else default_maxnumber or DEFAULT_V2_MAX_COUNTER)
+                raw["challenge"] = v2_challenge.to_payload()
+                if hmac_signature_secret and v2_challenge.signature:
+                    diagnostics["signature_valid"] = verify_altcha_v2_solution(
+                        v2_challenge,
+                        {"counter": start, "derivedKey": altcha_v2_derive_key_hex(v2_challenge, start)},
+                        hmac_signature_secret=hmac_signature_secret,
+                    )
+                diagnostics.update(
+                    {
+                        "version": "v2",
+                        "algorithm": v2_challenge.algorithm,
+                        "max_counter": upper,
+                        "salt": v2_challenge.parameters.get("salt"),
+                        "key_prefix": v2_challenge.key_prefix,
+                        "key_prefix_length": len(v2_challenge.key_prefix),
+                        "signature_present": bool(v2_challenge.signature),
+                        "key_signature_present": bool(v2_challenge.key_signature),
+                        "v2_strategy": v2_strategy,
+                        "counter_mode": counter_mode,
+                    }
+                )
+                v2_solution = solve_altcha_v2_challenge(
+                    v2_challenge,
+                    start=start,
+                    max_counter=upper,
+                    workers=workers,
+                    timeout_sec=timeout_sec,
+                    counter_mode=counter_mode,
+                    strategy=v2_strategy,
+                    hmac_algorithm=hmac_algorithm,
+                    hmac_key_signature_secret=hmac_key_signature_secret,
+                )
+                if v2_solution is None:
+                    errors.append(f"no ALTCHA v2 solution found in range {start}..{upper}")
+                    return finish(ok=False)
+                payload_b64 = v2_solution.payload_b64()
+                raw["solution"] = {
+                    "counter": v2_solution.counter,
+                    "derivedKey": v2_solution.derived_key,
+                    "time": v2_solution.took_ms,
+                    "checked": v2_solution.checked,
+                    "strategy": v2_solution.strategy,
+                    "prefixMatched": v2_solution.prefix_matched,
+                }
+                raw["payload"] = v2_solution.payload()
+                raw["payloadBase64"] = payload_b64
+                diagnostics.update(
+                    {
+                        "counter": v2_solution.counter,
+                        "derived_key_prefix": v2_solution.derived_key[:16],
+                        "checked": v2_solution.checked,
+                        "solve_ms": v2_solution.took_ms,
+                        "prefix_matched": v2_solution.prefix_matched,
+                        "strategy_used": v2_solution.strategy,
+                        "mode": "form",
+                    }
+                )
+                return finish(ok=True, ticket=payload_b64, verify_code=str(v2_solution.counter))
+
+            if challenge_obj is None:
+                challenge_obj = parse_altcha_challenge(data)
             upper = int(max_number if max_number is not None else challenge_obj.maxnumber)
             raw["challenge"] = asdict(challenge_obj)
             diagnostics.update(
                 {
+                    "version": "v1",
                     "algorithm": challenge_obj.algorithm,
                     "maxnumber": upper,
                     "salt": challenge_obj.salt,

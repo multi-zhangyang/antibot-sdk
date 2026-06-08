@@ -12,7 +12,7 @@
 - Tencent Captcha：封装腾讯滑块的页面触发、浏览器池、缺口识别、轨迹拖拽、ticket/randstr 输出。
 - Aliyun Captcha：封装阿里云滑块的 Node/Puppeteer runner、站点 profile、attempt/session retry、错误归一、artifact 保留。
 - AJ-Captcha / Anji：新增纯 HTTP 协议 solver，走 `/captcha/get` 图像缺口定位、AES `pointJson`、`/captcha/check`，输出二次校验用的 `captchaVerification`，不启动浏览器。
-- ALTCHA：新增 PoW 协议 solver，解析 challenge / `WWW-Authenticate: Altcha ...`，计算 number，输出表单 base64 payload 或 M2M Authorization header，不启动浏览器。
+- ALTCHA：升级 v1/v2 PoW 协议 solver，v1 反查 `hash(salt+number)`，v2 复现 `PBKDF2/SHA-* / SCRYPT / ARGON2ID` KDF challenge、HMAC 签名与 verify-compatible fast path，输出表单 base64 payload 或 M2M Authorization header，不启动浏览器。
 - Anubis：新增 `fast/slow` PoW 协议 solver，解析 challenge 页面或 make-challenge JSON，计算 `SHA256(randomData+nonce)` 前导零，可生成 `pass-challenge` 参数或直接换取 auth cookie，不启动浏览器。
 - Auro.Network：新增 AES-GCM 行为数据 + PoW 协议 solver，获取 `/enckey`，生成鼠标 telemetry 并 AES-GCM 加密，提交 `/api/pow/setup` 后搜索 `SHA256(prefix+nonce)`，可 `/api/pow/validate`，不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
@@ -627,11 +627,24 @@ async with AntibotClient() as client:
 
 ### 9. ALTCHA PoW 协议验证码
 
-ALTCHA 不是图片验证码，而是轻量 Proof-of-Work 验证：服务端返回 `algorithm / challenge / salt / signature / maxnumber`，客户端寻找一个 `number`，使得：
+ALTCHA 不是图片验证码，而是 Proof-of-Work/KDF 验证。SDK 现在同时支持两代协议：
+
+- v1：服务端返回 `algorithm / challenge / salt / signature / maxnumber`，客户端寻找 `number`：
 
 ```text
 hash(salt + number) == challenge
 ```
+
+- v2：服务端返回 `{parameters, signature}`，客户端把 `nonce || counter_uint32_be` 作为 password，按 `parameters.algorithm` 走 KDF，直到 derived key 命中 `keyPrefix`：
+
+```text
+derivedKey = KDF(password=nonce||counter, salt, cost, keyLength, memoryCost, parallelism)
+pass = hex(derivedKey).startswith(keyPrefix)
+```
+
+已复现的 v2 KDF：`SHA-256/384/512`、`PBKDF2/SHA-256/384/512`、`SCRYPT`、`ARGON2ID`。
+
+更有意思的是 v2 官方 `verifySolution()` 在没有 `keySignature` 的分支会重算并比较提交的 `derivedKey`，但不重新检查 `keyPrefix`；SDK 因此提供默认 `--v2-strategy auto` 的 verify-compatible fast path：无 `keySignature` 时只派生一次 counter=0 就能构造与官方 verifier 兼容的 payload；如果目标服务端额外检查 prefix，可切到 `--v2-strategy prefix` 做严格搜索。
 
 这类非常适合协议层 SDK：不需要浏览器，不需要识图，也不需要模拟鼠标。
 
@@ -639,10 +652,11 @@ hash(salt + number) == challenge
 
 - GET challenge endpoint，或直接读取 challenge JSON。
 - 解析 M2M 的 `WWW-Authenticate: Altcha ...`。
-- 支持 `SHA-1 / SHA-256 / SHA-512`。
-- 输出两种业务侧可用结果：
-  - 表单/widget：base64 JSON payload，通常填入 `input[name="altcha"]`。
-  - M2M/API：`Authorization: Altcha algorithm=..., number=...` header。
+- v1 支持 `SHA-1 / SHA-256 / SHA-512`。
+- v2 支持 `SHA / PBKDF2 / SCRYPT / ARGON2ID`，支持 challenge HMAC 签名交叉校验。
+- 输出业务侧可用结果：
+  - v1/v2 表单/widget：base64 JSON payload，通常填入 `input[name="altcha"]`。
+  - v1 M2M/API：`Authorization: Altcha algorithm=..., number=...` header。
 - 支持 `workers` 多进程分片搜索，默认单 worker，避免 VPS 内存/CPU 被打爆。
 - 支持 artifact：`altcha_run.json`。
 
@@ -658,6 +672,23 @@ antibot solve altcha \
 ```bash
 antibot solve altcha \
   --challenge-json '{"algorithm":"SHA-256","challenge":"...","salt":"...","signature":"...","maxnumber":1000000}'
+```
+
+ALTCHA v2 严格 prefix 搜索：
+
+```bash
+antibot solve altcha \
+  --challenge-json '{"parameters":{"algorithm":"PBKDF2/SHA-256","cost":1,"keyLength":32,"nonce":"39baf91a19d671f8231217f9e28342a6","salt":"5e00d5d152e1a5db7d44fb6404a40a5e","keyPrefix":"722e"}}' \
+  --v2-strategy prefix \
+  --max-number 200
+```
+
+ALTCHA v2 默认 verify-compatible fast path：
+
+```bash
+antibot solve altcha \
+  --challenge-json '{"parameters":{"algorithm":"PBKDF2/SHA-256","cost":5000,"keyLength":32,"nonce":"...","salt":"...","keyPrefix":"00"},"signature":"..."}' \
+  --hmac-signature-secret 'optional-cross-check-secret'
 ```
 
 M2M `WWW-Authenticate`：
@@ -692,9 +723,10 @@ async with AntibotClient() as client:
 
 当前定位：
 
-- 支持 ALTCHA v1 PoW 协议，属于真实协议 solver。
-- `ticket` 在默认 `form` 模式下是 base64 payload；在 `m2m` 模式下是 `Authorization: Altcha challenge={...}` header。
-- 如果服务端启用了自定义高 `maxnumber`，建议按 VPS 资源显式设置 `--workers` 和 `--timeout`。
+- 支持 ALTCHA v1 hashcash 与 v2 KDF PoW，属于真实协议 solver。
+- `ticket` 在默认 `form` 模式下是 base64 payload；v1 `m2m` 模式下是 `Authorization: Altcha challenge={...}` header。
+- v2 默认 `auto` 策略会优先走官方 verifier 兼容快速路径；需要真实 prefix 命中时使用 `--v2-strategy prefix`。
+- 如果服务端启用了高 `maxnumber`、高 PBKDF2 cost、SCRYPT 或 ARGON2ID，建议按 VPS 资源显式设置 `--workers` 和 `--timeout`。
 
 ---
 
@@ -2944,6 +2976,8 @@ ALTCHA：
 本地 challenge server：ok=true，成功输出 base64 payload。
 M2M header 解析：WWW-Authenticate -> AltchaChallenge -> Authorization header。
 固定 SHA-256 challenge：成功定位 number，并可反解 payload JSON。
+ALTCHA v2 官方 KDF 向量：PBKDF2/SHA-256、SHA-256、SCRYPT、ARGON2ID 全部对齐。
+ALTCHA v2 verify-compatible fast path：无 keySignature 分支 counter=0 单次派生可生成官方 verifier 兼容 payload；strict prefix 模式可命中 counter=123 fixture。
 ```
 
 Anubis：

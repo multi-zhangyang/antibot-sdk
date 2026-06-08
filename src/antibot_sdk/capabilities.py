@@ -39,7 +39,7 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "captcha_type": "proof_of_work",
         "status": "alpha",
         "output": "base64 payload / Authorization header",
-        "scope": "ALTCHA v1 PoW：解析 challenge 或 WWW-Authenticate，计算 number，输出表单 payload 或 M2M Authorization header；不启动浏览器。",
+        "scope": "ALTCHA v1/v2 PoW：v1 解析 challenge 或 WWW-Authenticate 反查 number；v2 复现 PBKDF2/SHA/Scrypt/Argon2id KDF challenge、HMAC 签名与 verify-compatible fast path，输出表单 payload 或 M2M Authorization header；不启动浏览器。",
     },
     "anubis": {
         "provider": "anubis",

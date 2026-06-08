@@ -208,8 +208,8 @@ def list_profiles() -> dict[str, Any]:
         "altcha": {
             "generic_pow": {
                 "patterns": ["altcha", "altcha.org"],
-                "mode": "proof-of-work-protocol-solver",
-                "successFields": ["altcha base64 payload", "Authorization: Altcha ..."],
+                "mode": "v1-hashcash-plus-v2-kdf-proof-of-work-protocol-solver",
+                "successFields": ["altcha base64 payload", "Authorization: Altcha ...", "counter+derivedKey"],
             }
         },
         "anubis": {
