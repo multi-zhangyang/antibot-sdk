@@ -1,0 +1,9 @@
+playwright>=1.40
+captcha-recognizer>=1.0
+crack-tcaptcha>=0.0.8
+fastapi>=0.110
+uvicorn>=0.27
+requests>=2.31
+Pillow>=10.0
+opencv-python>=4.8
+numpy>=1.26

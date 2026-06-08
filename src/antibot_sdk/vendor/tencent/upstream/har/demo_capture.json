@@ -1,0 +1,881 @@
+[
+  {
+    "t": "req",
+    "url": "https://cloud.tencent.com/product/captcha",
+    "method": "GET",
+    "headers": {
+      "upgrade-insecure-requests": "1",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": "\"Linux\""
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/collect/whitelist?id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&referer=",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/rateConfig?id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&referer=",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "res",
+    "url": "https://cloud.tencent.com/product/captcha",
+    "status": 200,
+    "body": "<!DOCTYPE html>\n<html>\n  <head>\n    <meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\">\n<meta name=\"viewport\" content=\"width=device-width, maximum-scale=1\">\n<meta charset=\"utf-8\">\n<meta name=\"format-detection\" content=\"telephone=no\">\n<title>T-sec-腾讯安全天御-行为式验证码 Captcha-腾讯云</title>\n<meta name=\"keywords\" content=\"验证码,Captcha,图形验证码,行为验证码,滑动验证,滑块验证,网站验证码,APP验证码,小程序验证码,人机识别,图灵测试\">\n<meta name=\"description\" content=\"天御验证码（Captcha）针对网站、APP开发者提供安全智能的验证码服务。基于腾讯多年技术沉淀，最大程度保护注册登录、活动秒杀、点赞发帖、数据保护等各大场景下业务安全的同时，提供更精细化的用户体验。\">\n<link rel=\"dns-prefetch\" href=\"//cloudcache.tencent-cloud.com\" />\n<link rel=\"dns-prefetch\" href=\"//qcloudimg.tencent-cloud.cn\" />\n<link rel=\"icon\" href=\"//cloudcache.tencent-cloud.com/qcloud/favicon.ico\" type=\"image/x-icon\" />\n\n<link rel=\"canonical\" href=\"https://cloud.tencent.com/product/captcha\" />\n\n\n<script>\n  document.domain = 'cloud.tencent.com';\n  window.CDN_DOMAIN = 'cloudcache.tencent-cloud.com'\n</script>\n    \n    <link rel=\"stylesheet\" href=\"//cloudcache.tencent-cloud.com/open_proj/proj_qcloud_v2/gateway/portal/css/global.css\" />\n    \n      <link href=\"//cloudcache.tencent-cloud.com/qcloud/ui/tea-portal-material-portal/build/Main/Main-202604141503.css\" rel=\"stylesheet\" />\n    \n      <link href=\"https://cloudcache.tencent-cloud.com/qcloud/trisys-landing/materials/material-product.6df466eb26bc55d441f5.css\" rel=\"stylesheet\" />\n    \n      <link href=\"https://cloudcache.tencent-cloud.com/qcloud/portal/css/roadmap/snippet.abc3270d6.css\" rel=\"stylesheet\" />\n    \n      <link href=\"//cloudcache.tencent-cloud.com/qcloud/ui/portal-set/build/DsSale/DsSale-202309121954.css\" rel=\"stylesheet\" />\n    \n      <link href=\"https://cloudcache.tencent-cloud.com/qcloud/portal/css/anchorWidget/snippet.efb555991.css\" rel=\"stylesheet\" />\n    \n    \n    <link id=\"qcportal-kit-style\" rel=\"stylesheet\" href=\"https://cloudcache.tencent-cloud.com/qcloud/portal/kit/full.27f8aefa73940f4e6eda.css\">\n    \n<script src=\"https://tam.cdn-go.cn/aegis-sdk/latest/aegis.min.js\"></script>\n<script>\n  !function(){\"use strict\";if(window.Aegis){let n=function(e){var t=new RegExp(\"(^| )\"+decodeURIComponent(e)+\"(?:=([^;]*))?(;|$)\"),n=document.cookie.match(t);return n?n[2]?decodeURIComponent(n[2]):\"\":null};var e=[],t=window.aegisIns=new Aegis({id:\"dWOw9fv7jg4XmVzQ09\",onError:!0,pagePerformance:!0,reportAssetSpeed:!0,reportApiSpeed:!0,api:{reportRequest:!0,resHeaders:[\"x-req-id\"]},ext1:n(\"qcloud_uid\")||\"\",beforeRequest:function(e){if(/bot|wechatdevtools|spider/i.test(navigator.userAgent))return!1},beforeReportSpeed:function(t){if(\"static\"===t.type&&\"function\"==typeof URL)try{var n=t.url||\"\";if(-1!==n.indexOf(\"asset-retry\"))return;var r=new URL(n).hostname;r&&!e.includes(r)&&e.push(r)}catch(o){}}});window.addEventListener(\"beforeunload\",function(){e.length&&t.reportEvent({name:\"resource-domain\",ext3:e.join(\"|\")})})}}();\n</script>\n\n  </head>\n  <body>\n    \n<script>\n  var userAgent = navigator.userAgent || 'unknown';\n  userAgent = userAgent.toLowerCase();\n\n  var iosReg = /ip(hone|ad|od)/i"
+  },
+  {
+    "t": "req",
+    "url": "https://qcloudimg.tencent-cloud.cn/raw/1709092006d7facfae0ed2520192836c/captcha.js",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/collect/pv?originFrom=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&referer=",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/speed/performance?dnsLookup=3&tcp=42&ssl=33&ttfb=503&contentDownload=0&domParse=1070&resourceDownload=0&firstScreenTiming=1372&from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=&",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "res",
+    "url": "https://rumt-zh.com/rateConfig?id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&referer=",
+    "status": 200,
+    "body": "{\"retcode\":0,\"msg\":\"\",\"configs\":[{\"limit_type\":\"log\",\"sample_rate\":100},{\"limit_type\":\"jsError\",\"sample_rate\":100},{\"limit_type\":\"whiteScreen\",\"sample_rate\":100},{\"limit_type\":\"assetsException\",\"sample_rate\":100},{\"limit_type\":\"pv\",\"sample_rate\":100},{\"limit_type\":\"event\",\"sample_rate\":100},{\"limit_type\":\"speed\",\"sample_rate\":100},{\"limit_type\":\"performance\",\"sample_rate\":100},{\"limit_type\":\"webvitals\",\"sample_rate\":100},{\"limit_type\":\"custom\",\"sample_rate\":100},{\"limit_type\":\"miniProgramData\",\"sample_rate\":100}],\"ttl\":864000}"
+  },
+  {
+    "t": "res",
+    "url": "https://rumt-zh.com/collect/whitelist?id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&referer=",
+    "status": 200,
+    "body": "{\"retcode\":0,\"result\":{\"is_in_white_list\":false,\"rate\":1,\"use_gzip\":0}}"
+  },
+  {
+    "t": "res",
+    "url": "https://qcloudimg.tencent-cloud.cn/raw/1709092006d7facfae0ed2520192836c/captcha.js",
+    "status": 200,
+    "body": "// 官网验证码介绍页体验\nvar js = document.createElement('script');\njs.src = 'https://turing.captcha.qcloud.com/TCaptcha.js';\ndocument.head.appendChild(js);\nvar captchaTimer = null;\nwindow.captchaCallback = function () {\n  console.log('验证成功');\n};\nwindow.captchaCallbackNoFeel = function () {\n  Toast('验证成功', 2000);\n};\nfunction Toast(msg, duration) {\n  duration = isNaN(duration) ? 3000 : duration;\n  var m = document.createElement('div');\n  m.innerHTML = msg;\n  m.style.cssText =\n    'max-width:60%;min-width: 150px;padding:0 14px;height: 40px;color: rgb(255, 255, 255);line-height: 40px;text-align: center;border-radius: 4px;position: fixed;top: 50%;left: 50%;transform: translate(-50%, -50%);z-index: 999999;background: rgba(0, 0, 0,.7);font-size: 16px;';\n  document.body.appendChild(m);\n  setTimeout(function () {\n    var d = 0.5;\n    m.style.webkitTransition = '-webkit-transform ' + d + 's ease-in, opacity ' + d + 's ease-in';\n    m.style.opacity = '0';\n    setTimeout(function () {\n      document.body.removeChild(m);\n    }, d * 1000);\n  }, duration);\n}\nfunction init() {\n  console.log(window.TencentCaptcha);\n  if (window.TencentCaptcha) {\n    clearTimeout(captchaTimer);\n    captchaTimer = null;\n    document.getElementById('captcha_click').onclick = function () {\n      new TencentCaptcha('199999861', captchaCallback, {}).show();\n    };\n    document.getElementById('vtt_click').onclick = function () {\n      new TencentCaptcha('199999726', captchaCallback, {}).show();\n    };\n    document.getElementById('text_click').onclick = function () {\n      new TencentCaptcha('199999888', captchaCallback, {}).show();\n    };\n    document.getElementById('noFeel_click').onclick = function () {\n      new TencentCaptcha('199999399', captchaCallbackNoFeel, { loading: false }).show();\n    };\n    document.getElementById('image_click').onclick = function () {\n      new TencentCaptcha('199999761', captchaCallback, {}).show();\n    };\n  } else {\n    captchaTimer = setTimeout(function () {\n      init();\n    }, 500);\n  }\n}\ninit();\n"
+  },
+  {
+    "t": "res",
+    "url": "https://rumt-zh.com/speed/performance?dnsLookup=3&tcp=42&ssl=33&ttfb=503&contentDownload=0&domParse=1070&resourceDownload=0&firstScreenTiming=1372&from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=&",
+    "status": 204,
+    "body": ""
+  },
+  {
+    "t": "res",
+    "url": "https://rumt-zh.com/collect/pv?originFrom=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&referer=",
+    "status": 204,
+    "body": ""
+  },
+  {
+    "t": "req",
+    "url": "https://turing.captcha.qcloud.com/TCaptcha.js",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://ping.cloud.tencent.com/trafficCollect.php?expKey=browse&expValue=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&uin=&ul=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&referer=&fromSource=qcloud.directEnter.product&visitId=d14b978c8b4fc4184e30825a790e58f6&landingpage=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&language=zh&lastLoginType=&_ga=&pageTitle=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&from=&from_column=&type=OfficialNetworkTraffic&t=1780581587035",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://oth.str.beacon.qq.com/trpc.beacon.configserver.BeaconConfigService/QueryConfig",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "application/json, text/plain, */*",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json;charset=utf-8",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "application/json, text/plain, */*",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json;charset=utf-8",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "application/json, text/plain, */*",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json;charset=utf-8",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "application/json, text/plain, */*",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json;charset=utf-8",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://cloud.tencent.com/product/feedback/ajax/getSurvey?condition=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&channelId=1012235648000&_=1780581587203&callback=axiosJsonpCallback1",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/product/captcha",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://turing.captcha.gtimg.com/1/tcaptcha-frame.91efdf16.js",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "res",
+    "url": "https://turing.captcha.qcloud.com/TCaptcha.js",
+    "status": 200,
+    "body": "!function(e){var a={};function t(i){if(a[i])return a[i].exports;var r=a[i]={i:i,l:!1,exports:{__esModule: undefined}};return e[i].call(r.exports,r,r.exports,t),r.l=!0,r.exports}t.m=e,t.c=a,t.d=function(e,a,i){t.o(e,a)||Object.defineProperty(e,a,{enumerable:!0,get:i})},t.r=function(e){\"undefined\"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:\"Module\"}),Object.defineProperty(e,\"__esModule\",{value:!0})},t.t=function(e,a){if(1&a&&(e=t(e)),8&a)return e;if(4&a&&\"object\"==typeof e&&e&&e.__esModule)return e;var i=Object.create(null);if(t.r(i),Object.defineProperty(i,\"default\",{enumerable:!0,value:e}),2&a&&\"string\"!=typeof e)for(var r in e)t.d(i,r,function(a){return e[a]}.bind(null,r));return i},t.n=function(e){var a=e&&e.__esModule?function(){return e[\"default\"]}:function(){return e};return t.d(a,\"a\",a),a},t.o=function(e,a){return Object.prototype.hasOwnProperty.call(e,a)},t.p=\"\",t(t.s=62)}([,function(e,a,t){\"use strict\";var i=this&&this.__values||function(e){var a=\"function\"==typeof Symbol&&Symbol.iterator,t=a&&e[a],i=0;if(t)return t.call(e);if(e&&\"number\"==typeof e.length)return{next:function(){return e&&i>=e.length&&(e=void 0),{value:e&&e[i++],done:!e}}};throw new TypeError(a?\"Object is not iterable.\":\"Symbol.iterator is not defined.\")},r=this&&this.__importDefault||function(e){return e&&e.__esModule?e:{\"default\":e}};a.__esModule=!0,a.pxToRem=a.loadExternalCSS=a.isLowIE=a.isIos=a.getIEVersion=a.getLatestPrehandleSpeed=a.hashCode=a.debounce=a.getPerformance=a.getLogCommonParams=a.getDeviceInfo=a.getTokenID=void 0;var n=r(t(14));function o(){var e=function(e){var a,t=document.cookie,i=encodeURIComponent(e),r=t.indexOf(i),n=null;if(r>-1){var o=t.indexOf(\";\",r);-1===o&&(o=t.length),n=decodeURIComponent(t.substring(r+i.length+1,o))}try{window.localStorage&&(a=localStorage.getItem(e)),window.sessionStorage&&(a=a||sessionStorage.getItem(e))}catch(c){}return a||n}(\"TDC_itoken\");return e?e.split(\":\")[0]:undefined}function c(){var e=new n[\"default\"](navigator.userAgent);return{platform:e.getOS().name,client:e.getBrowser().name}}a.getTokenID=o,a.getDeviceInfo=c,a.getLogCommonParams=function(){try{var e=document.referrer||\"unknown\",a=location.href||document.URL,t=navigator.userAgent;e=e.length>512?e.substr(0,512):e,a=a.length>1024?a.substr(0,1024):a;var i=c(),r=i.client,n=i.platform;return[\"referer=\".concat(encodeURIComponent(e)),\"href=\".concat(encodeURIComponent(a)),\"token_id=\".concat(o()),\"ua=\".concat(t),\"client=\".concat(r),\"platform=\".concat(n)]}catch(s){return a=(a=s.message).length>1024?a.substr(0,1024):a,[\"href=\".concat(encodeURIComponent(a))]}};a.getPerformance=function(e){var a,t;if(window.performance&&\"function\"==typeof window.performance.getEntriesByType){var r=[],n={},o=window.performance.getEntriesByType(\"resource\"),c=[\"xmlhttprequest\",\"script\",\"iframe\",\"img\",\"link\"];try{for(var s=i(o),u=s.next();!u.done;u=s.next()){var d=u.value;if(-1!==c.indexOf(d.initiatorType)){var l=\"\";try{l=d.name.split(\"://\")[1].split(\"?\""
+  },
+  {
+    "t": "req",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "application/json, text/plain, */*",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json;charset=utf-8",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "application/json, text/plain, */*",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json;charset=utf-8",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/collect?from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "res",
+    "url": "https://ping.cloud.tencent.com/trafficCollect.php?expKey=browse&expValue=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&uin=&ul=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&referer=&fromSource=qcloud.directEnter.product&visitId=d14b978c8b4fc4184e30825a790e58f6&landingpage=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&language=zh&lastLoginType=&_ga=&pageTitle=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&from=&from_column=&type=OfficialNetworkTraffic&t=1780581587035",
+    "status": 200,
+    "body": ""
+  },
+  {
+    "t": "res",
+    "url": "https://cloud.tencent.com/product/feedback/ajax/getSurvey?condition=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&channelId=1012235648000&_=1780581587203&callback=axiosJsonpCallback1",
+    "status": 200,
+    "body": "/**/ typeof axiosJsonpCallback1 === 'function' && axiosJsonpCallback1({\"code\":\"RequestLimitExceeded\",\"msg\":\"Your current request times equals to `142` in a second, which exceeds the frequency limit `90` for a second. Please reduce the frequency of calls.\"});"
+  },
+  {
+    "t": "res",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "status": 200,
+    "body": "{\"result\": 200, \"srcGatewayIp\": \"157.230.130.220\", \"serverTime\": \"1780581587742\", \"msg\": \"success\"}"
+  },
+  {
+    "t": "res",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "status": 200,
+    "body": "{\"result\": 200, \"srcGatewayIp\": \"157.230.130.220\", \"serverTime\": \"1780581587742\", \"msg\": \"success\"}"
+  },
+  {
+    "t": "res",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "status": 200,
+    "body": "{\"result\": 200, \"srcGatewayIp\": \"157.230.130.220\", \"serverTime\": \"1780581587750\", \"msg\": \"success\"}"
+  },
+  {
+    "t": "res",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "status": 200,
+    "body": "{\"result\": 200, \"srcGatewayIp\": \"157.230.130.220\", \"serverTime\": \"1780581587751\", \"msg\": \"success\"}"
+  },
+  {
+    "t": "res",
+    "url": "https://rumt-zh.com/collect?from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=",
+    "status": 204,
+    "body": ""
+  },
+  {
+    "t": "res",
+    "url": "https://oth.str.beacon.qq.com/trpc.beacon.configserver.BeaconConfigService/QueryConfig",
+    "status": 200,
+    "body": "{\"ret\":1,\"msg\":\"Can't get appkey config, appkey:0WEB0OEX9Y4SQ244\",\"beaconConfig\":\"\"}"
+  },
+  {
+    "t": "res",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "status": 200,
+    "body": "{\"result\": 200, \"srcGatewayIp\": \"157.230.130.220\", \"serverTime\": \"1780581587879\", \"msg\": \"success\"}"
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/speed?from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "res",
+    "url": "https://rumt-zh.com/speed?from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=",
+    "status": 204,
+    "body": ""
+  },
+  {
+    "t": "res",
+    "url": "https://turing.captcha.gtimg.com/1/tcaptcha-frame.91efdf16.js",
+    "status": 200,
+    "body": "!function(e){var t={};function a(i){if(t[i])return t[i].exports;var r=t[i]={i:i,l:!1,exports:{__esModule: undefined}};return e[i].call(r.exports,r,r.exports,a),r.l=!0,r.exports}a.m=e,a.c=t,a.d=function(e,t,i){a.o(e,t)||Object.defineProperty(e,t,{enumerable:!0,get:i})},a.r=function(e){\"undefined\"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:\"Module\"}),Object.defineProperty(e,\"__esModule\",{value:!0})},a.t=function(e,t){if(1&t&&(e=a(e)),8&t)return e;if(4&t&&\"object\"==typeof e&&e&&e.__esModule)return e;var i=Object.create(null);if(a.r(i),Object.defineProperty(i,\"default\",{enumerable:!0,value:e}),2&t&&\"string\"!=typeof e)for(var r in e)a.d(i,r,function(t){return e[t]}.bind(null,r));return i},a.n=function(e){var t=e&&e.__esModule?function(){return e[\"default\"]}:function(){return e};return a.d(t,\"a\",t),t},a.o=function(e,t){return Object.prototype.hasOwnProperty.call(e,t)},a.p=\"\",a(a.s=115)}([function(e,t,a){\"use strict\";var i=this&&this.__importDefault||function(e){return e&&e.__esModule?e:{\"default\":e}};t.__esModule=!0,t.setScaleWidth=t.changeDomVisibility=t.domParserHtml=t.setVoiceOverFocus=t.bodyAriaHidden=t.addAriaModel=t.isTouchEventSupported=t.supportsPassive=t.isWindow=t.getWindow=t.getOffset=t.isDarkMode=t.shakeEl=t.addOnceAnimationClass=t.animationEndName=t.removeDomClass=t.addDomClass=t.setCss=t.getCSS=t.supportsCSS=t.createGeneralIframe=void 0;var r=a(3),n=i(a(18)),o=a(19),s=i(a(7)),c=a(4);t.createGeneralIframe=function(e){var t=document.createElement(\"div\");(null===e||void 0===e?void 0:e.name)?t.innerHTML='<iframe name=\"'.concat(null===e||void 0===e?void 0:e.name,'\" />'):t.innerHTML=\"<iframe />\";var a=t.childNodes[0];return(null===e||void 0===e?void 0:e.id)&&(a.id=e.id),(null===e||void 0===e?void 0:e.className)&&(a.className=e.className),a.setAttribute(\"frameborder\",\"0\"),a.setAttribute(\"border\",\"0\"),a.setAttribute(\"marginheight\",\"0\"),a.setAttribute(\"marginwidth\",\"0\"),a.setAttribute(\"scrolling\",\"no\"),a};t.supportsCSS=function(e,t){var a=document.createElement(\"div\");return e in a.style&&\"length\"!==e&&\"parentRule\"!==e&&(a.style[e]=t,a.style[e]===t)};t.getCSS=function(e,t){return e.currentStyle?e.currentStyle[t]:window.getComputedStyle(e,null)[t]};t.setCss=function(e,t){if(e&&t&&(0,r.isObject)(t)){for(var a in t)try{e.style[a]=t[a]}catch(i){}return t}};t.addDomClass=function(e,t){if(e)if(e.classList)e.classList.add(t);else{var a=e.className,i=a+(\"\"!==a?\" \":\"\")+t;e.className=i}};t.removeDomClass=function(e,t){if(e&&t)for(var a=t.split(\" \"),i=0;i<a.length;i++)if(e.classList)e.classList.remove(a[i]);else{var r=\" \".concat(e.className,\" \"),n=(r=r.replace(/(\\s+)/gi,\" \")).replace(\" \".concat(a[i],\" \"),\" \");n=n.replace(/(^\\s+)|(\\s+$)/g,\"\"),e.className=n}},t.animationEndName=function(){var e,t=document.createElement(\"fake\"),a={animation:\"animationend\",mozAnimation:\"mozAnimationEnd\",webkitAnimation:\"webkitAnimationEnd\"};for(e in a)if(t.style[e]!==undefined)return a[e];return!1}();t.addOnceAnimationClass=function(e){"
+  },
+  {
+    "t": "req",
+    "url": "https://www.google.com/ccm/collect?rcb=3&frm=0&ae=g&auid=1357092948.1780581589&dt=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&en=page_view&dl=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&scrsrc=www.googletagmanager.com&rnd=144849570.1780581589&navt=n&npa=0&ep.ads_data_redaction=0&gtm=45He6621h1v77048748za200zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228215~119027222&apve=1&apvf=f&apvc=1&tft=1780581589239&tfd=5913",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://turing.captcha.gtimg.com/1/template/drag_ele.html",
+    "method": "GET",
+    "headers": {
+      "referer": "https://cloud.tencent.com/",
+      "upgrade-insecure-requests": "1",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": "\"Linux\""
+    }
+  },
+  {
+    "t": "res",
+    "url": "https://www.google.com/ccm/collect?rcb=3&frm=0&ae=g&auid=1357092948.1780581589&dt=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&en=page_view&dl=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&scrsrc=www.googletagmanager.com&rnd=144849570.1780581589&navt=n&npa=0&ep.ads_data_redaction=0&gtm=45He6621h1v77048748za200zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228215~119027222&apve=1&apvf=f&apvc=1&tft=1780581589239&tfd=5913",
+    "status": 200,
+    "body": ""
+  },
+  {
+    "t": "req",
+    "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/940175154/?random=1780581589371&cv=11&fst=1780581589371&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=2&frm=0&tiba=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=9&rfmt=3&fmt=4",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://www.google.com/rmkt/collect/940175154/?random=1780581589371&cv=11&fst=1780581589371&fmt=8&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=2&frm=0&tiba=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=68&gcp=5",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/940175154/?random=1780581589435&cv=11&fst=1780581589435&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=2&frm=0&tiba=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=9&rfmt=3&fmt=4",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://www.google.com/rmkt/collect/940175154/?random=1780581589435&cv=11&fst=1780581589435&fmt=8&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=2&frm=0&tiba=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=68&gcp=5",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://www.google.com/ccm/collect?rcb=2&frm=0&ae=g&auid=1357092948.1780581589&dt=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&dl=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&scrsrc=www.googletagmanager.com&rnd=144849570.1780581589&navt=n&npa=0&_tu=CA&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228214~119027224&apve=1&apvf=f&apvc=0&tids=AW-940175154&tid=AW-940175154&tft=1780581589441&tfd=6115",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "res",
+    "url": "https://www.google.com/rmkt/collect/940175154/?random=1780581589371&cv=11&fst=1780581589371&fmt=8&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=2&frm=0&tiba=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=68&gcp=5",
+    "status": 200,
+    "body": ""
+  },
+  {
+    "t": "res",
+    "url": "https://www.google.com/rmkt/collect/940175154/?random=1780581589435&cv=11&fst=1780581589435&fmt=8&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=2&frm=0&tiba=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=68&gcp=5",
+    "status": 200,
+    "body": ""
+  },
+  {
+    "t": "res",
+    "url": "https://www.google.com/ccm/collect?rcb=2&frm=0&ae=g&auid=1357092948.1780581589&dt=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&dl=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&scrsrc=www.googletagmanager.com&rnd=144849570.1780581589&navt=n&npa=0&_tu=CA&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228214~119027224&apve=1&apvf=f&apvc=0&tids=AW-940175154&tid=AW-940175154&tft=1780581589441&tfd=6115",
+    "status": 200,
+    "body": ""
+  },
+  {
+    "t": "req",
+    "url": "https://www.google.com/pagead/1p-user-list/940175154/?random=1780581589435&cv=11&fst=1780578000000&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=2&frm=0&tiba=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=9&rfmt=3&fmt=3&is_vtc=1&cid=CAQS1AEAEQoqgc8VBqiqeDAeUkJEb72qGD8zY8x91NdTBtJYPU3-MoG1KhaXGk0WYB2nU8A20F-ZMrJkKL3C9XEK6opS4x9WKfexFBMZhcJOFh4io1gVHCUGlwrAXjM0CqTzlsuM0U1JUHxNpvUrWilxlAZOlxtjxJQWO7ohwZxeb3WCLbgcWjLF9QGT_WO2VUTsjNGN1EVbhRmsKw8ZErk3i50v1eokhqSmTjZitBoRseZOPPprypNXf_35GtRtigH_JhwVdU2HBEvUkDay9rokEvWhqDrShQ&random=4119440985&rmt_tld=0&ipr=y",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://www.google.com/pagead/1p-user-list/940175154/?random=1780581589371&cv=11&fst=1780578000000&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=2&frm=0&tiba=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=9&rfmt=3&fmt=3&is_vtc=1&cid=CAQS1AEAEQoqgT8GNCuQ_wO8DclBBbR0N_2AlMCRjWkt3PTcEuBp46kzHrvNqNSXWZjCjTBrXe6tT8-0KFqIWxgu_bp49XbXaLi4ICuascIC08WFNn7c6vfxOhP05iFuROS_N2xqRIjsOD8SA60V501ncHiIV5CW4o7StTy3OCwMOaM-ggtBcIF87-Mm2l3mVglO0_FhTLSDzleh3e5FRLV0R10Jmi_KXh90F6OXjK1dLQYTi5Hd4oH5xpDN3j6TqDJLTWXmKKe7j9z0nV-E-cEc7X1u8izffQ&random=2766647448&rmt_tld=0&ipr=y",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "res",
+    "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/940175154/?random=1780581589435&cv=11&fst=1780581589435&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=2&frm=0&tiba=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=9&rfmt=3&fmt=4",
+    "status": 200,
+    "body": "(function(){var s = {};(function(){var k=typeof Object.defineProperties==\"function\"?Object.defineProperty:function(a,d,b){if(a==Array.prototype||a==Object.prototype)return a;a[d]=b.value;return a};function l(a){a=[\"object\"==typeof globalThis&&globalThis,a,\"object\"==typeof window&&window,\"object\"==typeof self&&self,\"object\"==typeof global&&global];for(var d=0;d<a.length;++d){var b=a[d];if(b&&b.Math==Math)return b}throw Error(\"Cannot find global object\");} var p=l(this),q=typeof Symbol===\"function\"&&typeof Symbol(\"x\")===\"symbol\",r={},t={};function u(a,d,b){if(!b||a!=null){b=t[d];if(b==null)return a[d];b=a[b];return b!==void 0?b:a[d]}} function v(a,d,b){if(d)a:{var c=a.split(\".\");a=c.length===1;var e=c[0],g;!a&&e in r?g=r:g=p;for(e=0;e<c.length-1;e++){var f=c[e];if(!(f in g))break a;g=g[f]}c=c[c.length-1];b=q&&b===\"es6\"?g[c]:null;d=d(b);d!=null&&(a?k(r,c,{configurable:!0,writable:!0,value:d}):d!==b&&(t[c]===void 0&&(a=Math.random()*1E9>>>0,t[c]=q?p.Symbol(c):\"$jscp$\"+a+\"$\"+c),k(g,t[c],{configurable:!0,writable:!0,value:d})))}} var w=q&&typeof u(Object,\"assign\")==\"function\"?u(Object,\"assign\"):function(a,d){if(a==null)throw new TypeError(\"No nullish arg\");a=Object(a);for(var b=1;b<arguments.length;b++){var c=arguments[b];if(c)for(var e in c)Object.prototype.hasOwnProperty.call(c,e)&&(a[e]=c[e])}return a};v(\"Object.assign\",function(a){return a||w},\"es6\");/*  Copyright The Closure Library Authors. SPDX-License-Identifier: Apache-2.0 */ var x=this||self;var y={};var z=window,A=navigator,C={cache:\"no-store\",credentials:\"include\",keepalive:!0,method:\"POST\",mode:\"no-cors\",redirect:\"follow\"};function D(a){if(typeof z.fetch===\"function\"){var d=u(Object,\"assign\").call(Object,{},C);try{var b=z.fetch(a,d);if(b)return b.then(function(){}).catch(function(){}),!0}catch(c){}}E(a);return!0}function F(a){var d=new Image(1,1);d.onload=function(){d.onload=null};d.onerror=function(){d.onerror=null};d.src=a} function E(a){try{var d=A.sendBeacon&&A.sendBeacon(a)}catch(c){var b=y.TAGGING;b||(b=y.TAGGING=[]);b[15]=!0}d||F(a)};var G=/#|$/;function H(a){var d=a.search(G),b;a:{for(b=0;(b=a.indexOf(\"fmt\",b))>=0&&b<d;){var c=a.charCodeAt(b-1);if(c==38||c==63)if(c=a.charCodeAt(b+3),!c||c==61||c==38||c==35)break a;b+=4}b=-1}if(b<0)return null;c=a.indexOf(\"&\",b);if(c<0||c>d)c=d;return decodeURIComponent(a.slice(b+4,c!==-1?c:0).replace(/\\+/g,\" \"))};function I(a,d,b,c){function e(){--g;if(g<=0){var h;(h=a.GooglebQhCsO)||(h={});var B=h[d];B&&(delete h[d],h=B[0],typeof h===\"function\"&&h())}}c=c===void 0?[]:c;for(var g=b.length+1,f={g:0};f.g<b.length;f={g:f.g},f.g++){var n=Number(H(b[f.g])),m=null;n!==1&&n!==2||!(n=a.document.getElementById(\"goog_conv_iframe\"))||n.src||(m=n);m||(m=new Image,c&&c[f.g]&&(m.onerror=function(h){return function(){D(c[h.g])&&e()}}(f)));m.onload=e;m.src=b[f.g]}e()} for(var J=[\"ss_\"],K=s||x,L;J.length&&(L=J.shift());)J.length||I===void 0?K[L]&&K[L]!==Object.prototype[L]?K=K[L]:K=K[L]={}:K[L]=I;}).call(this);;s.ss_(window,'OjE3ODA1ODE1ODk0MzU',['https://www.googl"
+  },
+  {
+    "t": "res",
+    "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/940175154/?random=1780581589371&cv=11&fst=1780581589371&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=2&frm=0&tiba=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=9&rfmt=3&fmt=4",
+    "status": 200,
+    "body": "(function(){var s = {};(function(){var k=typeof Object.defineProperties==\"function\"?Object.defineProperty:function(a,d,b){if(a==Array.prototype||a==Object.prototype)return a;a[d]=b.value;return a};function l(a){a=[\"object\"==typeof globalThis&&globalThis,a,\"object\"==typeof window&&window,\"object\"==typeof self&&self,\"object\"==typeof global&&global];for(var d=0;d<a.length;++d){var b=a[d];if(b&&b.Math==Math)return b}throw Error(\"Cannot find global object\");} var p=l(this),q=typeof Symbol===\"function\"&&typeof Symbol(\"x\")===\"symbol\",r={},t={};function u(a,d,b){if(!b||a!=null){b=t[d];if(b==null)return a[d];b=a[b];return b!==void 0?b:a[d]}} function v(a,d,b){if(d)a:{var c=a.split(\".\");a=c.length===1;var e=c[0],g;!a&&e in r?g=r:g=p;for(e=0;e<c.length-1;e++){var f=c[e];if(!(f in g))break a;g=g[f]}c=c[c.length-1];b=q&&b===\"es6\"?g[c]:null;d=d(b);d!=null&&(a?k(r,c,{configurable:!0,writable:!0,value:d}):d!==b&&(t[c]===void 0&&(a=Math.random()*1E9>>>0,t[c]=q?p.Symbol(c):\"$jscp$\"+a+\"$\"+c),k(g,t[c],{configurable:!0,writable:!0,value:d})))}} var w=q&&typeof u(Object,\"assign\")==\"function\"?u(Object,\"assign\"):function(a,d){if(a==null)throw new TypeError(\"No nullish arg\");a=Object(a);for(var b=1;b<arguments.length;b++){var c=arguments[b];if(c)for(var e in c)Object.prototype.hasOwnProperty.call(c,e)&&(a[e]=c[e])}return a};v(\"Object.assign\",function(a){return a||w},\"es6\");/*  Copyright The Closure Library Authors. SPDX-License-Identifier: Apache-2.0 */ var x=this||self;var y={};var z=window,A=navigator,C={cache:\"no-store\",credentials:\"include\",keepalive:!0,method:\"POST\",mode:\"no-cors\",redirect:\"follow\"};function D(a){if(typeof z.fetch===\"function\"){var d=u(Object,\"assign\").call(Object,{},C);try{var b=z.fetch(a,d);if(b)return b.then(function(){}).catch(function(){}),!0}catch(c){}}E(a);return!0}function F(a){var d=new Image(1,1);d.onload=function(){d.onload=null};d.onerror=function(){d.onerror=null};d.src=a} function E(a){try{var d=A.sendBeacon&&A.sendBeacon(a)}catch(c){var b=y.TAGGING;b||(b=y.TAGGING=[]);b[15]=!0}d||F(a)};var G=/#|$/;function H(a){var d=a.search(G),b;a:{for(b=0;(b=a.indexOf(\"fmt\",b))>=0&&b<d;){var c=a.charCodeAt(b-1);if(c==38||c==63)if(c=a.charCodeAt(b+3),!c||c==61||c==38||c==35)break a;b+=4}b=-1}if(b<0)return null;c=a.indexOf(\"&\",b);if(c<0||c>d)c=d;return decodeURIComponent(a.slice(b+4,c!==-1?c:0).replace(/\\+/g,\" \"))};function I(a,d,b,c){function e(){--g;if(g<=0){var h;(h=a.GooglebQhCsO)||(h={});var B=h[d];B&&(delete h[d],h=B[0],typeof h===\"function\"&&h())}}c=c===void 0?[]:c;for(var g=b.length+1,f={g:0};f.g<b.length;f={g:f.g},f.g++){var n=Number(H(b[f.g])),m=null;n!==1&&n!==2||!(n=a.document.getElementById(\"goog_conv_iframe\"))||n.src||(m=n);m||(m=new Image,c&&c[f.g]&&(m.onerror=function(h){return function(){D(c[h.g])&&e()}}(f)));m.onload=e;m.src=b[f.g]}e()} for(var J=[\"ss_\"],K=s||x,L;J.length&&(L=J.shift());)J.length||I===void 0?K[L]&&K[L]!==Object.prototype[L]?K=K[L]:K=K[L]={}:K[L]=I;}).call(this);;s.ss_(window,'OjE3ODA1ODE1ODkzNzE',['https://www.googl"
+  },
+  {
+    "t": "res",
+    "url": "https://www.google.com/pagead/1p-user-list/940175154/?random=1780581589435&cv=11&fst=1780578000000&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=2&frm=0&tiba=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=9&rfmt=3&fmt=3&is_vtc=1&cid=CAQS1AEAEQoqgc8VBqiqeDAeUkJEb72qGD8zY8x91NdTBtJYPU3-MoG1KhaXGk0WYB2nU8A20F-ZMrJkKL3C9XEK6opS4x9WKfexFBMZhcJOFh4io1gVHCUGlwrAXjM0CqTzlsuM0U1JUHxNpvUrWilxlAZOlxtjxJQWO7ohwZxeb3WCLbgcWjLF9QGT_WO2VUTsjNGN1EVbhRmsKw8ZErk3i50v1eokhqSmTjZitBoRseZOPPprypNXf_35GtRtigH_JhwVdU2HBEvUkDay9rokEvWhqDrShQ&random=4119440985&rmt_tld=0&ipr=y",
+    "status": 200,
+    "body": "GIF89a\u0001\u0000\u0001\u0000�\u0000\u0000\u0000\u0000\u0000���!�\u0004\u0001\u0000\u0000\u0000\u0000,\u0000\u0000\u0000\u0000\u0001\u0000\u0001\u0000\u0000\u0002\u0001D\u0000;"
+  },
+  {
+    "t": "res",
+    "url": "https://www.google.com/pagead/1p-user-list/940175154/?random=1780581589371&cv=11&fst=1780578000000&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115616985~115938466~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=2&frm=0&tiba=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=9&rfmt=3&fmt=3&is_vtc=1&cid=CAQS1AEAEQoqgT8GNCuQ_wO8DclBBbR0N_2AlMCRjWkt3PTcEuBp46kzHrvNqNSXWZjCjTBrXe6tT8-0KFqIWxgu_bp49XbXaLi4ICuascIC08WFNn7c6vfxOhP05iFuROS_N2xqRIjsOD8SA60V501ncHiIV5CW4o7StTy3OCwMOaM-ggtBcIF87-Mm2l3mVglO0_FhTLSDzleh3e5FRLV0R10Jmi_KXh90F6OXjK1dLQYTi5Hd4oH5xpDN3j6TqDJLTWXmKKe7j9z0nV-E-cEc7X1u8izffQ&random=2766647448&rmt_tld=0&ipr=y",
+    "status": 200,
+    "body": "GIF89a\u0001\u0000\u0001\u0000�\u0000\u0000\u0000\u0000\u0000���!�\u0004\u0001\u0000\u0000\u0000\u0000,\u0000\u0000\u0000\u0000\u0001\u0000\u0001\u0000\u0000\u0002\u0001D\u0000;"
+  },
+  {
+    "t": "req",
+    "url": "https://turing.captcha.gtimg.com/1/dy-jy3.js",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://turing.captcha.gtimg.com/1/template/drag_ele.html",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://turing.captcha.gtimg.com/1/dy-ele.54bf6023.js",
+    "method": "GET",
+    "headers": {
+      "origin": "https://turing.captcha.gtimg.com",
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://turing.captcha.gtimg.com/1/template/drag_ele.html",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "res",
+    "url": "https://turing.captcha.gtimg.com/1/template/drag_ele.html",
+    "status": 200,
+    "body": "<!DOCTYPE html><html lang=\"mul\"><head><meta charset=\"UTF-8\"><meta name=\"renderer\" content=\"webkit\"><title>验证码</title><script type=\"text/javascript\">window.Set=\"undefined\"!=typeof Set?Set:function(){};var apiDomain=window.name;window.TCaptchaApiDomain=apiDomain||\"https://turing.captcha.qcloud.com\"</script><!--[if lte IE 7]>\n  <style>\n    .tcaptcha-embed-contrl{\n     margin-left: 5px !important;\n    }\n    .tcaptcha-embed .verify-btn{\n      margin-left: 5px !important;\n    }\n    .tc-action--normal, .tc-action--aged{\n      display: inline !important;\n      zoom:1 !important;\n    }\n  </style>\n  <![endif]--><!--[if lte IE 8]>\n  <style>\n    .tc-cover{\n      filter:progid:DXImageTransform.Microsoft.gradient(startColorstr=#D8FFFFFF,endColorstr=#D8FFFFFF);\n    }\n  </style>\n  <![endif]--><!--[if lte IE 9]>\n  <style>\n    .tc-title{\n      display: block !important;\n    }\n    body .body-wrap .tc-title-wrap .tc-title .tc-instruction-icon{\n      display: inline;\n      vertical-align: center !important;\n    }\n  </style>\n  <![endif]--><script src=\"https://turing.captcha.gtimg.com/1/dy-jy3.js\"></script><script type=\"text/javascript\">\"object\"!=typeof JSON&&(JSON={}),function(){\"use strict\";var n=/^[\\],:{}\\s]*$/,r=/\\\\(?:[\"\\\\\\/bfnrt]|u[0-9a-fA-F]{4})/g,o=/\"[^\"\\\\\\n\\r]*\"|true|false|null|-?\\d+(?:\\.\\d*)?(?:[eE][+\\-]?\\d+)?/g,i=/(?:^|:|,)(?:\\s*\\[)+/g,e=/[\\\\\"\\u0000-\\u001f\\u007f-\\u009f\\u00ad\\u0600-\\u0604\\u070f\\u17b4\\u17b5\\u200c-\\u200f\\u2028-\\u202f\\u2060-\\u206f\\ufeff\\ufff0-\\uffff]/g,c=/[\\u0000\\u00ad\\u0600-\\u0604\\u070f\\u17b4\\u17b5\\u200c-\\u200f\\u2028-\\u202f\\u2060-\\u206f\\ufeff\\ufff0-\\uffff]/g,p,s,u,l;function t(t){return t<10?\"0\"+t:t}function f(){return this.valueOf()}function a(t){return e.lastIndex=0,e.test(t)?'\"'+t.replace(e,function(t){var e=u[t];return\"string\"==typeof e?e:\"\\\\u\"+(\"0000\"+t.charCodeAt(0).toString(16)).slice(-4)})+'\"':'\"'+t+'\"'}function y(t,e){var n,r,o,u,f,i=p,c=e[t];switch(c&&\"object\"==typeof c&&\"function\"==typeof c.toJSON&&(c=c.toJSON(t)),\"function\"==typeof l&&(c=l.call(e,t,c)),typeof c){case\"string\":return a(c);case\"number\":return isFinite(c)?String(c):\"null\";case\"boolean\":case\"null\":return String(c);case\"object\":if(!c)return\"null\";if(p+=s,f=[],\"[object Array]\"===Object.prototype.toString.apply(c)){for(u=c.length,n=0;n<u;n+=1)f[n]=y(n,c)||\"null\";return o=0===f.length?\"[]\":p?\"[\\n\"+p+f.join(\",\\n\"+p)+\"\\n\"+i+\"]\":\"[\"+f.join(\",\")+\"]\",p=i,o}if(l&&\"object\"==typeof l)for(u=l.length,n=0;n<u;n+=1)\"string\"==typeof l[n]&&(o=y(r=l[n],c))&&f.push(a(r)+(p?\": \":\":\")+o);else for(r in c)Object.prototype.hasOwnProperty.call(c,r)&&(o=y(r,c))&&f.push(a(r)+(p?\": \":\":\")+o);return o=0===f.length?\"{}\":p?\"{\\n\"+p+f.join(\",\\n\"+p)+\"\\n\"+i+\"}\":\"{\"+f.join(\",\")+\"}\",p=i,o}}\"function\"!=typeof Date.prototype.toJSON&&(Date.prototype.toJSON=function(){return isFinite(this.valueOf())?this.getUTCFullYear()+\"-\"+t(this.getUTCMonth()+1)+\"-\"+t(this.getUTCDate())+\"T\"+t(this.getUTCHours())+\":\"+t(this.getUTCMinutes())+\":\"+t(this.getUTCSeconds())+\"Z\":null},Boolean.prototype.toJSON=f,Number.prototype.toJSON"
+  },
+  {
+    "t": "res",
+    "url": "https://turing.captcha.gtimg.com/1/dy-jy3.js",
+    "status": 200,
+    "body": "!function(e,t){\"use strict\";\"object\"==typeof module&&\"object\"==typeof module.exports?module.exports=e.document?t(e,!0):function(e){if(!e.document)throw new Error(\"jQuery requires a window with a document\");return t(e)}:t(e)}(\"undefined\"!=typeof window?window:this,function(C,e){\"use strict\";var t=[],r=Object.getPrototypeOf,s=t.slice,g=t.flat?function(e){return t.flat.call(e)}:function(e){return t.concat.apply([],e)},u=t.push,i=t.indexOf,n={},o=n.toString,v=n.hasOwnProperty,a=v.toString,l=a.call(Object),y={},m=function(e){return\"function\"==typeof e&&\"number\"!=typeof e.nodeType},x=function(e){return null!=e&&e===e.window},E=C.document,c={type:!0,src:!0,nonce:!0,noModule:!0};function b(e,t,n){var r,i,o=(n=n||E).createElement(\"script\");if(o.text=e,t)for(r in c)(i=t[r]||t.getAttribute&&t.getAttribute(r))&&o.setAttribute(r,i);n.head.appendChild(o).parentNode.removeChild(o)}function w(e){return null==e?e+\"\":\"object\"==typeof e||\"function\"==typeof e?n[o.call(e)]||\"object\":typeof e}var f=\"3.5.1\",S=function(e,t){return new S.fn.init(e,t)};function p(e){var t=!!e&&\"length\"in e&&e.length,n=w(e);return!m(e)&&!x(e)&&(\"array\"===n||0===t||\"number\"==typeof t&&0<t&&t-1 in e)}S.fn=S.prototype={jquery:f,constructor:S,length:0,toArray:function(){return s.call(this)},get:function(e){return null==e?s.call(this):e<0?this[e+this.length]:this[e]},pushStack:function(e){var t=S.merge(this.constructor(),e);return t.prevObject=this,t},each:function(e){return S.each(this,e)},map:function(n){return this.pushStack(S.map(this,function(e,t){return n.call(e,t,e)}))},slice:function(){return this.pushStack(s.apply(this,arguments))},first:function(){return this.eq(0)},last:function(){return this.eq(-1)},even:function(){return this.pushStack(S.grep(this,function(e,t){return(t+1)%2}))},odd:function(){return this.pushStack(S.grep(this,function(e,t){return t%2}))},eq:function(e){var t=this.length,n=+e+(e<0?t:0);return this.pushStack(0<=n&&n<t?[this[n]]:[])},end:function(){return this.prevObject||this.constructor()},push:u,sort:t.sort,splice:t.splice},S.extend=S.fn.extend=function(){var e,t,n,r,i,o,a=arguments[0]||{},s=1,u=arguments.length,l=!1;for(\"boolean\"==typeof a&&(l=a,a=arguments[s]||{},s++),\"object\"==typeof a||m(a)||(a={}),s===u&&(a=this,s--);s<u;s++)if(null!=(e=arguments[s]))for(t in e)r=e[t],\"__proto__\"!==t&&a!==r&&(l&&r&&(S.isPlainObject(r)||(i=Array.isArray(r)))?(n=a[t],o=i&&!Array.isArray(n)?[]:i||S.isPlainObject(n)?n:{},i=!1,a[t]=S.extend(l,o,r)):void 0!==r&&(a[t]=r));return a},S.extend({expando:\"jQuery\"+(f+Math.random()).replace(/\\D/g,\"\"),isReady:!0,error:function(e){throw new Error(e)},noop:function(){},isPlainObject:function(e){var t,n;return!(!e||\"[object Object]\"!==o.call(e))&&(!(t=r(e))||\"function\"==typeof(n=v.call(t,\"constructor\")&&t.constructor)&&a.call(n)===l)},isEmptyObject:function(e){var t;for(t in e)return!1;return!0},globalEval:function(e,t,n){b(e,{nonce:t&&t.nonce},n)},each:function(e,t){var n,r=0;if(p(e)){for(n=e.length;r<n;r++)if(!1===t.call(e[r],r,e[r]))break}e"
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/collect?from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "res",
+    "url": "https://turing.captcha.gtimg.com/1/dy-ele.54bf6023.js",
+    "status": 200,
+    "body": "!function(e){var t={};function r(i){if(t[i])return t[i].exports;var n=t[i]={i:i,l:!1,exports:{__esModule: undefined}};return e[i].call(n.exports,n,n.exports,r),n.l=!0,n.exports}r.m=e,r.c=t,r.d=function(e,t,i){r.o(e,t)||Object.defineProperty(e,t,{enumerable:!0,get:i})},r.r=function(e){\"undefined\"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:\"Module\"}),Object.defineProperty(e,\"__esModule\",{value:!0})},r.t=function(e,t){if(1&t&&(e=r(e)),8&t)return e;if(4&t&&\"object\"==typeof e&&e&&e.__esModule)return e;var i=Object.create(null);if(r.r(i),Object.defineProperty(i,\"default\",{enumerable:!0,value:e}),2&t&&\"string\"!=typeof e)for(var n in e)r.d(i,n,function(t){return e[t]}.bind(null,n));return i},r.n=function(e){var t=e&&e.__esModule?function(){return e[\"default\"]}:function(){return e};return r.d(t,\"a\",t),t},r.o=function(e,t){return Object.prototype.hasOwnProperty.call(e,t)},r.p=\"\",r(r.s=117)}([function(e,t,r){\"use strict\";var i=this&&this.__importDefault||function(e){return e&&e.__esModule?e:{\"default\":e}};t.__esModule=!0,t.setScaleWidth=t.changeDomVisibility=t.domParserHtml=t.setVoiceOverFocus=t.bodyAriaHidden=t.addAriaModel=t.isTouchEventSupported=t.supportsPassive=t.isWindow=t.getWindow=t.getOffset=t.isDarkMode=t.shakeEl=t.addOnceAnimationClass=t.animationEndName=t.removeDomClass=t.addDomClass=t.setCss=t.getCSS=t.supportsCSS=t.createGeneralIframe=void 0;var n=r(3),o=i(r(18)),a=r(19),s=i(r(7)),c=r(4);t.createGeneralIframe=function(e){var t=document.createElement(\"div\");(null===e||void 0===e?void 0:e.name)?t.innerHTML='<iframe name=\"'.concat(null===e||void 0===e?void 0:e.name,'\" />'):t.innerHTML=\"<iframe />\";var r=t.childNodes[0];return(null===e||void 0===e?void 0:e.id)&&(r.id=e.id),(null===e||void 0===e?void 0:e.className)&&(r.className=e.className),r.setAttribute(\"frameborder\",\"0\"),r.setAttribute(\"border\",\"0\"),r.setAttribute(\"marginheight\",\"0\"),r.setAttribute(\"marginwidth\",\"0\"),r.setAttribute(\"scrolling\",\"no\"),r};t.supportsCSS=function(e,t){var r=document.createElement(\"div\");return e in r.style&&\"length\"!==e&&\"parentRule\"!==e&&(r.style[e]=t,r.style[e]===t)};t.getCSS=function(e,t){return e.currentStyle?e.currentStyle[t]:window.getComputedStyle(e,null)[t]};t.setCss=function(e,t){if(e&&t&&(0,n.isObject)(t)){for(var r in t)try{e.style[r]=t[r]}catch(i){}return t}};t.addDomClass=function(e,t){if(e)if(e.classList)e.classList.add(t);else{var r=e.className,i=r+(\"\"!==r?\" \":\"\")+t;e.className=i}};t.removeDomClass=function(e,t){if(e&&t)for(var r=t.split(\" \"),i=0;i<r.length;i++)if(e.classList)e.classList.remove(r[i]);else{var n=\" \".concat(e.className,\" \"),o=(n=n.replace(/(\\s+)/gi,\" \")).replace(\" \".concat(r[i],\" \"),\" \");o=o.replace(/(^\\s+)|(\\s+$)/g,\"\"),e.className=o}},t.animationEndName=function(){var e,t=document.createElement(\"fake\"),r={animation:\"animationend\",mozAnimation:\"mozAnimationEnd\",webkitAnimation:\"webkitAnimationEnd\"};for(e in r)if(t.style[e]!==undefined)return r[e];return!1}();t.addOnceAnimationClass=function(e){"
+  },
+  {
+    "t": "res",
+    "url": "https://rumt-zh.com/collect?from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=",
+    "status": 204,
+    "body": ""
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/speed?from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "res",
+    "url": "https://rumt-zh.com/speed?from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=",
+    "status": 204,
+    "body": ""
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/speed/webvitals?FCP=1372&LCP=-1&FID=-1&CLS=-1&INP=-1&TTI=-1&from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "text/plain;charset=UTF-8",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "text/plain;charset=UTF-8",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://ping.cloud.tencent.com/trafficCollect.php?expKey=stayTime&expValue=6449&uin=&ul=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&referer=&fromSource=qcloud.directEnter.product&visitId=d14b978c8b4fc4184e30825a790e58f6&landingpage=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&language=zh&lastLoginType=&_ga=&pageTitle=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&from=&from_column=&type=OfficialNetworkTraffic&t=1780581593464",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/speed?from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "text/plain;charset=UTF-8",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/collect/events?sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=7b416924-6c89-4277-a94a-f4286216a983&env=production&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&from=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&referer=",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "text/plain;charset=UTF-8",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/collect/whitelist?id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=10000011-1011-1111-0011-100000111111&env=production&ext1=vYo9pqod9Efn&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&from=https%3A%2F%2Fcloud.tencent.com%2F&referer=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/rateConfig?id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=10000011-1011-1111-0011-100000111111&env=production&ext1=vYo9pqod9Efn&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&from=https%3A%2F%2Fcloud.tencent.com%2F&referer=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/collect/pv?originFrom=https%3A%2F%2Fcloud.tencent.com%2F&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=10000011-1011-1111-0011-100000111111&env=production&ext1=vYo9pqod9Efn&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&from=https%3A%2F%2Fcloud.tencent.com%2F&referer=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/speed/performance?dnsLookup=0&tcp=0&ssl=0&ttfb=470&contentDownload=443&domParse=1070&resourceDownload=0&firstScreenTiming=1228&from=https%3A%2F%2Fcloud.tencent.com%2F&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=10000011-1011-1111-0011-100000111111&env=production&ext1=vYo9pqod9Efn&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://ping.cloud.tencent.com/trafficCollect.php?expKey=browse&expValue=https%3A%2F%2Fcloud.tencent.com%2F&uin=&ul=https%3A%2F%2Fcloud.tencent.com%2F&referer=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&fromSource=qcloud.directEnter.product&visitId=d14b978c8b4fc4184e30825a790e58f6&landingpage=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&language=zh&lastLoginType=&_ga=&pageTitle=%E8%85%BE%E8%AE%AF%E4%BA%91%20%E4%BA%A7%E4%B8%9A%E6%99%BA%E5%8F%98%C2%B7%E4%BA%91%E5%90%AF%E6%9C%AA%E6%9D%A5%20-%20%E8%85%BE%E8%AE%AF&from=&from_column=&type=OfficialNetworkTraffic&t=1780581596152",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "application/json, text/plain, */*",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json;charset=utf-8",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "application/json, text/plain, */*",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json;charset=utf-8",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/collect?from=https%3A%2F%2Fcloud.tencent.com%2F&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=10000011-1011-1111-0011-100000111111&env=production&ext1=vYo9pqod9Efn&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "application/json, text/plain, */*",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json;charset=utf-8",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "accept": "application/json, text/plain, */*",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json;charset=utf-8",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/940175154/?random=1780581597896&cv=11&fst=1780581597896&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115938465~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2F&ref=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=16&frm=0&tiba=%E8%85%BE%E8%AE%AF%E4%BA%91%20%E4%BA%A7%E4%B8%9A%E6%99%BA%E5%8F%98%C2%B7%E4%BA%91%E5%90%AF%E6%9C%AA%E6%9D%A5%20-%20%E8%85%BE%E8%AE%AF&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=9&rfmt=3&fmt=4",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://www.google.com/rmkt/collect/940175154/?random=1780581597896&cv=11&fst=1780581597896&fmt=8&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115938465~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2F&ref=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=16&frm=0&tiba=%E8%85%BE%E8%AE%AF%E4%BA%91%20%E4%BA%A7%E4%B8%9A%E6%99%BA%E5%8F%98%C2%B7%E4%BA%91%E5%90%AF%E6%9C%AA%E6%9D%A5%20-%20%E8%85%BE%E8%AE%AF&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=68&gcp=5",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/940175154/?random=1780581598026&cv=11&fst=1780581598026&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115938465~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2F&ref=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=16&frm=0&tiba=%E8%85%BE%E8%AE%AF%E4%BA%91%20%E4%BA%A7%E4%B8%9A%E6%99%BA%E5%8F%98%C2%B7%E4%BA%91%E5%90%AF%E6%9C%AA%E6%9D%A5%20-%20%E8%85%BE%E8%AE%AF&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=9&rfmt=3&fmt=4",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://www.google.com/rmkt/collect/940175154/?random=1780581598026&cv=11&fst=1780581598026&fmt=8&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115938465~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2F&ref=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=16&frm=0&tiba=%E8%85%BE%E8%AE%AF%E4%BA%91%20%E4%BA%A7%E4%B8%9A%E6%99%BA%E5%8F%98%C2%B7%E4%BA%91%E5%90%AF%E6%9C%AA%E6%9D%A5%20-%20%E8%85%BE%E8%AE%AF&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=68&gcp=5",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://www.google.com/pagead/1p-user-list/940175154/?random=1780581597896&cv=11&fst=1780578000000&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115938465~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2F&ref=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=16&frm=0&tiba=%E8%85%BE%E8%AE%AF%E4%BA%91%20%E4%BA%A7%E4%B8%9A%E6%99%BA%E5%8F%98%C2%B7%E4%BA%91%E5%90%AF%E6%9C%AA%E6%9D%A5%20-%20%E8%85%BE%E8%AE%AF&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=9&rfmt=3&fmt=3&is_vtc=1&cid=CAQS4gEAEQoqgauiGWTJurl_7d0aetXfgipW92tdsVxDoUHErwGPMdpvKrlQs90AL_uwdSVEaCu5AGu-9Zn3SLqMmdmoW3XHZf_mu-xEDNVELpXWuOhO9YhOt9PYhSJodv0SWW7qJ3n1r8xdVxpQQC6I7cMGk1_7dbZIO-_n8cRnwjPHDXcA-Y0viAgPrkjAPw0W3-PQ4ONysFw-SgTr4jgEyY4WAg10NDkw7L6D_12tbWWRg3Knx3cDqb8qy1P_37BejC0gZP5X9wxnhKAI4t9XxYi2ozc4pNpX4yvQLTbl0kuf7SOW&random=2306019815&rmt_tld=0&ipr=y",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://www.google.com/pagead/1p-user-list/940175154/?random=1780581598026&cv=11&fst=1780578000000&bg=ffffff&guid=ON&async=1&gtm=45be6621h1z877048748za20gzb77048748zd77048748xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=0~115938465~115938468~118131809~118228214~119027224&u_w=1280&u_h=720&url=https%3A%2F%2Fcloud.tencent.com%2F&ref=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&rcb=16&frm=0&tiba=%E8%85%BE%E8%AE%AF%E4%BA%91%20%E4%BA%A7%E4%B8%9A%E6%99%BA%E5%8F%98%C2%B7%E4%BA%91%E5%90%AF%E6%9C%AA%E6%9D%A5%20-%20%E8%85%BE%E8%AE%AF&hn=www.googleadservices.com&npa=0&pscdl=noapi&auid=1357092948.1780581589&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Linux&uapv=&uaw=0&_tu=CA&ept=9&rfmt=3&fmt=3&is_vtc=1&cid=CAQS4gEAEQoqgbp-e0NQOYlnQwt7DX51HNc1F9ZQOW9NbzrB2Mrk7Jvd2KzHHFpK8rQQK4DgRPukPjLoEfXEGLLdgwMV5eWZbwfl6iqVIzxnEBv2LuanGXcTO24PDq8S5EN0NfdQTZP_JTvTBdrs23B_jFTsOirsPbTqzNU0XyG3DgiJi0WRXUtqdMDTOORiAW9Wu-YoGk8MfDLvAP-2V3m1CHspo9YNmKyz7fqnkzNjx4hPx_nIOzytL528poKU2KkrDN7h39U43oh42a5Ev_k34Tm5wGOHQ_mQ3o7W0xQzjSj7Z56z&random=191355050&rmt_tld=0&ipr=y",
+    "method": "GET",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/collect?from=https%3A%2F%2Fcloud.tencent.com%2F&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=10000011-1011-1111-0011-100000111111&env=production&ext1=vYo9pqod9Efn&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "req",
+    "url": "https://rumt-zh.com/speed?from=https%3A%2F%2Fcloud.tencent.com%2F&sampled=1&id=dWOw9fv7jg4XmVzQ09&uin=&version=1.43.57&aid=10000011-1011-1111-0011-100000111111&env=production&ext1=vYo9pqod9Efn&platform=5&netType=4&vp=1280%20*%20720&sr=1280%20*%20720&sessionId=b622e57dae9e4f3ab5c76b65aa2e0943&referer=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha",
+    "method": "POST",
+    "headers": {
+      "sec-ch-ua-platform": "\"Linux\"",
+      "referer": "https://cloud.tencent.com/",
+      "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36",
+      "sec-ch-ua": "\"Not:A-Brand\";v=\"99\", \"HeadlessChrome\";v=\"145\", \"Chromium\";v=\"145\"",
+      "content-type": "application/json",
+      "sec-ch-ua-mobile": "?0"
+    }
+  },
+  {
+    "t": "res",
+    "url": "https://ping.cloud.tencent.com/trafficCollect.php?expKey=stayTime&expValue=6449&uin=&ul=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&referer=&fromSource=qcloud.directEnter.product&visitId=d14b978c8b4fc4184e30825a790e58f6&landingpage=https%3A%2F%2Fcloud.tencent.com%2Fproduct%2Fcaptcha&language=zh&lastLoginType=&_ga=&pageTitle=T-sec-%E8%85%BE%E8%AE%AF%E5%AE%89%E5%85%A8%E5%A4%A9%E5%BE%A1-%E8%A1%8C%E4%B8%BA%E5%BC%8F%E9%AA%8C%E8%AF%81%E7%A0%81%20Captcha-%E8%85%BE%E8%AE%AF%E4%BA%91&from=&from_column=&type=OfficialNetworkTraffic&t=1780581593464",
+    "status": 200,
+    "body": ""
+  },
+  {
+    "t": "res",
+    "url": "https://otheve.beacon.qq.com/analytics/v2_upload?appkey=0WEB0OEX9Y4SQ244",
+    "status": 200,
+    "body": ""
+  }
+]

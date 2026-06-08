@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "antibot-sdk"
+version = "0.1.0"
+description = "Unified anti-bot browser automation SDK: Pydoll Cloudflare flows, Tencent slider, and Aliyun slider."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "multi-zhangyang" }]
+dependencies = [
+  "pydoll-python>=2.23.0",
+  "requests>=2.31",
+  "Pillow>=10.0",
+  "playwright>=1.40",
+  "captcha-recognizer>=1.0",
+  "crack-tcaptcha>=0.0.8",
+  "opencv-python>=4.8",
+  "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+service = ["fastapi>=0.110", "uvicorn>=0.27"]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.6"]
+
+[project.scripts]
+antibot = "antibot_sdk.cli:main"
+
+[tool.hatch.build]
+exclude = [
+  "src/antibot_sdk/vendor/aliyun/node_modules/**",
+  "**/__pycache__/**",
+  "**/*.pyc",
+  "dist/**",
+  ".venv/**",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/antibot_sdk"]
+artifacts = [
+  "src/antibot_sdk/vendor/aliyun/bridge.js",
+  "src/antibot_sdk/vendor/aliyun/package.json",
+  "src/antibot_sdk/vendor/aliyun/package-lock.json",
+  "src/antibot_sdk/vendor/aliyun/src/**/*.js",
+  "src/antibot_sdk/vendor/tencent/upstream/**",
+]
+exclude = ["src/antibot_sdk/vendor/aliyun/node_modules/**"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

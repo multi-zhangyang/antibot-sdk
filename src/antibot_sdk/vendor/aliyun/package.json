@@ -1,0 +1,57 @@
+{
+  "name": "aliyun-captcha-repro",
+  "version": "1.0.0",
+  "private": false,
+  "type": "commonjs",
+  "description": "Generic Aliyun CAPTCHA V3 slider reverse-engineering and reproducible listener-driven runner.",
+  "author": "multi-zhangyang",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "preflight": "bash bin/check_env.sh",
+    "captcha": "bash bin/run_captcha.sh",
+    "check:syntax": "node -c src/runner.js && node -c src/aggregate.js && node -c src/stability.js && node -c src/stability_stats.js && node -c src/index.js && node -c replay/auto_converge.js && node -c examples/basic.js",
+    "example": "node examples/basic.js",
+    "pack:dry": "npm pack --dry-run",
+    "stability": "bash bin/stability_check.sh",
+    "stats": "node src/stability_stats.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "pngjs": "7.0.0",
+    "proxy-chain": "^3.0.0",
+    "puppeteer-core": "25.1.0",
+    "rebrowser-puppeteer-core": "24.8.1"
+  },
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./runner": "./src/runner.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "aliyun-captcha-repro": "./bin/run_captcha.sh",
+    "aliyun-captcha-stability": "./bin/stability_check.sh"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "replay/auto_converge.js",
+    "docs/",
+    "examples/",
+    "vendor/",
+    ".env.example",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "aliyun",
+    "captcha",
+    "slider",
+    "v3",
+    "replay",
+    "reverse-engineering"
+  ]
+}
