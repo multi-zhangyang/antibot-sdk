@@ -7,6 +7,7 @@
 - Pydoll / CDP 浏览器运行器：页面打开、指纹补丁、Cloudflare/Turnstile/Managed Challenge 相关流程观察与自动化。
 - Tencent Captcha：封装腾讯滑块的页面触发、浏览器池、缺口识别、轨迹拖拽、ticket/randstr 输出。
 - Aliyun Captcha：封装阿里云滑块的 Node/Puppeteer runner、站点 profile、attempt/session retry、错误归一、artifact 保留。
+- Policy Engine：把 `F001/F015/NONE/gap/candidate/watchdog timeout` 等失败归类，决定是否换 session，并输出下一步调参建议。
 - Stress Harness：统一压测入口，输出 summary、records、attempt code 分布、失败现场。
 
 ---
@@ -104,6 +105,8 @@ antibot stress tencent \
 - 自动完成 Qoder 注册表单两段流程，触发 `#aliyunCaptcha-*` 滑块。
 - 支持 slot-mask 缺口识别、候选 raw 窗口过滤、轨迹控制、F001/F015 恢复。
 - 支持 attempt retry、session retry、timeout cleanup、artifact 输出。
+- Node runner 内置 per-stage watchdog：`proxy.anonymize / browser.launch / page.goto / preCaptchaAction / wait_ready / read_gap / drag / runtime snapshot / close` 都有独立阈值。
+- 每个 Aliyun 结果会带 `diagnostics.policy`，将失败分类成 `reputation_or_session`、`geometry_or_delta`、`watchdog_or_timeout`、`transient_candidate_or_dom` 等。
 - timeout 时如果现场 JSON 已经 `T001`，会按成功返回，并在 diagnostics 标记恢复信息。
 - 支持代理池格式 `host:port:user:pass`。
 
@@ -145,6 +148,17 @@ Qoder + proxy 默认策略：
 - 最多 2 次 session retry。
 - 每次 session retry 最多 2 attempts。
 - 目标是降低坏 session 内的 200s+ 长尾。
+- 如果某一阶段卡死，watchdog 会快速写入现场 JSON，例如：
+
+```json
+{
+  "watchdog": {
+    "label": "page.goto",
+    "timeoutMs": 65000,
+    "elapsedMs": 65012
+  }
+}
+```
 
 仍然可以手动覆盖：
 
@@ -254,6 +268,12 @@ async def main():
         )
         print(aliyun.ok, aliyun.verify_code, aliyun.diagnostics)
 
+        # 只做策略判断，不启动浏览器
+        from antibot_sdk import aliyun_policy_decision
+
+        decision = aliyun_policy_decision(codes=["F001", "F001"], has_proxy=True)
+        print(decision.failure_class, decision.should_retry_session)
+
 asyncio.run(main())
 ```
 
@@ -324,6 +344,7 @@ src/antibot_sdk/
   client.py                 # SDK facade: AntibotClient
   cli.py                    # antibot CLI
   models.py                 # BrowserResult / CaptchaResult
+  policy.py                 # Aliyun failure policy / retry decision
   profiles.py               # Aliyun site profile / URL provider detect
   proxy.py                  # 通用代理解析与脱敏
   stress.py                 # 统一压测框架
@@ -349,9 +370,10 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 7 passed
+pytest: 8 passed
 node -c bridge.js/site_profiles.js/runner.js: passed
 uv build: success
+watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON
 ```
 
 腾讯：
@@ -367,6 +389,7 @@ stress tencent --proxy ... --runs 4 --concurrency 2: 4/4
 无代理默认 profile：可恢复 F001/F015/gap not found，成功率可达 5/5，但有长尾。
 代理池 3 轮：3/3，平均 attempt 1.33。
 代理池快 session 5 轮：5/5，avg≈82643ms，p95≈156790ms，max_attempt=3。
+本轮 proxy + watchdog 回归 2 轮：2/2，avg≈43157ms，max_attempt=1。
 ```
 
 资源清理：
@@ -383,6 +406,16 @@ Aliyun temp profile dirs: 0
 - Qoder/Aliyun 的 `F001` 常和出口 IP / session reputation / 当前页面状态有关。
 - 代理池能明显降低部分 F001，但仍会出现 `NONE`、`gap not found`、`candidate rejected` 等临时状态。
 - 当前最佳基线是：**Qoder + proxy + 快 session 策略**。
+- watchdog 阈值可通过环境变量覆盖，例如：
+
+```bash
+antibot solve aliyun \
+  --url 'https://qoder.com/users/sign-up' \
+  --site-profile qoder_signup \
+  --env ALIYUN_PRE_ACTION_WATCHDOG_MS=90000 \
+  --env ALIYUN_READ_GAP_WATCHDOG_MS=25000
+```
+
 - 如果要继续扩大压测，建议先跑：
 
 ```bash

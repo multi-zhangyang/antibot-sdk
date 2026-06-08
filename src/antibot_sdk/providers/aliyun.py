@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ..models import CaptchaResult
+from ..policy import aliyun_policy_decision
 from ..profiles import aliyun_profile_for_url
 from ..proxy import normalize_proxy_url, redacted_proxy
 
@@ -18,17 +19,7 @@ BRIDGE = VENDOR_DIR / "bridge.js"
 
 
 def is_recoverable_attempt_codes(codes: list[str]) -> bool:
-    transient = [
-        c for c in codes
-        if c in {"", "NONE"}
-        or "captcha not ready" in c
-        or "Navigation timeout" in c
-        or "timeout" in c.lower()
-        or "gap not found" in c
-        or "candidate rejected" in c
-    ]
-    repeated_f001 = codes.count("F001") >= 2
-    return len(codes) >= 2 and (repeated_f001 or len(transient) >= 2)
+    return aliyun_policy_decision(codes=codes).should_retry_session
 
 
 def discover_chrome() -> str | None:
@@ -228,12 +219,20 @@ class AliyunCaptchaSolver:
                 for a in attempts
                 if isinstance(a, dict)
             ]
+            policy = aliyun_policy_decision(raw, errors=err_list, has_proxy=bool(proxy_server))
             if proxy_server is None and codes.count("F001") >= 2:
                 diagnostics["failure_class"] = "likely_ip_or_session_reputation"
                 diagnostics["hint"] = "Qoder/Aliyun F001 repeated without proxy; use proxy_server or cooldown, then retry same profile."
             if attempts:
                 diagnostics["attempt_codes"] = codes
                 diagnostics["f001_count"] = codes.count("F001")
+            diagnostics["policy"] = policy.to_dict()
+            if not is_ok:
+                diagnostics.setdefault("failure_class", policy.failure_class)
+            if raw.get("watchdog"):
+                diagnostics["watchdog"] = raw.get("watchdog")
+            if raw.get("watchdogEvents"):
+                diagnostics["watchdog_events"] = raw.get("watchdogEvents")[-5:]
             if stderr:
                 diagnostics["stderr_tail"] = stderr[-2000:]
             return CaptchaResult(
@@ -257,9 +256,13 @@ class AliyunCaptchaSolver:
                 for a in (attempts or [])
                 if isinstance(a, dict)
             ]
-            repeated_f001 = codes.count("F001") >= 2 or result.diagnostics.get("failure_class") == "likely_ip_or_session_reputation"
-            mixed_recoverable = repeated_f001 or is_recoverable_attempt_codes(codes)
-            if not mixed_recoverable:
+            policy = aliyun_policy_decision(
+                result.raw if isinstance(result.raw, dict) else {},
+                errors=result.errors,
+                has_proxy=bool(proxy_server),
+            )
+            legacy_reputation = result.diagnostics.get("failure_class") == "likely_ip_or_session_reputation"
+            if not (policy.should_retry_session or legacy_reputation):
                 return result
             delay = float(session_retry_delay_sec if session_retry_delay_sec is not None else 3.0)
             if delay > 0:
@@ -299,7 +302,8 @@ class AliyunCaptchaSolver:
                 "delay_sec": delay,
                 "retry_max_attempts": retry_max_attempts,
                 "previous_errors": result.errors,
-                "previous_attempt_codes": codes,
+                "previous_attempt_codes": codes or policy.codes,
+                "policy": policy.to_dict(),
                 "previous_out": result.artifacts.get("out"),
             }
             return retried

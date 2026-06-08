@@ -1,4 +1,5 @@
 from antibot_sdk.profiles import aliyun_profile_for_url, detect_provider_for_url, list_profiles
+from antibot_sdk.policy import aliyun_policy_decision
 from antibot_sdk.providers.aliyun import AliyunCaptchaSolver, is_recoverable_attempt_codes
 
 
@@ -39,3 +40,18 @@ def test_aliyun_recoverable_attempt_codes():
     assert is_recoverable_attempt_codes(["NONE", "candidate rejected: raw>240"])
     assert is_recoverable_attempt_codes(["captcha not ready after 120000ms", "NONE"])
     assert not is_recoverable_attempt_codes(["T001"])
+
+
+def test_aliyun_policy_engine_classifies_watchdog_and_geometry():
+    timeout_decision = aliyun_policy_decision(
+        codes=["watchdog timeout: captcha.wait_ready", "NONE"],
+        has_proxy=True,
+    )
+    assert timeout_decision.failure_class == "watchdog_or_timeout"
+    assert timeout_decision.should_retry_session
+
+    geometry_decision = aliyun_policy_decision(codes=["F015"])
+    assert geometry_decision.failure_class == "geometry_or_delta"
+    assert geometry_decision.recoverable
+    assert not geometry_decision.should_retry_session
+    assert geometry_decision.env_overrides["LISTENER_AUTO_DELTA"] == "1"

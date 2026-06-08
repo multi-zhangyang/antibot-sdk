@@ -86,6 +86,60 @@ function envList(name, fallback = '') {
     .map(s => s.trim())
     .filter(Boolean);
 }
+class WatchdogTimeout extends Error {
+  constructor(label, timeoutMs, elapsedMs) {
+    super(`watchdog timeout: ${label} after ${elapsedMs}ms`);
+    this.name = 'WatchdogTimeout';
+    this.label = label;
+    this.timeoutMs = timeoutMs;
+    this.elapsedMs = elapsedMs;
+    this.watchdog = { label, timeoutMs, elapsedMs };
+  }
+}
+function watchdogMs(name, fallback) {
+  return Math.max(0, Math.floor(num(name, fallback)));
+}
+async function withWatchdog(label, timeoutMs, fn, result) {
+  const ms = Math.max(0, Math.floor(Number(timeoutMs) || 0));
+  if (!envFlag('ALIYUN_WATCHDOG_ENABLED', true) || ms <= 0) return await fn();
+  const started = Date.now();
+  let timer = null;
+  let fired = false;
+  const op = Promise.resolve()
+    .then(fn)
+    .catch((e) => {
+      // If the race already timed out, suppress late rejections from Puppeteer
+      // operations that will be interrupted by browser/page cleanup.
+      if (fired) return undefined;
+      throw e;
+    });
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      fired = true;
+      const err = new WatchdogTimeout(label, ms, Date.now() - started);
+      if (result) {
+        result.watchdog = { ...err.watchdog, at: new Date().toISOString() };
+        result.watchdogEvents = result.watchdogEvents || [];
+        result.watchdogEvents.push({ ...result.watchdog, type: 'timeout' });
+      }
+      reject(err);
+    }, ms);
+    if (timer && timer.unref) timer.unref();
+  });
+  try {
+    const value = await Promise.race([op, timeout]);
+    if (result) {
+      result.stageTimings = result.stageTimings || [];
+      result.stageTimings.push({ label, elapsedMs: Date.now() - started });
+    }
+    return value;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+function errWatchdog(e) {
+  return e && e.watchdog ? e.watchdog : null;
+}
 function normalizeVerifyCode(code) {
   const c = String(code || '').trim().toUpperCase();
   return c || 'NONE';
@@ -1164,6 +1218,22 @@ async function solveCaptchaOnce(options = {}) {
     fs.mkdirSync(outputDir, { recursive: true });
     const result = { at: new Date().toISOString(), targetUrl, selectors: sel, profile, net: [], outputDir, out };
     partialResult = result;
+    result.watchdogConfig = {
+      enabled: envFlag('ALIYUN_WATCHDOG_ENABLED', true),
+      proxyMs: watchdogMs('ALIYUN_PROXY_WATCHDOG_MS', 30000),
+      launchMs: watchdogMs('ALIYUN_LAUNCH_WATCHDOG_MS', 90000),
+      pageMs: watchdogMs('ALIYUN_PAGE_WATCHDOG_MS', 30000),
+      hooksMs: watchdogMs('ALIYUN_HOOKS_WATCHDOG_MS', 20000),
+      gotoMs: watchdogMs('ALIYUN_GOTO_WATCHDOG_MS', (options.gotoTimeoutMs || num('GOTO_TIMEOUT_MS', 60000)) + 5000),
+      preActionMs: watchdogMs('ALIYUN_PRE_ACTION_WATCHDOG_MS', 90000),
+      captchaMs: watchdogMs('ALIYUN_CAPTCHA_WATCHDOG_MS', num('CAPTCHA_WAIT_MS', 90000) + 5000),
+      readGapMs: watchdogMs('ALIYUN_READ_GAP_WATCHDOG_MS', 25000),
+      refreshMs: watchdogMs('ALIYUN_REFRESH_WATCHDOG_MS', 12000),
+      dragMs: watchdogMs('ALIYUN_DRAG_WATCHDOG_MS', Math.max(30000, Number(profile.totalMs || 0) + 10000)),
+      runtimeMs: watchdogMs('ALIYUN_RUNTIME_WATCHDOG_MS', 8000),
+      closeMs: watchdogMs('ALIYUN_CLOSE_WATCHDOG_MS', 8000),
+    };
+    const wd = (label, ms, fn) => withWatchdog(label, ms, fn, result);
     const captureInternals = envFlag('DEEP_HOOKS', false) || envFlag('CAPTURE_INTERNALS', false);
     result.deepHooksEnabled = captureInternals;
     const attemptNo = options.attempt || 1;
@@ -1186,58 +1256,62 @@ async function solveCaptchaOnce(options = {}) {
           try {
             const ProxyChain = require('proxy-chain');
             const raw = proxyAddr.includes('://') ? proxyAddr : 'http://' + proxyAddr;
-            proxyAddr = await ProxyChain.anonymizeProxy(raw);
+            proxyAddr = await wd('proxy.anonymize', result.watchdogConfig.proxyMs, () => ProxyChain.anonymizeProxy(raw));
             anonymizedProxyToClose = proxyAddr;
             result.anonymizedProxy = redactProxy(proxyAddr);
           } catch (e) { result.proxyChainError = e.message; proxyAddr = ''; }
         }
       }
-      browser = await driver.launch({
-      executablePath: chromePath,
-      headless,
-      defaultViewport: {
-        width: fp ? fp.width : (options.viewportWidth || num('VIEWPORT_WIDTH', 1365)),
-        height: fp ? fp.height : (options.viewportHeight || num('VIEWPORT_HEIGHT', 768)),
-        deviceScaleFactor: fp ? fp.deviceScaleFactor : (options.deviceScaleFactor || 1),
-      },
-      ignoreDefaultArgs: ['--enable-automation'],
-      args: [
-        '--disable-blink-features=AutomationControlled',
-        '--disable-dev-shm-usage',
-        '--no-sandbox',
-        '--disable-gpu-sandbox',
-        '--ignore-gpu-blocklist',
-        '--enable-webgl',
-        ...(fp ? [`--window-size=${fp.width},${fp.height}`, `--lang=${fp.language}`] : []),
-        ...(proxyAddr ? [`--proxy-server=${proxyAddr}`] : []),
-        ...(options.browserArgs || []),
-      ],
-    });
+      browser = await wd('browser.launch', result.watchdogConfig.launchMs, () => driver.launch({
+        executablePath: chromePath,
+        headless,
+        defaultViewport: {
+          width: fp ? fp.width : (options.viewportWidth || num('VIEWPORT_WIDTH', 1365)),
+          height: fp ? fp.height : (options.viewportHeight || num('VIEWPORT_HEIGHT', 768)),
+          deviceScaleFactor: fp ? fp.deviceScaleFactor : (options.deviceScaleFactor || 1),
+        },
+        ignoreDefaultArgs: ['--enable-automation'],
+        args: [
+          '--disable-blink-features=AutomationControlled',
+          '--disable-dev-shm-usage',
+          '--no-sandbox',
+          '--disable-gpu-sandbox',
+          '--ignore-gpu-blocklist',
+          '--enable-webgl',
+          ...(fp ? [`--window-size=${fp.width},${fp.height}`, `--lang=${fp.language}`] : []),
+          ...(proxyAddr ? [`--proxy-server=${proxyAddr}`] : []),
+          ...(options.browserArgs || []),
+        ],
+      }));
     }
     let page;
     if (options.pageInstance) {
       page = options.pageInstance;
       attachResponseLogger(page, result);
-      await installHooks(page, fp, options.swapData || null, captureInternals);
-      if (captureInternals) await installDeepHooks(page);
-      result.dynamicJsForce = await setupDynamicJsForce(page);
+      await wd('page.install_hooks', result.watchdogConfig.hooksMs, async () => {
+        await installHooks(page, fp, options.swapData || null, captureInternals);
+        if (captureInternals) await installDeepHooks(page);
+        result.dynamicJsForce = await setupDynamicJsForce(page);
+      });
     } else {
-      page = await browser.newPage();
+      page = await wd('page.new', result.watchdogConfig.pageMs, () => browser.newPage());
       attachResponseLogger(page, result);
-      await installHooks(page, fp, options.swapData || null, captureInternals);
-      if (captureInternals) await installDeepHooks(page);
-      result.dynamicJsForce = await setupDynamicJsForce(page);
+      await wd('page.install_hooks', result.watchdogConfig.hooksMs, async () => {
+        await installHooks(page, fp, options.swapData || null, captureInternals);
+        if (captureInternals) await installDeepHooks(page);
+        result.dynamicJsForce = await setupDynamicJsForce(page);
+      });
       await page.setUserAgent((fp && fp.ua) || ua).catch(() => {});
       if (fp && fp.acceptLanguage) await page.setExtraHTTPHeaders({ 'Accept-Language': fp.acceptLanguage }).catch(() => {});
       const cdp = await page.target().createCDPSession().catch(() => null);
       if (cdp && fp && fp.timezone) await cdp.send('Emulation.setTimezoneOverride', { timezoneId: fp.timezone }).catch(() => {});
-      await page.goto(targetUrl, { waitUntil: options.gotoWaitUntil || process.env.GOTO_WAIT_UNTIL || 'domcontentloaded', timeout: options.gotoTimeoutMs || num('GOTO_TIMEOUT_MS', 60000) });
+      await wd('page.goto', result.watchdogConfig.gotoMs, () => page.goto(targetUrl, { waitUntil: options.gotoWaitUntil || process.env.GOTO_WAIT_UNTIL || 'domcontentloaded', timeout: options.gotoTimeoutMs || num('GOTO_TIMEOUT_MS', 60000) }));
       await sleep(options.afterGotoMs ?? num('AFTER_GOTO_MS', 500));
       if (options.preCaptchaAction) {
-        result.preCaptchaAction = await options.preCaptchaAction(page, result).catch(e => ({ error: e.message }));
+        result.preCaptchaAction = await wd('site.pre_captcha_action', result.watchdogConfig.preActionMs, () => options.preCaptchaAction(page, result).catch(e => ({ error: e.message })));
       }
     }
-    await waitForCaptcha(page, result, sel);
+    await wd('captcha.wait_ready', result.watchdogConfig.captchaMs, () => waitForCaptcha(page, result, sel));
     await sleep(options.afterCaptchaVisibleMs ?? num('AFTER_CAPTCHA_VISIBLE_MS', 500));
     const maxRefreshes = num('LISTENER_MAX_REFRESHES', 0);
     const maxVerifyRefreshes = num('LISTENER_MAX_VERIFY_REFRESHES', 0);
@@ -1246,14 +1320,15 @@ async function solveCaptchaOnce(options = {}) {
     result.initialReadRetries = [];
     for (let r = 0; r <= maxRefreshes; r++) {
       try {
-        const read = await readGap(page, result, outputDir, r === 0 ? 'selected' : `selected_retry_${r}`, sel, ua);
+        const tag = r === 0 ? 'selected' : `selected_retry_${r}`;
+        const read = await wd(`captcha.read_gap:${tag}`, result.watchdogConfig.readGapMs, () => readGap(page, result, outputDir, tag, sel, ua));
         state = read.state; gap = read.gap;
         break;
       } catch (readErr) {
         const message = readErr && readErr.message || String(readErr);
         if (r >= maxRefreshes || !/gap not found|captcha images not found/i.test(message)) throw readErr;
-        const currentState = await captchaState(page, sel).catch(e => ({ error: e.message }));
-        const refreshResult = await refreshPuzzle(page, currentState);
+        const currentState = await wd('captcha.state_before_initial_refresh', result.watchdogConfig.runtimeMs, () => captchaState(page, sel).catch(e => ({ error: e.message })));
+        const refreshResult = await wd(`captcha.refresh:selected_retry_${r + 1}`, result.watchdogConfig.refreshMs, () => refreshPuzzle(page, currentState));
         result.initialReadRetries.push({ at: Date.now(), retry: r + 1, error: message, refreshResult });
         if (!refreshResult.changed) throw readErr;
         await sleep(800);
@@ -1266,13 +1341,13 @@ async function solveCaptchaOnce(options = {}) {
     if (!cand.ok && maxRefreshes > 0) {
       result.refreshes = result.refreshes || [];
       for (let r = 0; r < maxRefreshes; r++) {
-        const refreshResult = await refreshPuzzle(page, state);
+        const refreshResult = await wd(`captcha.refresh:pre_${r + 1}`, result.watchdogConfig.refreshMs, () => refreshPuzzle(page, state));
         result.refreshes.push(refreshResult);
         if (!refreshResult.changed) break;
         await sleep(800);
         const refreshTag = `pre_${r + 1}`;
         try {
-          const refreshRead = await readGap(page, result, outputDir, refreshTag, sel, ua);
+          const refreshRead = await wd(`captcha.read_gap:${refreshTag}`, result.watchdogConfig.readGapMs, () => readGap(page, result, outputDir, refreshTag, sel, ua));
           state = refreshRead.state; gap = refreshRead.gap;
           cand = candidateMetrics(state, gap);
           result[`candidate_${refreshTag}`] = cand;
@@ -1337,10 +1412,10 @@ async function solveCaptchaOnce(options = {}) {
     };
     result.verifyNetwork = null;
     result.verifyResponse = null;
-    result.listenerRun = (runMode === 'cdpdrag' || runMode === 'mouse') ? await runCdpMouse(page, runSpec) : (runMode === 'xdotool' ? await runXdotoolDrag(page, runSpec) : await page.evaluate((spec) => window.__AC_run(spec), runSpec));
+    result.listenerRun = await wd('captcha.drag:primary', result.watchdogConfig.dragMs, () => (runMode === 'cdpdrag' || runMode === 'mouse') ? runCdpMouse(page, runSpec) : (runMode === 'xdotool' ? runXdotoolDrag(page, runSpec) : page.evaluate((spec) => window.__AC_run(spec), runSpec)));
     const waitVerify = options.verifyWaitMs || num('VERIFY_WAIT_MS', 12000), started = Date.now();
     while (!result.verifyNetwork && Date.now() - started < waitVerify) await sleep(150);
-    result.runtime = await page.evaluate(() => ({ calls: window.__AC && window.__AC.calls.slice(-50), errors: window.__AC && window.__AC.errors.slice(-20), jsonHits: window.__AC && window.__AC.jsonHits.slice(-40), payloads: window.__AC && window.__AC.payloads.slice(-40), formOps: window.__AC && window.__AC.formOps.slice(-40), listenerCount: window.__AC && window.__AC.listeners.length, captchaParams: window.__AC && window.__AC.captchaParams && window.__AC.captchaParams.slice(-20), btoaHits: window.__AC && window.__AC.btoaHits && window.__AC.btoaHits.slice(-20), u8Hits: window.__AC && window.__AC.u8Hits && window.__AC.u8Hits.slice(-20), trackPairs: window.__AC && window.__AC.trackPairs && window.__AC.trackPairs.slice(-40), foundTrackObjects: window.__AC && window.__AC.foundTrackObjects && window.__AC.foundTrackObjects.slice(-20), trackHits: window.__AC && window.__AC.trackHits && window.__AC.trackHits.slice(-40), vmpIns: window.__AC && window.__AC.vmpIns && window.__AC.vmpIns.slice(-40), updates: window.__AC && window.__AC.updates && window.__AC.updates.slice(-20), secretHits: window.__AC && window.__AC.secretHits && window.__AC.secretHits.slice(-20), sigKeys: window.__AC && window.__AC.sigKeys && window.__AC.sigKeys.slice(-20), deepHooksInited: window.__AC && window.__AC.deepHooksInited })).catch(e => ({ error: e.message }));
+    result.runtime = await wd('runtime.snapshot:primary', result.watchdogConfig.runtimeMs, () => page.evaluate(() => ({ calls: window.__AC && window.__AC.calls.slice(-50), errors: window.__AC && window.__AC.errors.slice(-20), jsonHits: window.__AC && window.__AC.jsonHits.slice(-40), payloads: window.__AC && window.__AC.payloads.slice(-40), formOps: window.__AC && window.__AC.formOps.slice(-40), listenerCount: window.__AC && window.__AC.listeners.length, captchaParams: window.__AC && window.__AC.captchaParams && window.__AC.captchaParams.slice(-20), btoaHits: window.__AC && window.__AC.btoaHits && window.__AC.btoaHits.slice(-20), u8Hits: window.__AC && window.__AC.u8Hits && window.__AC.u8Hits.slice(-20), trackPairs: window.__AC && window.__AC.trackPairs && window.__AC.trackPairs.slice(-40), foundTrackObjects: window.__AC && window.__AC.foundTrackObjects && window.__AC.foundTrackObjects.slice(-20), trackHits: window.__AC && window.__AC.trackHits && window.__AC.trackHits.slice(-40), vmpIns: window.__AC && window.__AC.vmpIns && window.__AC.vmpIns.slice(-40), updates: window.__AC && window.__AC.updates && window.__AC.updates.slice(-20), secretHits: window.__AC && window.__AC.secretHits && window.__AC.secretHits.slice(-20), sigKeys: window.__AC && window.__AC.sigKeys && window.__AC.sigKeys.slice(-20), deepHooksInited: window.__AC && window.__AC.deepHooksInited })).catch(e => ({ error: e.message })));
     result.ok = !!(result.verifyResponse && (result.verifyResponse.VerifyResult === true || result.verifyResponse.VerifyCode === 'T001'));
     result.verifyFailureCode = result.ok ? '' : verifyFailureCode(result);
     // Auto-delta search: if F015 with valid candidate, try +/- 4/8 px on SAME puzzle before refreshing
@@ -1358,7 +1433,7 @@ async function solveCaptchaOnce(options = {}) {
         result.verifyNetwork = null;
         result.verifyResponse = null;
         const adjTag = `delta_${step >= 0 ? '+' : ''}${step}`;
-        result[`listenerRun_${adjTag}`] = (runMode === 'cdpdrag' || runMode === 'mouse') ? await runCdpMouse(page, adjSpec) : (runMode === 'xdotool' ? await runXdotoolDrag(page, adjSpec) : await page.evaluate((spec) => window.__AC_run(spec), adjSpec));
+        result[`listenerRun_${adjTag}`] = await wd(`captcha.drag:${adjTag}`, result.watchdogConfig.dragMs, () => (runMode === 'cdpdrag' || runMode === 'mouse') ? runCdpMouse(page, adjSpec) : (runMode === 'xdotool' ? runXdotoolDrag(page, adjSpec) : page.evaluate((spec) => window.__AC_run(spec), adjSpec)));
         const adjStarted = Date.now();
         while (!result.verifyNetwork && Date.now() - adjStarted < waitVerify) await sleep(150);
         const adjOk = !!(result.verifyResponse && (result.verifyResponse.VerifyResult === true || result.verifyResponse.VerifyCode === 'T001'));
@@ -1380,13 +1455,13 @@ async function solveCaptchaOnce(options = {}) {
     if (!result.ok && maxVerifyRefreshes > 0 && initialVerifyRefreshAllowed) {
       result.refreshes = result.refreshes || [];
       for (let r = 0; r < maxVerifyRefreshes; r++) {
-        const refreshResult = await refreshPuzzle(page, result.state);
+        const refreshResult = await wd(`captcha.refresh:verify_${r + 1}`, result.watchdogConfig.refreshMs, () => refreshPuzzle(page, result.state));
         result.refreshes.push(refreshResult);
         if (!refreshResult.changed) break;
         await sleep(800);
         const refreshTag = `refresh_${r + 1}`;
         try {
-          const { state: rState, gap: rGap } = await readGap(page, result, outputDir, refreshTag, sel, ua);
+          const { state: rState, gap: rGap } = await wd(`captcha.read_gap:${refreshTag}`, result.watchdogConfig.readGapMs, () => readGap(page, result, outputDir, refreshTag, sel, ua));
           const rCand = candidateMetrics(rState, rGap);
           result[`candidate_${refreshTag}`] = rCand;
           if (!rCand.ok && process.env.LISTENER_ENFORCE_CANDIDATE_FILTER === '1') continue;
@@ -1419,7 +1494,7 @@ async function solveCaptchaOnce(options = {}) {
           };
           result.verifyNetwork = null;
           result.verifyResponse = null;
-          result[`listenerRun_${refreshTag}`] = (runMode === 'cdpdrag' || runMode === 'mouse') ? await runCdpMouse(page, rSpec) : (runMode === 'xdotool' ? await runXdotoolDrag(page, rSpec) : await page.evaluate((spec) => window.__AC_run(spec), rSpec));
+          result[`listenerRun_${refreshTag}`] = await wd(`captcha.drag:${refreshTag}`, result.watchdogConfig.dragMs, () => (runMode === 'cdpdrag' || runMode === 'mouse') ? runCdpMouse(page, rSpec) : (runMode === 'xdotool' ? runXdotoolDrag(page, rSpec) : page.evaluate((spec) => window.__AC_run(spec), rSpec)));
           const rStarted = Date.now();
           while (!result.verifyNetwork && Date.now() - rStarted < waitVerify) await sleep(150);
           result.ok = !!(result.verifyResponse && (result.verifyResponse.VerifyResult === true || result.verifyResponse.VerifyCode === 'T001'));
@@ -1454,6 +1529,7 @@ async function solveCaptchaOnce(options = {}) {
       ...(partialResult || {}),
       ok: false,
       error: { message: e.message, stack: String(e.stack || '').slice(0, 4000) },
+      watchdog: errWatchdog(e) || (partialResult && partialResult.watchdog),
       targetUrl: (partialResult && partialResult.targetUrl) || options.targetUrl || options.url || process.env.TARGET_URL || '',
       selectors: (partialResult && partialResult.selectors) || selectors(options.selectors || {}),
       outputDir,
@@ -1463,11 +1539,13 @@ async function solveCaptchaOnce(options = {}) {
     fs.writeFileSync(out, JSON.stringify(failed, null, 2));
     throw e;
   } finally {
-    if (ownedBrowser && browser) await browser.close().catch(() => {});
+    if (ownedBrowser && browser) {
+      await withWatchdog('browser.close', watchdogMs('ALIYUN_CLOSE_WATCHDOG_MS', 8000), () => browser.close(), partialResult).catch(() => {});
+    }
     if (anonymizedProxyToClose) {
       try {
         const ProxyChain = require('proxy-chain');
-        await ProxyChain.closeAnonymizedProxy(anonymizedProxyToClose, true);
+        await withWatchdog('proxy.close', watchdogMs('ALIYUN_PROXY_CLOSE_WATCHDOG_MS', 8000), () => ProxyChain.closeAnonymizedProxy(anonymizedProxyToClose, true), partialResult);
       } catch {}
     }
     restoreProfileEnv();
@@ -1536,7 +1614,7 @@ async function solveCaptcha(options = {}) {
       }
     } catch (e) {
       lastError = e;
-      attempts.push({ attempt: i, ok: false, error: e.message, out: attemptOut });
+      attempts.push({ attempt: i, ok: false, error: e.message, watchdog: errWatchdog(e), out: attemptOut });
       if (i === maxAttempts) {
         if (lastResult) {
           lastResult.attempts = attempts;
@@ -1544,7 +1622,7 @@ async function solveCaptcha(options = {}) {
           return lastResult;
         }
         fs.mkdirSync(baseOutputDir, { recursive: true });
-        fs.writeFileSync(finalOut, JSON.stringify({ ok: false, error: { message: e.message, stack: String(e.stack || '').slice(0, 4000) }, maxAttempts, attempts, out: finalOut, outputDir: baseOutputDir }, null, 2));
+        fs.writeFileSync(finalOut, JSON.stringify({ ok: false, error: { message: e.message, stack: String(e.stack || '').slice(0, 4000) }, watchdog: errWatchdog(e), maxAttempts, attempts, out: finalOut, outputDir: baseOutputDir }, null, 2));
         throw e;
       }
     }

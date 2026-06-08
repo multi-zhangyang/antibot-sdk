@@ -56,6 +56,8 @@ def _compact_raw(raw):
         "candidate": raw.get("candidate"),
         "finalSolve": raw.get("finalSolve"),
         "retryHint": raw.get("retryHint"),
+        "watchdog": raw.get("watchdog"),
+        "watchdogEvents": raw.get("watchdogEvents"),
     }
     return {k: v for k, v in keep.items() if v not in (None, "", [], {})}
 
@@ -78,7 +80,7 @@ async def amain(argv: list[str] | None = None) -> int:
     d = sub.add_parser("diagnose")
     d.add_argument("--browser-binary")
 
-    profs = sub.add_parser("profiles")
+    sub.add_parser("profiles")
 
     run = sub.add_parser("run")
     run.add_argument("url")
@@ -96,7 +98,7 @@ async def amain(argv: list[str] | None = None) -> int:
     run.add_argument("--platform")
     run.add_argument("--raw", action="store_true")
 
-    inst = sub.add_parser("install-js-deps")
+    sub.add_parser("install-js-deps")
 
     auto = sub.add_parser("auto")
     auto.add_argument("url")
