@@ -64,6 +64,14 @@ from .providers.pcaptcha import (
     solve_pcaptcha_challenge,
     verify_pcaptcha_answer,
 )
+from .providers.powcaptcha import (
+    PowCaptchaQuiz,
+    PowCaptchaSolution,
+    parse_powcaptcha_quiz,
+    powcaptcha_quiz_to_base64,
+    solve_powcaptcha_quiz,
+    verify_powcaptcha_answer,
+)
 from .providers.recaptcha import is_recaptcha_token, latest_recaptcha_token
 from .providers.turnstile import is_turnstile_token, latest_turnstile_token
 from .providers.yidun import detect_yidun_slide_gap, latest_yidun_success
@@ -96,6 +104,8 @@ __all__ = [
     "FailureClassifier",
     "PCaptchaChallenge",
     "PCaptchaSolution",
+    "PowCaptchaQuiz",
+    "PowCaptchaSolution",
     "PolicyDecision",
     "SubmitFlow",
     "SuccessOracle",
@@ -130,12 +140,16 @@ __all__ = [
     "mcaptcha_hash_bytes",
     "mcaptcha_score",
     "parse_mcaptcha_config",
+    "parse_powcaptcha_quiz",
     "solve_mcaptcha_config",
+    "solve_powcaptcha_quiz",
     "verify_mcaptcha_work",
     "generate_pcaptcha_challenge_from_roots",
     "parse_pcaptcha_challenge",
+    "powcaptcha_quiz_to_base64",
     "solve_pcaptcha_challenge",
     "verify_pcaptcha_answer",
+    "verify_powcaptcha_answer",
     "friendly_difficulty_to_threshold",
     "parse_friendly_solution_payload",
     "solve_friendly_puzzle",

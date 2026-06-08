@@ -86,6 +86,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "answer / validated token flow",
         "scope": "P-Captcha QuadraticResidueProblem：解析 Woodall prime challenge，用模平方根直接求 answer，可提交 {id, answer}；不启动浏览器。",
     },
+    "powcaptcha": {
+        "provider": "powcaptcha",
+        "name": "pow_captcha",
+        "category": "solver",
+        "captcha_type": "buffer_reconstruction_pow",
+        "status": "alpha",
+        "output": "answer buffer / verification body",
+        "scope": "pow_captcha 二进制 buffer reconstruction PoW：解析 serialized quiz、按 uncertainty ranges 做 mixed-radix 搜索，输出命中 SHA-256 的 answer；不启动浏览器。",
+    },
     "wicketkeeper": {
         "provider": "wicketkeeper",
         "name": "Wicketkeeper",

@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / FriendlyCaptcha PoW / Cap PoW / mCaptcha PoW / Wicketkeeper JWT PoW / P-Captcha 二次剩余 PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / FriendlyCaptcha PoW / Cap PoW / mCaptcha PoW / Wicketkeeper JWT PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -19,6 +19,7 @@
 - mCaptcha：新增 SHA-256 PoW 协议 solver，复现 Rust/JS 的 `bincode(String)+u128 score` 规则，获取 `/api/v1/pow/config` 后本地找 nonce，可提交 `/api/v1/pow/verify` 换 token，不启动浏览器。
 - Wicketkeeper：新增 EdDSA-JWT PoW 协议 solver，获取 `/v0/challenge` 后计算 `SHA256(challenge+nonce)` 前导零，可提交 `/v0/siteverify` 换 success JWT，不启动浏览器。
 - P-Captcha：新增 QuadraticResidueProblem 协议 solver，解析 Woodall prime challenge，用模平方根直接求 answer，可提交 `{id, answer}`，不启动浏览器。
+- pow_captcha：新增二进制 buffer reconstruction PoW solver，解析 serialized quiz、按 uncertainty ranges 做 mixed-radix 搜索，输出命中 SHA-256 的 answer，不启动浏览器。
 - GeeTest v4：从 observer 升级出滑动 solver alpha，抓取 bg/slice、CV 匹配缺口、生成拖动轨迹，并提取 `lot_number/captcha_output/pass_token/gen_time`。
 - 网易易盾 / Yidun：滑动拼图 solver alpha，抓取 bg/front、OpenCV 定位缺口、模拟滑块轨迹，并提取 `validate/token/zoneId`。
 - Policy Engine：把 `F001/F015/NONE/gap/candidate/watchdog timeout` 等失败归类，决定是否换 session，并输出下一步调参建议。
@@ -44,6 +45,7 @@
 | mCaptcha | 协议 solver | `proof_of_work` | alpha | verify body / mCaptcha token |
 | Wicketkeeper | 协议 solver | `proof_of_work` | alpha | hidden-input solution / success JWT |
 | P-Captcha | 协议 solver | `quadratic_residue_pow` | alpha | `answer` / `{id, answer}` |
+| pow_captcha | 协议 solver | `buffer_reconstruction_pow` | alpha | answer buffer / verify body |
 | GeeTest v4 | 真实 solver | `slider` | alpha | `pass_token/lot_number` |
 | NetEase Yidun | 真实 solver | `jigsaw` | alpha | `validate/token/zoneId` |
 | Turnstile | 流程/Token 观察采集 | `token_widget` | observer | widget token / artifacts |
@@ -960,7 +962,70 @@ async with AntibotClient() as client:
 
 ---
 
-### 14. mCaptcha PoW
+### 14. pow_captcha Buffer Reconstruction PoW
+
+pow_captcha 不是普通前导零 hashcash，而是把“正确 buffer 的 SHA-256、当前被污染 buffer、每个不确定字节的取值范围”序列化到 quiz 里。前端 `takeTest`/WASM 会按 mixed-radix 方式枚举这些不确定字节，直到 `SHA256(candidate_buffer)` 命中目标 hash。SDK 当前把这条链路复现成纯 Python 协议 solver。
+
+关键点：
+
+- `SERIAL` 格式：`a1/a2/count + uncertainties + target_hash + corrupted_buffer`。
+- 每个 uncertainty 包含：`index/min/max/base`，支持 wrap-around 取值范围。
+- 搜索顺序复现 upstream C/WASM：每轮先从后往前对 uncertainty 做一次“加一”，再比较 SHA-256。
+- 输出 answer：`answer` base64、`answerHex`，可选 POST 给业务 verify endpoint。
+- 不启动浏览器；默认单 worker，支持 `--workers` 分片搜索。
+
+命令示例：
+
+```bash
+antibot solve powcaptcha \
+  --quiz-b64 'AP8AAQAAAAPbwbTJAP/kjVdbXaXGOAQBJfZdsP4+JElLduqYZFfZhgA=' \
+  --max-attempts 10
+```
+
+从 challenge endpoint 拉 quiz，并提交 verify：
+
+```bash
+antibot solve powcaptcha \
+  --challenge-url 'https://target.example/powcaptcha/challenge' \
+  --verify-url 'https://target.example/powcaptcha/verify' \
+  --submit \
+  --timeout 60
+```
+
+压测：
+
+```bash
+antibot stress powcaptcha \
+  --challenge-url 'https://target.example/powcaptcha/challenge' \
+  --verify-url 'https://target.example/powcaptcha/verify' \
+  --submit \
+  --runs 20 \
+  --concurrency 4
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_powcaptcha(
+        challenge_url="https://target.example/powcaptcha/challenge",
+        verify_url="https://target.example/powcaptcha/verify",
+        submit=True,
+    )
+    print(ret.ok, ret.ticket, ret.verify_code, ret.diagnostics.get("search_space"))
+```
+
+当前定位：
+
+- 这是协议层 buffer reconstruction PoW solver，不是 OCR/视觉识别。
+- 已和 upstream `pow.js` / `C/takeTest.c` 的 `takeTest` 行为对齐，包括“先 increment 再 hash”的枚举顺序。
+- 大 search space 仍会吃 CPU；VPS 上先控制 `--concurrency`，必要时再开 `--workers`。
+
+---
+
+### 15. mCaptcha PoW
 
 mCaptcha 是 self-hosted PoW CAPTCHA。浏览器 widget 的流程是：`POST /api/v1/pow/config` 取 `string/difficulty_factor/salt`，本地搜索 nonce，再 `POST /api/v1/pow/verify` 换取服务端 token。SDK 当前把这条链路做成纯协议 solver。
 
@@ -1032,7 +1097,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 15. Wicketkeeper JWT PoW
+### 16. Wicketkeeper JWT PoW
 
 Wicketkeeper 是 self-hosted PoW CAPTCHA：服务端签发 EdDSA JWT challenge，前端 worker 搜索 nonce，后端 `/v0/siteverify` 校验 JWT、PoW 和 replay 状态后返回 success JWT。SDK 当前把这条链路做成纯协议 solver。
 
@@ -1092,7 +1157,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 16. GeeTest v4 / 极验
+### 17. GeeTest v4 / 极验
 
 GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：能在官方 v4 slide demo 上完成图片定位、轨迹拖动和成功载荷提取。但这个能力还不是稳定通杀，真实站点仍会受风险策略、设备指纹、轨迹质量和出口 IP 影响。
 
@@ -1189,7 +1254,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 17. 网易易盾 / Yidun 滑动拼图
+### 18. 网易易盾 / Yidun 滑动拼图
 
 Yidun 现在保留 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
 
@@ -1260,7 +1325,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 18. 自动分发模式
+### 19. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
@@ -1273,6 +1338,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - mCaptcha / `/api/v1/pow/config` 相关 URL -> `mcaptcha`
 - Wicketkeeper / `/v0/challenge` 相关 URL -> `wicketkeeper`
 - P-Captcha / QuadraticResidueProblem 相关 URL -> `pcaptcha`
+- pow_captcha / powcaptcha / takeTest 相关 URL -> `powcaptcha`
 - Tencent / TCaptcha 相关 URL -> `tencent`
 - GeeTest / gcaptcha4 相关 URL -> `geetest`
 - Yidun / NetEase Dun / necaptcha / dun.163.com 相关 URL -> `yidun`
@@ -1290,7 +1356,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 19. 代理格式
+### 20. 代理格式
 
 支持以下格式：
 
@@ -1396,6 +1462,13 @@ async def main():
             validate=True,
         )
         print(pcaptcha.ok, pcaptcha.ticket, pcaptcha.verify_code)
+
+        powcaptcha = await client.solve_powcaptcha(
+            challenge_url="https://target.example/powcaptcha/challenge",
+            verify_url="https://target.example/powcaptcha/verify",
+            submit=True,
+        )
+        print(powcaptcha.ok, powcaptcha.ticket, powcaptcha.diagnostics.get("search_space"))
 
         yidun = await client.solve_yidun(
             target_url="https://dun.163.com/trial/jigsaw",
@@ -1507,6 +1580,11 @@ antibot solve pcaptcha --challenge-url 'https://target.example/api/challenge'
 antibot solve pcaptcha --challenge-url 'https://target.example/api/challenge' --validate-url 'https://target.example/api/validate' --validate
 antibot stress pcaptcha --challenge-url 'https://target.example/api/challenge' --validate-url 'https://target.example/api/validate' --validate --runs 20
 
+# pow_captcha
+antibot solve powcaptcha --quiz-b64 'AP8AAQAAAAPbwbTJAP/kjVdbXaXGOAQBJfZdsP4+JElLduqYZFfZhgA=' --max-attempts 10
+antibot solve powcaptcha --challenge-url 'https://target.example/powcaptcha/challenge' --verify-url 'https://target.example/powcaptcha/verify' --submit
+antibot stress powcaptcha --challenge-url 'https://target.example/powcaptcha/challenge' --runs 20 --concurrency 4
+
 # Submit verification，证明 token 是否真过页面流程
 antibot verify recaptcha --url 'https://target.example/form' --captcha-json /tmp/recaptcha-run/recaptcha_run.json --submit '#submit' --success '.ok' --failure '.captcha-error'
 antibot verify hcaptcha --url 'https://target.example/form' --token 'P1_xxx' --submit '#submit' --success '.ok'
@@ -1606,6 +1684,7 @@ src/antibot_sdk/
     mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
     wicketkeeper.py         # Wicketkeeper JWT PoW protocol solver
     pcaptcha.py             # P-Captcha quadratic residue protocol solver
+    powcaptcha.py           # pow_captcha buffer reconstruction PoW protocol solver
     geetest.py              # GeeTest v4 hook + slide solver alpha
     hcaptcha.py             # hCaptcha hook/observer provider
     recaptcha.py            # reCAPTCHA/Enterprise hook/observer provider
@@ -1626,6 +1705,7 @@ tests/
   test_friendlycaptcha.py
   test_cap.py
   test_pcaptcha.py
+  test_powcaptcha.py
   test_yidun_slide.py
 ```
 
@@ -1636,7 +1716,7 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 45 passed
+pytest: 53 passed
 node -c bridge.js/site_profiles.js/runner.js: passed
 uv build: success
 watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON
@@ -1758,6 +1838,16 @@ P-Captcha：
 本地 P-Captcha challenge + validate stress 20 轮/concurrency=4：20/20，avg≈57.2ms，p95≈84ms。
 ```
 
+pow_captcha：
+
+```text
+upstream pow.js + C/takeTest.c：确认 SERIAL 格式、uncertainty mixed-radix increment、SHA256(buffer) 命中规则。
+WASM/takeTest fixture：quiz=AP8AAQAAAAPbwbTJAP/kjVdbXaXGOAQBJfZdsP4+JElLduqYZFfZhgA=，answer=02，attempts=2。
+makeTest(16,"abcd",32,127) sample：Python 解出 answer=abcd，search_space=16。
+本地 mock challenge + verify：ok=true，成功返回 pow-token。
+本地 pow_captcha fixture stress 20 轮/concurrency=4：20/20，avg≈0.5ms，p95≈1ms。
+```
+
 Turnstile：
 
 ```text
@@ -1792,6 +1882,7 @@ stress recaptcha mock 2 轮：2/2。
 - mCaptcha PoW 耗时主要由 `difficulty_factor`、nonce 命中位置和 worker 数决定；默认单 worker，压测时先控制并发避免把 VPS CPU 打满。
 - Wicketkeeper difficulty 是前导 0 nibble 个数，每 +1 平均搜索空间约乘 16；success JWT 只能由服务端 `/siteverify` 签发。
 - P-Captcha 当前不是暴力搜索，而是模平方根；耗时主要由 Woodall prime bit 数和 rounds 决定，`2xs` 约 761 bits，`3xl` 约 22974 bits。
+- pow_captcha 是 buffer reconstruction PoW；耗时取决于 uncertainty 个数、各自 base 的乘积 search_space、命中位置和 worker 数。VPS 上优先降并发，再考虑多 worker。
 - Yidun 的误差主要来自三类：浅色缺口的 `color_template` / 暗色缺口的 `shadow_*` 分支选择、front 图片相对 slider 的视觉偏移、以及轨迹/IP/设备指纹。
 - 代理池能明显降低部分 F001，但仍会出现 `NONE`、`gap not found`、`candidate rejected` 等临时状态。
 - 当前最佳基线是：**Qoder + proxy + 快 session 策略**。

@@ -135,6 +135,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "cap",
             "mcaptcha",
             "pcaptcha",
+            "powcaptcha",
             "wicketkeeper",
             "geetest",
             "yidun",
@@ -316,6 +317,26 @@ async def amain(argv: list[str] | None = None) -> int:
     pc.add_argument("--proxy")
     pc.add_argument("--output-dir")
     pc.add_argument("--raw", action="store_true")
+
+    powc = solve_sub.add_parser("powcaptcha")
+    powc_source = powc.add_mutually_exclusive_group(required=True)
+    powc_source.add_argument("--quiz", help="inline raw/base64/hex quiz")
+    powc_source.add_argument("--quiz-b64")
+    powc_source.add_argument("--quiz-hex")
+    powc_source.add_argument("--quiz-file")
+    powc_source.add_argument("--challenge-json", help="inline JSON object, or @/path/to/challenge.json")
+    powc_source.add_argument("--challenge-file")
+    powc_source.add_argument("--challenge-url")
+    powc.add_argument("--id", dest="challenge_id", help="challenge id when the endpoint does not include it")
+    powc.add_argument("--verify-url", help="POST solved answer to verification endpoint")
+    powc.add_argument("--submit", action="store_true", help="POST solution.submit_body to --verify-url")
+    powc.add_argument("--start", type=int, default=0)
+    powc.add_argument("--max-attempts", type=int, default=50_000_000)
+    powc.add_argument("--workers", type=int, default=1)
+    powc.add_argument("--timeout", type=int, default=60)
+    powc.add_argument("--proxy")
+    powc.add_argument("--output-dir")
+    powc.add_argument("--raw", action="store_true")
 
     wk = solve_sub.add_parser("wicketkeeper")
     wk_source = wk.add_mutually_exclusive_group(required=True)
@@ -569,6 +590,27 @@ async def amain(argv: list[str] | None = None) -> int:
     spc.add_argument("--output-json")
     spc.add_argument("--full", action="store_true")
 
+    spow = stress_sub.add_parser("powcaptcha")
+    spow_source = spow.add_mutually_exclusive_group(required=True)
+    spow_source.add_argument("--challenge-url")
+    spow_source.add_argument("--challenge-json")
+    spow_source.add_argument("--challenge-file")
+    spow_source.add_argument("--quiz-b64")
+    spow_source.add_argument("--quiz-hex")
+    spow_source.add_argument("--quiz-file")
+    spow.add_argument("--id", dest="challenge_id")
+    spow.add_argument("--verify-url")
+    spow.add_argument("--submit", action="store_true")
+    spow.add_argument("--runs", type=int, default=10)
+    spow.add_argument("--concurrency", type=int, default=2)
+    spow.add_argument("--timeout", type=int, default=60)
+    spow.add_argument("--max-attempts", type=int, default=50_000_000)
+    spow.add_argument("--workers", type=int, default=1)
+    spow.add_argument("--proxy")
+    spow.add_argument("--output-dir")
+    spow.add_argument("--output-json")
+    spow.add_argument("--full", action="store_true")
+
     swk = stress_sub.add_parser("wicketkeeper")
     swk_source = swk.add_mutually_exclusive_group(required=True)
     swk_source.add_argument("--challenge-url")
@@ -737,6 +779,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "cap",
             "mcaptcha",
             "pcaptcha",
+            "powcaptcha",
             "wicketkeeper",
             "anubis",
         ):
@@ -943,6 +986,27 @@ async def amain(argv: list[str] | None = None) -> int:
             challenge_id=args.challenge_id,
             validate_url=args.validate_url,
             validate=args.validate,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "powcaptcha":
+        ret = await client.solve_powcaptcha(
+            quiz=args.quiz,
+            quiz_b64=args.quiz_b64,
+            quiz_hex=args.quiz_hex,
+            quiz_file=args.quiz_file,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            challenge_id=args.challenge_id,
+            verify_url=args.verify_url,
+            submit=args.submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
@@ -1300,6 +1364,33 @@ async def amain(argv: list[str] | None = None) -> int:
                 challenge_url=args.challenge_url,
                 validate_url=args.validate_url,
                 validate=args.validate,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "powcaptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="powcaptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_powcaptcha(
+                quiz_b64=args.quiz_b64,
+                quiz_hex=args.quiz_hex,
+                quiz_file=args.quiz_file,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                challenge_id=args.challenge_id,
+                verify_url=args.verify_url,
+                submit=args.submit,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
