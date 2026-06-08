@@ -86,6 +86,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "answer / validated token flow",
         "scope": "P-Captcha QuadraticResidueProblem：解析 Woodall prime challenge，用模平方根直接求 answer，可提交 {id, answer}；不启动浏览器。",
     },
+    "wicketkeeper": {
+        "provider": "wicketkeeper",
+        "name": "Wicketkeeper",
+        "category": "solver",
+        "captcha_type": "proof_of_work",
+        "status": "alpha",
+        "output": "hidden-input solution / success JWT",
+        "scope": "Wicketkeeper EdDSA-JWT PoW：获取 /v0/challenge，计算 SHA256(challenge+nonce) 前导零，可提交 /v0/siteverify 换 success JWT；不启动浏览器。",
+    },
     "geetest": {
         "provider": "geetest",
         "name": "GeeTest v4",

@@ -67,6 +67,13 @@ from .providers.pcaptcha import (
 from .providers.recaptcha import is_recaptcha_token, latest_recaptcha_token
 from .providers.turnstile import is_turnstile_token, latest_turnstile_token
 from .providers.yidun import detect_yidun_slide_gap, latest_yidun_success
+from .providers.wicketkeeper import (
+    WicketkeeperChallenge,
+    WicketkeeperSolution,
+    solve_wicketkeeper_challenge,
+    verify_wicketkeeper_work,
+    wicketkeeper_hash_hex,
+)
 from .stress import run_stress
 from .verification import FailureClassifier, SubmitFlow, SuccessOracle, VerificationResult, verify_submit_flow
 
@@ -93,6 +100,8 @@ __all__ = [
     "SubmitFlow",
     "SuccessOracle",
     "VerificationResult",
+    "WicketkeeperChallenge",
+    "WicketkeeperSolution",
     "aliyun_policy_decision",
     "detect_provider_for_url",
     "detect_geetest_slide_gap",
@@ -142,6 +151,9 @@ __all__ = [
     "list_capabilities",
     "list_profiles",
     "run_stress",
+    "solve_wicketkeeper_challenge",
     "UNSUPPORTED_CAPABILITIES",
+    "verify_wicketkeeper_work",
     "verify_submit_flow",
+    "wicketkeeper_hash_hex",
 ]

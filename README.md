@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / FriendlyCaptcha PoW / Cap PoW / mCaptcha PoW / P-Captcha 二次剩余 PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / FriendlyCaptcha PoW / Cap PoW / mCaptcha PoW / Wicketkeeper JWT PoW / P-Captcha 二次剩余 PoW / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -17,6 +17,7 @@
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
 - Cap / @cap.js：新增 SHA-256 PoW 协议 solver，支持 v1 seeded challenge 与 format-2 `sha256-pow`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
 - mCaptcha：新增 SHA-256 PoW 协议 solver，复现 Rust/JS 的 `bincode(String)+u128 score` 规则，获取 `/api/v1/pow/config` 后本地找 nonce，可提交 `/api/v1/pow/verify` 换 token，不启动浏览器。
+- Wicketkeeper：新增 EdDSA-JWT PoW 协议 solver，获取 `/v0/challenge` 后计算 `SHA256(challenge+nonce)` 前导零，可提交 `/v0/siteverify` 换 success JWT，不启动浏览器。
 - P-Captcha：新增 QuadraticResidueProblem 协议 solver，解析 Woodall prime challenge，用模平方根直接求 answer，可提交 `{id, answer}`，不启动浏览器。
 - GeeTest v4：从 observer 升级出滑动 solver alpha，抓取 bg/slice、CV 匹配缺口、生成拖动轨迹，并提取 `lot_number/captcha_output/pass_token/gen_time`。
 - 网易易盾 / Yidun：滑动拼图 solver alpha，抓取 bg/front、OpenCV 定位缺口、模拟滑块轨迹，并提取 `validate/token/zoneId`。
@@ -41,6 +42,7 @@
 | FriendlyCaptcha | 协议 solver | `proof_of_work` | alpha | `frc-captcha-solution` payload |
 | Cap / @cap.js | 协议 solver | `proof_of_work` | alpha | `/redeem` body / Cap token |
 | mCaptcha | 协议 solver | `proof_of_work` | alpha | verify body / mCaptcha token |
+| Wicketkeeper | 协议 solver | `proof_of_work` | alpha | hidden-input solution / success JWT |
 | P-Captcha | 协议 solver | `quadratic_residue_pow` | alpha | `answer` / `{id, answer}` |
 | GeeTest v4 | 真实 solver | `slider` | alpha | `pass_token/lot_number` |
 | NetEase Yidun | 真实 solver | `jigsaw` | alpha | `validate/token/zoneId` |
@@ -1030,7 +1032,67 @@ async with AntibotClient() as client:
 
 ---
 
-### 15. GeeTest v4 / 极验
+### 15. Wicketkeeper JWT PoW
+
+Wicketkeeper 是 self-hosted PoW CAPTCHA：服务端签发 EdDSA JWT challenge，前端 worker 搜索 nonce，后端 `/v0/siteverify` 校验 JWT、PoW 和 replay 状态后返回 success JWT。SDK 当前把这条链路做成纯协议 solver。
+
+关键点：
+
+- challenge endpoint：`GET /v0/challenge`。
+- challenge 响应：`challenge / difficulty / token`，其中 token 是包含 `cid/diff/iat/exp` 的 EdDSA JWT。
+- PoW 输入：`challenge + nonce`。
+- 通过条件：SHA-256 hex 字符串满足指定数量的前导 0 nibble。
+- verify endpoint：`POST /v0/siteverify`，提交：
+
+```json
+{"token":"challenge.jwt","nonce":"73720","response":"000021ae..."}
+```
+
+命令示例：
+
+```bash
+antibot solve wicketkeeper \
+  --base-url 'https://captcha.example'
+```
+
+只解 PoW，不提交 `/siteverify`：
+
+```bash
+antibot solve wicketkeeper \
+  --challenge-json '{"challenge":"hunter","difficulty":4,"token":"challenge.jwt"}' \
+  --no-submit
+```
+
+压测：
+
+```bash
+antibot stress wicketkeeper \
+  --base-url 'https://captcha.example' \
+  --runs 20 \
+  --concurrency 4
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_wicketkeeper(
+        base_url="https://captcha.example",
+    )
+    print(ret.ok, ret.ticket, ret.verify_code)
+```
+
+当前定位：
+
+- 这是协议层 JWT + PoW solver，不打开浏览器。
+- 已按 upstream `client/src/solvers/fast.js` 与 `server/handlers.go` 复现：`SHA256(challenge+nonce)` + leading-zero nibble。
+- success JWT 仍由服务端签发，SDK 不伪造签名，只完成客户端应做的 PoW 和提交闭环。
+
+---
+
+### 16. GeeTest v4 / 极验
 
 GeeTest v4 现在不再只是 observer，已经加入 **slide solver alpha**：能在官方 v4 slide demo 上完成图片定位、轨迹拖动和成功载荷提取。但这个能力还不是稳定通杀，真实站点仍会受风险策略、设备指纹、轨迹质量和出口 IP 影响。
 
@@ -1127,7 +1189,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 16. 网易易盾 / Yidun 滑动拼图
+### 17. 网易易盾 / Yidun 滑动拼图
 
 Yidun 现在保留 **jigsaw solver alpha**，不是单纯 observer。当前在网易易盾官方 `trial/jigsaw` 页面可以完成：图片提取、缺口定位、滑块拖动、服务端 check 返回 `validate/token/zoneId`。
 
@@ -1198,7 +1260,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 17. 自动分发模式
+### 18. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
@@ -1209,6 +1271,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - FriendlyCaptcha / `frc-captcha` 相关 URL -> `friendlycaptcha`
 - Cap / trycap / cap-widget 相关 URL -> `cap`
 - mCaptcha / `/api/v1/pow/config` 相关 URL -> `mcaptcha`
+- Wicketkeeper / `/v0/challenge` 相关 URL -> `wicketkeeper`
 - P-Captcha / QuadraticResidueProblem 相关 URL -> `pcaptcha`
 - Tencent / TCaptcha 相关 URL -> `tencent`
 - GeeTest / gcaptcha4 相关 URL -> `geetest`
@@ -1227,7 +1290,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 18. 代理格式
+### 19. 代理格式
 
 支持以下格式：
 
@@ -1435,6 +1498,10 @@ antibot stress cap --api-endpoint 'https://target.example/cap/' --runs 50 --conc
 antibot solve mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key'
 antibot stress mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key' --runs 20
 
+# Wicketkeeper
+antibot solve wicketkeeper --base-url 'https://captcha.example'
+antibot stress wicketkeeper --base-url 'https://captcha.example' --runs 20
+
 # P-Captcha
 antibot solve pcaptcha --challenge-url 'https://target.example/api/challenge'
 antibot solve pcaptcha --challenge-url 'https://target.example/api/challenge' --validate-url 'https://target.example/api/validate' --validate
@@ -1537,6 +1604,7 @@ src/antibot_sdk/
     friendlycaptcha.py      # FriendlyCaptcha classic PoW protocol solver
     cap.py                  # Cap/@cap.js SHA-256 PoW protocol solver
     mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
+    wicketkeeper.py         # Wicketkeeper JWT PoW protocol solver
     pcaptcha.py             # P-Captcha quadratic residue protocol solver
     geetest.py              # GeeTest v4 hook + slide solver alpha
     hcaptcha.py             # hCaptcha hook/observer provider
@@ -1674,6 +1742,14 @@ mCaptcha：
 本地 mCaptcha stress 20 轮/concurrency=4：20/20，avg≈29.8ms，p95≈50ms。
 ```
 
+Wicketkeeper：
+
+```text
+upstream client/src/solvers/fast.js + server/handlers.go：确认 SHA256(challenge+nonce) 与 leading-zero nibble 规则。
+fixture challenge=hunter,difficulty=4：nonce=73720，response=000021aed34dbacfb31c00533eecdc3099fe858b8377273a12cc9cdfecfaebe4。
+本地 mock challenge + siteverify stress 20 轮/concurrency=4：20/20，avg≈23.2ms，p95≈35ms。
+```
+
 P-Captcha：
 
 ```text
@@ -1714,6 +1790,7 @@ stress recaptcha mock 2 轮：2/2。
 - FriendlyCaptcha classic 也是 PoW；耗时主要由 difficulty、solution count、命中位置和 worker 数决定。默认 `10,000,000` 次/段 solution 上限，真实站点不够时调 `--max-attempts-per-solution`。
 - Cap PoW 耗时主要由 `c/s/d`、format-2 target 长度、命中位置和 worker 数决定；遇到 `rsw/instrumentation` 时不要硬解，当前版本会按 unsupported 返回。
 - mCaptcha PoW 耗时主要由 `difficulty_factor`、nonce 命中位置和 worker 数决定；默认单 worker，压测时先控制并发避免把 VPS CPU 打满。
+- Wicketkeeper difficulty 是前导 0 nibble 个数，每 +1 平均搜索空间约乘 16；success JWT 只能由服务端 `/siteverify` 签发。
 - P-Captcha 当前不是暴力搜索，而是模平方根；耗时主要由 Woodall prime bit 数和 rounds 决定，`2xs` 约 761 bits，`3xl` 约 22974 bits。
 - Yidun 的误差主要来自三类：浅色缺口的 `color_template` / 暗色缺口的 `shadow_*` 分支选择、front 图片相对 slider 的视觉偏移、以及轨迹/IP/设备指纹。
 - 代理池能明显降低部分 F001，但仍会出现 `NONE`、`gap not found`、`candidate rejected` 等临时状态。

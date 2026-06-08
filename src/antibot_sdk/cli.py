@@ -135,6 +135,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "cap",
             "mcaptcha",
             "pcaptcha",
+            "wicketkeeper",
             "geetest",
             "yidun",
             "hcaptcha",
@@ -315,6 +316,25 @@ async def amain(argv: list[str] | None = None) -> int:
     pc.add_argument("--proxy")
     pc.add_argument("--output-dir")
     pc.add_argument("--raw", action="store_true")
+
+    wk = solve_sub.add_parser("wicketkeeper")
+    wk_source = wk.add_mutually_exclusive_group(required=True)
+    wk_source.add_argument("--challenge", help="inline challenge/cid")
+    wk_source.add_argument("--challenge-json", help="inline JSON object, or @/path/to/challenge.json")
+    wk_source.add_argument("--challenge-file")
+    wk_source.add_argument("--challenge-url", help="Wicketkeeper /v0/challenge endpoint")
+    wk_source.add_argument("--base-url", help="Wicketkeeper instance root; infers /v0/{challenge,siteverify}")
+    wk.add_argument("--difficulty", type=int)
+    wk.add_argument("--token", help="challenge JWT when using --challenge")
+    wk.add_argument("--siteverify-url", help="Wicketkeeper /v0/siteverify endpoint")
+    wk.add_argument("--no-submit", action="store_true", help="only return the solved hidden-input JSON")
+    wk.add_argument("--start", type=int, default=0)
+    wk.add_argument("--max-attempts", type=int, default=50_000_000)
+    wk.add_argument("--workers", type=int, default=1)
+    wk.add_argument("--timeout", type=int, default=60)
+    wk.add_argument("--proxy")
+    wk.add_argument("--output-dir")
+    wk.add_argument("--raw", action="store_true")
 
     gt = solve_sub.add_parser("geetest")
     gt.add_argument("--url", dest="target_url", required=True)
@@ -549,6 +569,24 @@ async def amain(argv: list[str] | None = None) -> int:
     spc.add_argument("--output-json")
     spc.add_argument("--full", action="store_true")
 
+    swk = stress_sub.add_parser("wicketkeeper")
+    swk_source = swk.add_mutually_exclusive_group(required=True)
+    swk_source.add_argument("--challenge-url")
+    swk_source.add_argument("--base-url")
+    swk_source.add_argument("--challenge-json")
+    swk_source.add_argument("--challenge-file")
+    swk.add_argument("--siteverify-url")
+    swk.add_argument("--no-submit", action="store_true")
+    swk.add_argument("--runs", type=int, default=10)
+    swk.add_argument("--concurrency", type=int, default=2)
+    swk.add_argument("--timeout", type=int, default=60)
+    swk.add_argument("--max-attempts", type=int, default=50_000_000)
+    swk.add_argument("--workers", type=int, default=1)
+    swk.add_argument("--proxy")
+    swk.add_argument("--output-dir")
+    swk.add_argument("--output-json")
+    swk.add_argument("--full", action="store_true")
+
     sg = stress_sub.add_parser("geetest")
     sg.add_argument("--url", dest="target_url", required=True)
     sg.add_argument("--runs", type=int, default=3)
@@ -699,6 +737,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "cap",
             "mcaptcha",
             "pcaptcha",
+            "wicketkeeper",
             "anubis",
         ):
             common.update({
@@ -904,6 +943,26 @@ async def amain(argv: list[str] | None = None) -> int:
             challenge_id=args.challenge_id,
             validate_url=args.validate_url,
             validate=args.validate,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "wicketkeeper":
+        ret = await client.solve_wicketkeeper(
+            challenge=args.challenge,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            base_url=args.base_url,
+            difficulty=args.difficulty,
+            token=args.token,
+            siteverify_url=args.siteverify_url,
+            submit=not args.no_submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
@@ -1241,6 +1300,30 @@ async def amain(argv: list[str] | None = None) -> int:
                 challenge_url=args.challenge_url,
                 validate_url=args.validate_url,
                 validate=args.validate,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "wicketkeeper":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="wicketkeeper",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_wicketkeeper(
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                base_url=args.base_url,
+                siteverify_url=args.siteverify_url,
+                submit=not args.no_submit,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,

@@ -19,6 +19,7 @@ from .providers.recaptcha import ReCaptchaSolver
 from .providers.tencent import TencentCaptchaSolver
 from .providers.turnstile import TurnstileSolver
 from .providers.yidun import YidunCaptchaSolver
+from .providers.wicketkeeper import WicketkeeperSolver
 
 
 class AntibotClient:
@@ -35,6 +36,7 @@ class AntibotClient:
         self.friendlycaptcha = FriendlyCaptchaSolver()
         self.mcaptcha = MCaptchaSolver()
         self.pcaptcha = PCaptchaSolver()
+        self.wicketkeeper = WicketkeeperSolver()
         self.tencent = TencentCaptchaSolver()
         self.aliyun = AliyunCaptchaSolver()
         self.geetest = GeeTestCaptchaSolver()
@@ -79,6 +81,9 @@ class AntibotClient:
 
     async def solve_pcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.pcaptcha.solve(**kwargs)
+
+    async def solve_wicketkeeper(self, **kwargs: Any) -> CaptchaResult:
+        return await self.wicketkeeper.solve(**kwargs)
 
     async def solve_geetest(self, **kwargs: Any) -> CaptchaResult:
         return await self.geetest.solve(**kwargs)
@@ -285,6 +290,37 @@ class AntibotClient:
             }
             pc_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_pcaptcha(**pc_kwargs)
+        if provider == "wicketkeeper":
+            wk_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "base_url",
+                    "difficulty",
+                    "token",
+                    "siteverify_url",
+                    "submit",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            if not wk_kwargs.get("challenge_url") and not wk_kwargs.get("base_url"):
+                if target_url.rstrip("/").endswith("/challenge"):
+                    wk_kwargs["challenge_url"] = target_url
+                else:
+                    wk_kwargs["base_url"] = target_url
+            return await self.solve_wicketkeeper(**wk_kwargs)
         if provider == "aliyun":
             return await self.solve_aliyun(target_url=target_url, **kwargs)
         if provider == "recaptcha":

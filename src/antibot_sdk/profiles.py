@@ -121,6 +121,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "mcaptcha"
     if any(x in u or x in host for x in ("p-captcha", "pcaptcha", "quadraticresidueproblem")):
         return "pcaptcha"
+    if any(x in u or x in host for x in ("wicketkeeper", "/v0/challenge", "/v0/siteverify")):
+        return "wicketkeeper"
     if any(x in u or x in host for x in ("geetest", "gcaptcha4", "gt4.geetest")):
         return "geetest"
     if any(x in u or x in host for x in ("yidun", "necaptcha", "dun.163.com", "c.dun.163.com")):
@@ -211,6 +213,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "quadratic-residue-protocol-solver",
                 "successFields": ["answer", "{id, answer}"],
                 "endpoints": ["/api/challenge", "/api/validate"],
+            }
+        },
+        "wicketkeeper": {
+            "jwt_pow": {
+                "patterns": ["wicketkeeper", "/v0/challenge", "/v0/siteverify"],
+                "mode": "wicketkeeper-jwt-pow-protocol-solver",
+                "successFields": ["hidden input JSON", "success JWT"],
+                "endpoints": ["/v0/challenge", "/v0/siteverify"],
             }
         },
         "yidun": {
