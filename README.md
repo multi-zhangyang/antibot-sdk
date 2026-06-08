@@ -7,6 +7,7 @@
 - Pydoll / CDP 浏览器运行器：页面打开、指纹补丁、Cloudflare/Turnstile/Managed Challenge 相关流程观察与自动化。
 - Turnstile：新增浏览器 hook/observer provider，采集 `turnstile.render()` 配置、callback token、`cf-turnstile-response`、widget DOM 和网络现场。
 - hCaptcha：新增浏览器 hook/observer provider，采集 `hcaptcha.render()`、callback token、`h-captcha-response/g-recaptcha-response`、Enterprise `rqdata`、widget DOM 和网络现场。
+- reCAPTCHA / reCAPTCHA Enterprise：新增浏览器 hook/observer provider，采集 `grecaptcha.render()`、`grecaptcha.enterprise.execute()`、action、callback/execute token、`g-recaptcha-response` 和网络现场。
 - Tencent Captcha：封装腾讯滑块的页面触发、浏览器池、缺口识别、轨迹拖拽、ticket/randstr 输出。
 - Aliyun Captcha：封装阿里云滑块的 Node/Puppeteer runner、站点 profile、attempt/session retry、错误归一、artifact 保留。
 - GeeTest v4：新增浏览器 hook/observer provider，采集 `initGeetest4` 配置、实例方法、运行事件、`getValidate()` 成功载荷和网络现场。
@@ -183,7 +184,73 @@ async with AntibotClient() as client:
 
 ---
 
-### 4. 腾讯滑块验证码
+### 4. reCAPTCHA / reCAPTCHA Enterprise
+
+reCAPTCHA provider 面向 v2 widget、invisible、v3/Enterprise score/action 模式，第一版先做 **render/execute/token/action/network artifact**。
+
+能力：
+
+- 在页面最早阶段 hook `window.grecaptcha`。
+- 自动 wrap `window.grecaptcha.enterprise`。
+- 记录 `grecaptcha.render(container, options)`：
+  - `sitekey`
+  - `size/theme/badge`
+  - `action`
+  - callback 名称或函数
+- 记录 `grecaptcha.execute(sitekey, {action})` / `grecaptcha.enterprise.execute(sitekey, {action})`：
+  - execute sitekey
+  - action
+  - API 类型：`grecaptcha` 或 `grecaptcha.enterprise`
+- wrap `callback / expired-callback / error-callback`。
+- 采集成功 token：
+  - `callback(token)`
+  - `execute()` Promise 返回 token
+  - `grecaptcha.getResponse()`
+  - `textarea/input[name="g-recaptcha-response"]`
+- 自动尝试历史 render/execute 参数，点击可见 widget/iframe 容器。
+- 保留 `recaptcha_run.json`、截图、HTML、reCAPTCHA/Enterprise 网络记录。
+- 支持代理、headless/headed、trigger selector、stress 压测。
+
+命令示例：
+
+```bash
+antibot solve recaptcha \
+  --url 'https://target.example/path-with-recaptcha' \
+  --output-dir /tmp/recaptcha-run
+```
+
+压测：
+
+```bash
+antibot stress recaptcha \
+  --url 'https://target.example/path-with-recaptcha' \
+  --runs 10 \
+  --concurrency 2 \
+  --timeout 90 \
+  --output-json /tmp/recaptcha-stress.json
+```
+
+Python 示例：
+
+```python
+from antibot_sdk import AntibotClient
+
+async with AntibotClient() as client:
+    ret = await client.solve_recaptcha(
+        target_url="https://target.example/path-with-recaptcha",
+        output_dir="/tmp/recaptcha-run",
+    )
+    print(ret.ok, ret.ticket, ret.diagnostics.get("sitekey"), ret.diagnostics.get("action"))
+```
+
+当前定位：
+
+- 对 v3/Enterprise 低风险直接出 token、页面自身 callback/execute、测试页/集成页 token 链路有效。
+- 遇到 v2 图片/checkbox 交互挑战时，当前版本先保留完整现场；下一步再接图片识别、anchor/reload 流分析和 Enterprise assessment 结果归一。
+
+---
+
+### 5. 腾讯滑块验证码
 
 能力：
 
@@ -234,7 +301,7 @@ antibot stress tencent \
 
 ---
 
-### 5. 阿里云滑块验证码
+### 6. 阿里云滑块验证码
 
 能力：
 
@@ -312,7 +379,7 @@ antibot stress aliyun \
 
 ---
 
-### 6. GeeTest v4 / 极验
+### 7. GeeTest v4 / 极验
 
 第一版 GeeTest provider 先做 **可探测、可触发、可采集、可压测**，为后续轨迹/图像/行为模型接入打底。
 
@@ -385,7 +452,7 @@ async with AntibotClient() as client:
 
 ---
 
-### 7. 自动分发模式
+### 8. 自动分发模式
 
 SDK 可以根据 URL 粗略判断 provider：
 
@@ -393,6 +460,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - Tencent / TCaptcha 相关 URL -> `tencent`
 - GeeTest / gcaptcha4 相关 URL -> `geetest`
 - hCaptcha / h-captcha / js.hcaptcha.com 相关 URL -> `hcaptcha`
+- reCAPTCHA / g-recaptcha / recaptcha.net 相关 URL -> `recaptcha`
 - Turnstile / challenges.cloudflare.com 相关 URL -> `turnstile`
 - Cloudflare Managed Challenge / cf-challenge 相关 URL -> `cloudflare/browser`
 - 其他 -> 普通浏览器打开
@@ -405,7 +473,7 @@ antibot auto 'https://qoder.com/users/sign-up' \
 
 ---
 
-### 8. 代理格式
+### 9. 代理格式
 
 支持以下格式：
 
@@ -486,6 +554,12 @@ async def main():
         )
         print(hcaptcha.ok, hcaptcha.ticket, hcaptcha.diagnostics.get("sitekey"))
 
+        recaptcha = await client.solve_recaptcha(
+            target_url="https://target.example/path-with-recaptcha",
+            output_dir="/tmp/recaptcha-run",
+        )
+        print(recaptcha.ok, recaptcha.ticket, recaptcha.diagnostics.get("action"))
+
         aliyun = await client.solve_aliyun(
             target_url="https://qoder.com/users/sign-up",
             site_profile="qoder_signup",
@@ -535,6 +609,10 @@ antibot stress turnstile --url 'https://target.example/path-with-turnstile' --ru
 antibot solve hcaptcha --url 'https://target.example/path-with-hcaptcha'
 antibot stress hcaptcha --url 'https://target.example/path-with-hcaptcha' --runs 10
 
+# reCAPTCHA
+antibot solve recaptcha --url 'https://target.example/path-with-recaptcha'
+antibot stress recaptcha --url 'https://target.example/path-with-recaptcha' --runs 10
+
 # GeeTest
 antibot solve geetest --url 'https://target.example/path-with-geetest'
 antibot stress geetest --url 'https://target.example/path-with-geetest' --runs 10
@@ -558,12 +636,12 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / GeeTest 会保留：
+Turnstile / hCaptcha / reCAPTCHA / GeeTest 会保留：
 
 ```text
-turnstile_run.json / hcaptcha_run.json / geetest_run.json
-turnstile_page.png / hcaptcha_page.png / geetest_page.png
-turnstile_page.html / hcaptcha_page.html / geetest_page.html
+turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
+turnstile_page.png / hcaptcha_page.png / recaptcha_page.png / geetest_page.png
+turnstile_page.html / hcaptcha_page.html / recaptcha_page.html / geetest_page.html
 ```
 
 Stress 输出 JSON 结构：
@@ -601,6 +679,7 @@ src/antibot_sdk/
     aliyun.py               # Aliyun provider adapter
     geetest.py              # GeeTest v4 hook/observer provider
     hcaptcha.py             # hCaptcha hook/observer provider
+    recaptcha.py            # reCAPTCHA/Enterprise hook/observer provider
     turnstile.py            # Cloudflare Turnstile hook/observer provider
   vendor/
     tencent/                # Tencent solver + upstream snapshot
@@ -619,13 +698,14 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 11 passed
+pytest: 12 passed
 node -c bridge.js/site_profiles.js/runner.js: passed
 uv build: success
 watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON
 geetest mock: initGeetest4/onSuccess/getValidate 链路通过
 turnstile mock: render/callback/input token 链路通过
 hcaptcha mock: render/callback/input token 链路通过
+recaptcha mock: render/enterprise execute/callback/input token 链路通过
 ```
 
 腾讯：
@@ -669,6 +749,13 @@ hCaptcha：
 ```text
 本地 mock 页面：ok=true，成功提取 callback/input token、sitekey、size/theme。
 stress hcaptcha mock 2 轮：2/2。
+```
+
+reCAPTCHA / Enterprise：
+
+```text
+本地 mock 页面：ok=true，成功提取 Enterprise execute token、sitekey、action。
+stress recaptcha mock 2 轮：2/2。
 ```
 
 ---

@@ -112,6 +112,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "tencent",
             "geetest",
             "hcaptcha",
+            "recaptcha",
             "turnstile",
             "cloudflare",
             "browser",
@@ -208,6 +209,21 @@ async def amain(argv: list[str] | None = None) -> int:
     hc.add_argument("--timezone", default="America/New_York")
     hc.add_argument("--raw", action="store_true")
 
+    rc = solve_sub.add_parser("recaptcha")
+    rc.add_argument("--url", dest="target_url", required=True)
+    rc.add_argument("--headless", default="auto", choices=["auto", "true", "false"])
+    rc.add_argument("--headed", action="store_true")
+    rc.add_argument("--proxy")
+    rc.add_argument("--timeout", type=int, default=90)
+    rc.add_argument("--output-dir")
+    rc.add_argument("--trigger", action="append", default=[])
+    rc.add_argument("--no-auto-trigger", action="store_true")
+    rc.add_argument("--browser-binary")
+    rc.add_argument("--user-agent")
+    rc.add_argument("--locale", default="en-US")
+    rc.add_argument("--timezone", default="America/New_York")
+    rc.add_argument("--raw", action="store_true")
+
     stress = sub.add_parser("stress")
     stress_sub = stress.add_subparsers(dest="provider", required=True)
 
@@ -297,6 +313,20 @@ async def amain(argv: list[str] | None = None) -> int:
     shc.add_argument("--output-json")
     shc.add_argument("--full", action="store_true")
 
+    src = stress_sub.add_parser("recaptcha")
+    src.add_argument("--url", dest="target_url", required=True)
+    src.add_argument("--runs", type=int, default=3)
+    src.add_argument("--concurrency", type=int, default=1)
+    src.add_argument("--timeout", type=int, default=90)
+    src.add_argument("--headless", default="auto", choices=["auto", "true", "false"])
+    src.add_argument("--headed", action="store_true")
+    src.add_argument("--proxy")
+    src.add_argument("--trigger", action="append", default=[])
+    src.add_argument("--no-auto-trigger", action="store_true")
+    src.add_argument("--output-dir")
+    src.add_argument("--output-json")
+    src.add_argument("--full", action="store_true")
+
     args = p.parse_args(argv)
     if args.cmd == "diagnose":
         emit(BrowserAutomation.diagnose(args.browser_binary))
@@ -332,7 +362,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "proxy_server": args.proxy,
             "headless": headless,
         }
-        if provider in (None, "aliyun", "geetest", "hcaptcha", "turnstile"):
+        if provider in (None, "aliyun", "geetest", "hcaptcha", "recaptcha", "turnstile"):
             common.update({
                 "site_profile": args.site_profile,
                 "output_dir": args.output_dir,
@@ -416,6 +446,23 @@ async def amain(argv: list[str] | None = None) -> int:
     if args.cmd == "solve" and args.provider == "hcaptcha":
         headless = False if args.headed else _headless(args.headless)
         ret = await client.solve_hcaptcha(
+            target_url=args.target_url,
+            headless=headless,
+            proxy_server=args.proxy,
+            timeout_sec=args.timeout,
+            output_dir=args.output_dir,
+            trigger_selectors=args.trigger or None,
+            auto_trigger=not args.no_auto_trigger,
+            browser_binary=args.browser_binary,
+            user_agent=args.user_agent,
+            locale=args.locale,
+            timezone_id=args.timezone,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "recaptcha":
+        headless = False if args.headed else _headless(args.headless)
+        ret = await client.solve_recaptcha(
             target_url=args.target_url,
             headless=headless,
             proxy_server=args.proxy,
@@ -578,6 +625,27 @@ async def amain(argv: list[str] | None = None) -> int:
             per_run_timeout=args.timeout + 20,
             output_json=args.output_json,
             run_once=lambda i: client.solve_hcaptcha(
+                target_url=args.target_url,
+                headless=headless,
+                proxy_server=args.proxy,
+                timeout_sec=args.timeout,
+                trigger_selectors=args.trigger or None,
+                auto_trigger=not args.no_auto_trigger,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "recaptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        headless = False if args.headed else _headless(args.headless)
+        ret = await run_stress(
+            name="recaptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 20,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_recaptcha(
                 target_url=args.target_url,
                 headless=headless,
                 proxy_server=args.proxy,

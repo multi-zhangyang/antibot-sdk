@@ -2,6 +2,7 @@ from antibot_sdk.profiles import aliyun_profile_for_url, detect_provider_for_url
 from antibot_sdk.policy import aliyun_policy_decision
 from antibot_sdk.providers.geetest import is_geetest_success_payload, latest_geetest_success
 from antibot_sdk.providers.hcaptcha import is_hcaptcha_token, latest_hcaptcha_token
+from antibot_sdk.providers.recaptcha import is_recaptcha_token, latest_recaptcha_token
 from antibot_sdk.providers.turnstile import is_turnstile_token, latest_turnstile_token
 from antibot_sdk.providers.aliyun import AliyunCaptchaSolver, is_recoverable_attempt_codes
 
@@ -20,11 +21,13 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://cloud.tencent.com/product/captcha") == "tencent"
     assert detect_provider_for_url("https://www.geetest.com/adaptive-captcha-demo") == "geetest"
     assert detect_provider_for_url("https://docs.hcaptcha.com/invisible/") == "hcaptcha"
+    assert detect_provider_for_url("https://cloud.google.com/recaptcha/docs/overview") == "recaptcha"
     assert detect_provider_for_url("https://developers.cloudflare.com/turnstile/") == "turnstile"
     assert detect_provider_for_url("https://example.com") == "browser"
     assert "qoder_signup" in list_profiles()["aliyun"]
     assert "generic_v4" in list_profiles()["geetest"]
     assert "generic_widget" in list_profiles()["hcaptcha"]
+    assert "generic_widget_enterprise" in list_profiles()["recaptcha"]
     assert "generic_widget" in list_profiles()["turnstile"]
 
 
@@ -99,3 +102,14 @@ def test_hcaptcha_token_extraction():
     assert is_hcaptcha_token(token)
     assert latest_hcaptcha_token(state) == token
     assert not is_hcaptcha_token("short")
+
+
+def test_recaptcha_token_extraction():
+    token = "03AFcWeA" + "A" * 64 + "." + "b" * 24
+    state = {
+        "responses": [{"token": ""}, {"token": token}],
+        "inputs": [{"token": "ignored"}],
+    }
+    assert is_recaptcha_token(token)
+    assert latest_recaptcha_token(state) == token
+    assert not is_recaptcha_token("short")
