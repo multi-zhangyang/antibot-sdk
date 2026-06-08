@@ -159,7 +159,6 @@ class AntibotClient:
                     "slide_max_attempts",
                     "point_solve",
                     "point_max_attempts",
-                    "runtime_debug",
                     "output_dir",
                     "browser_binary",
                     "user_agent",

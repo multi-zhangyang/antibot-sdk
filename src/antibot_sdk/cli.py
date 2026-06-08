@@ -211,7 +211,6 @@ async def amain(argv: list[str] | None = None) -> int:
     yd.add_argument("--slide-attempts", type=int, default=3)
     yd.add_argument("--no-point-solve", action="store_true")
     yd.add_argument("--point-attempts", type=int, default=6)
-    yd.add_argument("--runtime-debug", action="store_true")
     yd.add_argument("--browser-binary")
     yd.add_argument("--user-agent")
     yd.add_argument("--locale", default="zh-CN")
@@ -340,7 +339,6 @@ async def amain(argv: list[str] | None = None) -> int:
     sy.add_argument("--slide-attempts", type=int, default=3)
     sy.add_argument("--no-point-solve", action="store_true")
     sy.add_argument("--point-attempts", type=int, default=6)
-    sy.add_argument("--runtime-debug", action="store_true")
     sy.add_argument("--output-dir")
     sy.add_argument("--output-json")
     sy.add_argument("--full", action="store_true")
@@ -558,7 +556,6 @@ async def amain(argv: list[str] | None = None) -> int:
             slide_max_attempts=args.slide_attempts,
             point_solve=not args.no_point_solve,
             point_max_attempts=args.point_attempts,
-            runtime_debug=args.runtime_debug,
             browser_binary=args.browser_binary,
             user_agent=args.user_agent,
             locale=args.locale,
@@ -756,7 +753,6 @@ async def amain(argv: list[str] | None = None) -> int:
                 slide_max_attempts=args.slide_attempts,
                 point_solve=not args.no_point_solve,
                 point_max_attempts=args.point_attempts,
-                runtime_debug=args.runtime_debug,
                 output_dir=str(root / f"run_{i}") if root else None,
             ),
         )
