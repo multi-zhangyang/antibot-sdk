@@ -144,6 +144,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "powcaptcha"
     if any(x in u or x in host for x in ("pow-bot-deterrent", "powbot", "/getchallenges?difficultylevel=")):
         return "powbot"
+    if any(x in u or x in host for x in ("pow-reaction", "powreaction", "/reactions/challenge")):
+        return "powreaction"
     if any(x in u or x in host for x in ("privatecaptcha", "private-captcha", "api.privatecaptcha.com", "/privatecaptcha/")):
         return "privatecaptcha"
     if any(x in u or x in host for x in ("portcullis", "pow-captcha", "/api/v1/challenge", "/api/v1/verify")):
@@ -326,6 +328,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "scrypt-wasm-pow-protocol-solver",
                 "successFields": ["nonce", "HTTP 200 OK"],
                 "endpoints": ["/GetChallenges", "/Verify"],
+            }
+        },
+        "powreaction": {
+            "signed_multi_round_pow": {
+                "patterns": ["pow-reaction", "powreaction", "/reactions/challenge"],
+                "mode": "jwt-signed-multi-round-sha256-pow-solver",
+                "successFields": ["{challenge, solutions, reaction}", "success=true"],
+                "endpoints": ["POST /reactions/challenge", "POST /reactions"],
             }
         },
         "privatecaptcha": {

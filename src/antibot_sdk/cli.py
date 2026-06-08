@@ -145,6 +145,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "pcaptcha",
             "powcaptcha",
             "powbot",
+            "powreaction",
             "privatecaptcha",
             "portcullis",
             "swetrix",
@@ -516,6 +517,25 @@ async def amain(argv: list[str] | None = None) -> int:
     powbot.add_argument("--proxy")
     powbot.add_argument("--output-dir")
     powbot.add_argument("--raw", action="store_true")
+
+    powr = solve_sub.add_parser("powreaction")
+    powr_source = powr.add_mutually_exclusive_group(required=True)
+    powr_source.add_argument("--base-url", help="reactions endpoint root; infers /challenge")
+    powr_source.add_argument("--challenge", help="inline signed JWT challenge")
+    powr_source.add_argument("--challenge-json", help="inline {challenge} JSON or raw payload fixture, or @/path")
+    powr_source.add_argument("--challenge-file")
+    powr_source.add_argument("--challenge-url", help="POST endpoint returning {challenge}")
+    powr.add_argument("--submit-url", help="POST endpoint accepting {challenge, solutions, reaction}")
+    powr.add_argument("--reaction", help="reaction/emoji when fetching challenge_url")
+    powr.add_argument("--submit", action="store_true")
+    powr.add_argument("--secret", help="optional HS256 secret to cross-check signed challenge")
+    powr.add_argument("--max-attempts-per-round", type=int, default=50_000_000)
+    powr.add_argument("--workers", type=int, default=1)
+    powr.add_argument("--timeout", type=int, default=60)
+    powr.add_argument("--proxy")
+    powr.add_argument("--output-dir")
+    powr.add_argument("--user-agent")
+    powr.add_argument("--raw", action="store_true")
 
     priv = solve_sub.add_parser("privatecaptcha")
     priv_source = priv.add_mutually_exclusive_group(required=True)
@@ -1078,6 +1098,28 @@ async def amain(argv: list[str] | None = None) -> int:
     spowbot.add_argument("--output-json")
     spowbot.add_argument("--full", action="store_true")
 
+    spowr = stress_sub.add_parser("powreaction")
+    spowr_source = spowr.add_mutually_exclusive_group(required=True)
+    spowr_source.add_argument("--base-url")
+    spowr_source.add_argument("--challenge")
+    spowr_source.add_argument("--challenge-json")
+    spowr_source.add_argument("--challenge-file")
+    spowr_source.add_argument("--challenge-url")
+    spowr.add_argument("--submit-url")
+    spowr.add_argument("--reaction")
+    spowr.add_argument("--submit", action="store_true")
+    spowr.add_argument("--secret")
+    spowr.add_argument("--runs", type=int, default=10)
+    spowr.add_argument("--concurrency", type=int, default=2)
+    spowr.add_argument("--timeout", type=int, default=60)
+    spowr.add_argument("--max-attempts-per-round", type=int, default=50_000_000)
+    spowr.add_argument("--workers", type=int, default=1)
+    spowr.add_argument("--proxy")
+    spowr.add_argument("--output-dir")
+    spowr.add_argument("--output-json")
+    spowr.add_argument("--user-agent")
+    spowr.add_argument("--full", action="store_true")
+
     spriv = stress_sub.add_parser("privatecaptcha")
     spriv_source = spriv.add_mutually_exclusive_group(required=True)
     spriv_source.add_argument("--puzzle")
@@ -1368,6 +1410,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "pcaptcha",
             "powcaptcha",
             "powbot",
+            "powreaction",
             "privatecaptcha",
             "portcullis",
             "swetrix",
@@ -1777,6 +1820,26 @@ async def amain(argv: list[str] | None = None) -> int:
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "powreaction":
+        ret = await client.solve_powreaction(
+            base_url=args.base_url,
+            challenge=args.challenge,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            submit_url=args.submit_url,
+            reaction=args.reaction,
+            submit=args.submit,
+            secret=args.secret,
+            max_attempts_per_round=args.max_attempts_per_round,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -2509,6 +2572,34 @@ async def amain(argv: list[str] | None = None) -> int:
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "powreaction":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="powreaction",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_powreaction(
+                base_url=args.base_url,
+                challenge=args.challenge,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                submit_url=args.submit_url,
+                reaction=args.reaction,
+                submit=args.submit,
+                secret=args.secret,
+                max_attempts_per_round=args.max_attempts_per_round,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
             ),
         )
         emit_stress(ret, full=args.full)

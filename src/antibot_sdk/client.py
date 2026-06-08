@@ -27,6 +27,7 @@ from .providers.powcaptcha import PowCaptchaSolver
 from .providers.powbot import PowBotSolver
 from .providers.privatecaptcha import PrivateCaptchaSolver
 from .providers.portcullis import PortcullisSolver
+from .providers.powreaction import PowReactionSolver
 from .providers.recaptcha import ReCaptchaSolver
 from .providers.silentchallenge import SilentChallengeSolver
 from .providers.swetrix import SwetrixSolver
@@ -59,6 +60,7 @@ class AntibotClient:
         self.pcaptcha = PCaptchaSolver()
         self.powcaptcha = PowCaptchaSolver()
         self.powbot = PowBotSolver()
+        self.powreaction = PowReactionSolver()
         self.privatecaptcha = PrivateCaptchaSolver()
         self.portcullis = PortcullisSolver()
         self.swetrix = SwetrixSolver()
@@ -132,6 +134,9 @@ class AntibotClient:
 
     async def solve_powbot(self, **kwargs: Any) -> CaptchaResult:
         return await self.powbot.solve(**kwargs)
+
+    async def solve_powreaction(self, **kwargs: Any) -> CaptchaResult:
+        return await self.powreaction.solve(**kwargs)
 
     async def solve_privatecaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.privatecaptcha.solve(**kwargs)
@@ -621,6 +626,39 @@ class AntibotClient:
                 else:
                     powbot_kwargs["base_url"] = target_url
             return await self.solve_powbot(**powbot_kwargs)
+        if provider == "powreaction":
+            pr_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "challenge",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "submit_url",
+                    "reaction",
+                    "submit",
+                    "secret",
+                    "max_attempts_per_round",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not pr_kwargs.get("base_url") and not pr_kwargs.get("challenge_url"):
+                if target_lower.rstrip("/").endswith("/challenge"):
+                    pr_kwargs["challenge_url"] = target_url
+                    pr_kwargs["base_url"] = target_url[: target_lower.rindex("/challenge")]
+                else:
+                    pr_kwargs["base_url"] = target_url
+            return await self.solve_powreaction(**pr_kwargs)
         if provider == "privatecaptcha":
             pc_kwargs = {
                 k: v
