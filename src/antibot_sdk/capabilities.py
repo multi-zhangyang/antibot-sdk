@@ -140,6 +140,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "_2__bProxy_v cookie value",
         "scope": "balooProxy/balooPow JS suffix challenge：复现 accessKey+OTP 派生链路与 SHA256(publicSalt+suffix) 精确匹配，输出反向代理 clearance cookie；不启动浏览器。",
     },
+    "basedflare": {
+        "provider": "basedflare",
+        "name": "BasedFlare / haproxy-protection",
+        "category": "solver",
+        "captcha_type": "haproxy_pow_cookie",
+        "status": "alpha",
+        "output": "_basedflare_pow cookie / pow_response",
+        "scope": "BasedFlare HAProxy edge PoW：解析 /.basedflare/bot-check JSON/HTML challenge，复现 sha256/argon2 Worker PoW，POST pow_response 换 _basedflare_pow clearance cookie；不启动浏览器。",
+    },
     "friendlycaptcha": {
         "provider": "friendlycaptcha",
         "name": "FriendlyCaptcha",

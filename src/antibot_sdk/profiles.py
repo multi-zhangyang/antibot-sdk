@@ -142,6 +142,11 @@ def detect_provider_for_url(url: str | None) -> str:
         return "wargon2"
     if any(x in u or x in host for x in ("balooproxy", "baloopow", "_2__bproxy_v", "publicsalt")):
         return "balooproxy"
+    if any(
+        x in u or x in host
+        for x in ("basedflare", "haproxy-protection", "/.basedflare/bot-check", "_basedflare_pow", "_basedflare_captcha")
+    ):
+        return "basedflare"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
         return "gunslol"
     if any(x in u or x in host for x in ("h33.ai", "botshield", "h33_bot_token", "/v1/botshield/")):
@@ -382,6 +387,20 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "blake3-access-key-derived-sha256-suffix-cookie-solver",
                 "successFields": ["suffix", "_2__bProxy_v cookie"],
                 "endpoints": ["GET protected page", "set cookie and retry"],
+            }
+        },
+        "basedflare": {
+            "haproxy_pow_cookie": {
+                "patterns": [
+                    "BasedFlare",
+                    "haproxy-protection",
+                    "/.basedflare/bot-check",
+                    "_basedflare_pow",
+                    "_basedflare_captcha",
+                ],
+                "mode": "haproxy-edge-sha256-or-argon2-pow-cookie-solver",
+                "successFields": ["pow_response", "_basedflare_pow cookie", "302 redirect"],
+                "endpoints": ["GET /.basedflare/bot-check", "POST /.basedflare/bot-check"],
             }
         },
         "friendlycaptcha": {

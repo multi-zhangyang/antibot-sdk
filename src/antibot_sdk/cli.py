@@ -149,6 +149,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "awswaf",
             "wargon2",
             "balooproxy",
+            "basedflare",
             "aliyun",
             "tencent",
             "friendlycaptcha",
@@ -458,6 +459,23 @@ async def amain(argv: list[str] | None = None) -> int:
     baloo.add_argument("--proxy")
     baloo.add_argument("--output-dir")
     baloo.add_argument("--raw", action="store_true")
+
+    bf = solve_sub.add_parser("basedflare")
+    bf.add_argument("--base-url", default="https://example.com", help="protected origin; infers /.basedflare/bot-check")
+    bf.add_argument("--bot-check-url", help="explicit BasedFlare bot-check endpoint")
+    bf.add_argument("--challenge-json", help="inline challenge JSON/HTML, or @/path")
+    bf.add_argument("--challenge-file")
+    bf.add_argument("--challenge-html", help="inline challenge HTML, or @/path")
+    bf.add_argument("--submit", action="store_true", help="POST pow_response and capture _basedflare_pow")
+    bf.add_argument("--difficulty-bits", type=int, help="override exact HAProxy pd when JSON only exposes ceil(pd/8)")
+    bf.add_argument("--start", type=int, default=0)
+    bf.add_argument("--max-attempts", type=int, default=20_000_000)
+    bf.add_argument("--workers", type=int, default=1)
+    bf.add_argument("--chunk-size", type=int, default=100_000)
+    bf.add_argument("--timeout", type=int, default=30)
+    bf.add_argument("--proxy")
+    bf.add_argument("--output-dir")
+    bf.add_argument("--raw", action="store_true")
 
     shpw = solve_sub.add_parser("shapow")
     shpw.add_argument("--base-url", default="https://example.com")
@@ -1707,6 +1725,26 @@ async def amain(argv: list[str] | None = None) -> int:
     sbaloo.add_argument("--output-json")
     sbaloo.add_argument("--full", action="store_true")
 
+    sbf = stress_sub.add_parser("basedflare")
+    sbf.add_argument("--base-url")
+    sbf.add_argument("--bot-check-url")
+    sbf.add_argument("--challenge-json")
+    sbf.add_argument("--challenge-file")
+    sbf.add_argument("--challenge-html")
+    sbf.add_argument("--submit", action="store_true")
+    sbf.add_argument("--difficulty-bits", type=int)
+    sbf.add_argument("--start", type=int, default=0)
+    sbf.add_argument("--max-attempts", type=int, default=20_000_000)
+    sbf.add_argument("--workers", type=int, default=1)
+    sbf.add_argument("--chunk-size", type=int, default=100_000)
+    sbf.add_argument("--runs", type=int, default=10)
+    sbf.add_argument("--concurrency", type=int, default=2)
+    sbf.add_argument("--timeout", type=int, default=30)
+    sbf.add_argument("--proxy")
+    sbf.add_argument("--output-dir")
+    sbf.add_argument("--output-json")
+    sbf.add_argument("--full", action="store_true")
+
     sshpw = stress_sub.add_parser("shapow")
     sshpw.add_argument("--base-url", default="https://example.com")
     sshpw.add_argument("--page-url")
@@ -2886,6 +2924,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "awswaf",
             "wargon2",
             "balooproxy",
+            "basedflare",
         ):
             common.update({
                 "site_profile": args.site_profile,
@@ -3184,6 +3223,26 @@ async def amain(argv: list[str] | None = None) -> int:
             challenge_html=args.challenge_html,
             base_url=args.base_url,
             submit=args.submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            chunk_size=args.chunk_size,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "basedflare":
+        ret = await client.solve_basedflare(
+            base_url=args.base_url,
+            bot_check_url=args.bot_check_url,
+            challenge_url=args.bot_check_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_html=args.challenge_html,
+            submit=args.submit,
+            difficulty_bits=args.difficulty_bits,
             start=args.start,
             max_attempts=args.max_attempts,
             workers=args.workers,
@@ -4623,6 +4682,35 @@ async def amain(argv: list[str] | None = None) -> int:
         )
         emit_stress(ret, full=args.full)
         return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "basedflare":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="basedflare",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_basedflare(
+                base_url=args.base_url,
+                bot_check_url=args.bot_check_url,
+                challenge_url=args.bot_check_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_html=args.challenge_html,
+                submit=args.submit,
+                difficulty_bits=args.difficulty_bits,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                chunk_size=args.chunk_size,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+
     if args.cmd == "stress" and args.provider == "shapow":
         root = Path(args.output_dir) if args.output_dir else None
         ret = await run_stress(

@@ -13,6 +13,7 @@ from .providers.anubis import AnubisSolver
 from .providers.auro import AuroSolver
 from .providers.awswaf import AwsWafSolver
 from .providers.balooproxy import BalooProxySolver
+from .providers.basedflare import BasedFlareSolver
 from .providers.browser import BrowserAutomation
 from .providers.botcha import BotchaSolver
 from .providers.btx import BtxSolver
@@ -92,6 +93,7 @@ class AntibotClient:
         self.auro = AuroSolver()
         self.awswaf = AwsWafSolver()
         self.balooproxy = BalooProxySolver()
+        self.basedflare = BasedFlareSolver()
         self.fcaptcha = FCaptchaSolver()
         self.cryptopuzzle = CryptoPuzzleSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
@@ -202,6 +204,9 @@ class AntibotClient:
 
     async def solve_balooproxy(self, **kwargs: Any) -> CaptchaResult:
         return await self.balooproxy.solve(**kwargs)
+
+    async def solve_basedflare(self, **kwargs: Any) -> CaptchaResult:
+        return await self.basedflare.solve(**kwargs)
 
     async def solve_cryptopuzzle(self, **kwargs: Any) -> CaptchaResult:
         return await self.cryptopuzzle.solve(**kwargs)
@@ -798,6 +803,35 @@ class AntibotClient:
             baloo_kwargs.setdefault("base_url", target_url)
             baloo_kwargs.setdefault("submit", True)
             return await self.solve_balooproxy(**baloo_kwargs)
+        if provider == "basedflare":
+            basedflare_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "bot_check_url",
+                    "challenge_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_html",
+                    "submit",
+                    "difficulty_bits",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "chunk_size",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            basedflare_kwargs.setdefault("base_url", target_url)
+            basedflare_kwargs.setdefault("submit", True)
+            return await self.solve_basedflare(**basedflare_kwargs)
         if provider == "friendlycaptcha":
             frc_kwargs = {
                 k: v
