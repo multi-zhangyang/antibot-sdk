@@ -5,13 +5,12 @@ build-backend = "hatchling.build"
 [project]
 name = "antibot-sdk"
 version = "0.1.0"
-description = "Unified anti-bot browser automation SDK: Pydoll Cloudflare flows, Tencent/Aliyun/GeeTest/Yidun sliders, and token verification."
+description = "Lean slider captcha SDK for Aliyun Captcha V3 and Tencent Captcha."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [{ name = "multi-zhangyang" }]
 dependencies = [
-  "pydoll-python>=2.23.0",
   "requests>=2.31",
   "Pillow>=10.0",
   "playwright>=1.40",
@@ -19,10 +18,6 @@ dependencies = [
   "crack-tcaptcha>=0.0.8",
   "opencv-python>=4.8",
   "numpy>=1.26",
-  "pycryptodome>=3.20",
-  "argon2-cffi>=23.1",
-  "bcrypt>=5.0.0",
-  "blake3>=1.0.8",
 ]
 
 [project.optional-dependencies]
@@ -48,13 +43,7 @@ artifacts = [
   "src/antibot_sdk/vendor/aliyun/package.json",
   "src/antibot_sdk/vendor/aliyun/package-lock.json",
   "src/antibot_sdk/vendor/aliyun/src/**/*.js",
-  "src/antibot_sdk/vendor/awswaf/**/*.mjs",
-  "src/antibot_sdk/vendor/datadome/**/*.mjs",
-  "src/antibot_sdk/vendor/hcaptcha_hsw/**/*.mjs",
-  "src/antibot_sdk/vendor/kasada_kpsdk/**/*.mjs",
-  "src/antibot_sdk/vendor/perimeterx/**/*.mjs",
-  "src/antibot_sdk/vendor/vercel_botid/**/*.mjs",
-  "src/antibot_sdk/vendor/tencent/upstream/**",
+  "src/antibot_sdk/vendor/tencent/*.py",
 ]
 exclude = ["src/antibot_sdk/vendor/aliyun/node_modules/**"]
 
