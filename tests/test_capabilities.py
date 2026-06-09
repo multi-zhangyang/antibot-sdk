@@ -16,6 +16,7 @@ def test_capability_matrix_product_boundary() -> None:
         "ajcaptcha",
         "activehashcash",
         "altcha",
+        "albireo",
         "anubis",
         "auro",
         "fcaptcha",
@@ -64,6 +65,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["ajcaptcha"]["captcha_type"] == "slider_protocol"
     assert solvers["activehashcash"]["captcha_type"] == "rails_hashcash_sha256"
     assert solvers["altcha"]["captcha_type"] == "proof_of_work"
+    assert solvers["albireo"]["captcha_type"] == "serverless_signed_pow"
     assert solvers["anubis"]["captcha_type"] == "proof_of_work"
     assert solvers["auro"]["captcha_type"] == "encrypted_behavior_pow"
     assert solvers["fcaptcha"]["captcha_type"] == "signals_bound_pow"

@@ -132,6 +132,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "donatello",
             "btx",
             "altcha",
+            "albireo",
             "anubis",
             "auro",
             "aliyun",
@@ -309,6 +310,23 @@ async def amain(argv: list[str] | None = None) -> int:
     alt.add_argument("--include-took", action="store_true")
     alt.add_argument("--mode", choices=["form", "m2m"], default="form")
     alt.add_argument("--raw", action="store_true")
+
+    alb = solve_sub.add_parser("albireo")
+    alb.add_argument("--base-url", default="https://example.com")
+    alb.add_argument("--page-url")
+    alb.add_argument("--challenge-json", help="inline challenge JSON/HTML/cookie, or @/path")
+    alb.add_argument("--challenge-file")
+    alb.add_argument("--challenge-cookie")
+    alb.add_argument("--submit-url")
+    alb.add_argument("--submit", action="store_true")
+    alb.add_argument("--start", type=int, default=0)
+    alb.add_argument("--max-attempts", type=int, default=20_000_000)
+    alb.add_argument("--workers", type=int, default=1)
+    alb.add_argument("--chunk-size", type=int, default=50_000)
+    alb.add_argument("--timeout", type=int, default=10)
+    alb.add_argument("--proxy")
+    alb.add_argument("--output-dir")
+    alb.add_argument("--raw", action="store_true")
 
     anu = solve_sub.add_parser("anubis")
     anu_source = anu.add_mutually_exclusive_group(required=True)
@@ -1320,6 +1338,26 @@ async def amain(argv: list[str] | None = None) -> int:
     salt.add_argument("--output-dir")
     salt.add_argument("--output-json")
     salt.add_argument("--full", action="store_true")
+
+    salb = stress_sub.add_parser("albireo")
+    salb.add_argument("--base-url", default="https://example.com")
+    salb.add_argument("--page-url")
+    salb.add_argument("--challenge-json")
+    salb.add_argument("--challenge-file")
+    salb.add_argument("--challenge-cookie")
+    salb.add_argument("--submit-url")
+    salb.add_argument("--submit", action="store_true")
+    salb.add_argument("--start", type=int, default=0)
+    salb.add_argument("--max-attempts", type=int, default=20_000_000)
+    salb.add_argument("--workers", type=int, default=1)
+    salb.add_argument("--chunk-size", type=int, default=50_000)
+    salb.add_argument("--runs", type=int, default=10)
+    salb.add_argument("--concurrency", type=int, default=2)
+    salb.add_argument("--timeout", type=int, default=10)
+    salb.add_argument("--proxy")
+    salb.add_argument("--output-dir")
+    salb.add_argument("--output-json")
+    salb.add_argument("--full", action="store_true")
 
     sanu = stress_sub.add_parser("anubis")
     sanu_source = sanu.add_mutually_exclusive_group(required=True)
@@ -2555,6 +2593,25 @@ async def amain(argv: list[str] | None = None) -> int:
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "albireo":
+        ret = await client.solve_albireo(
+            base_url=args.base_url,
+            page_url=args.page_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_cookie=args.challenge_cookie,
+            submit_url=args.submit_url,
+            submit=args.submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            chunk_size=args.chunk_size,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
     if args.cmd == "solve" and args.provider == "anubis":
         ret = await client.solve_anubis(
             challenge=args.challenge,
@@ -3687,6 +3744,33 @@ async def amain(argv: list[str] | None = None) -> int:
                 hmac_algorithm=args.hmac_algorithm,
                 hmac_signature_secret=args.hmac_signature_secret,
                 hmac_key_signature_secret=args.hmac_key_signature_secret,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "albireo":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="albireo",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_albireo(
+                base_url=args.base_url,
+                page_url=args.page_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_cookie=args.challenge_cookie,
+                submit_url=args.submit_url,
+                submit=args.submit,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                chunk_size=args.chunk_size,
+                timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
             ),

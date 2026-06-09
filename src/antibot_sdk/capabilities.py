@@ -59,6 +59,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "pass-challenge params / auth cookie",
         "scope": "Anubis fast/slow PoW：解析页面或 make-challenge JSON，计算 SHA256(randomData+nonce) 前导零，生成 pass-challenge 参数，可提交换 cookie；不启动浏览器。",
     },
+    "albireo": {
+        "provider": "albireo",
+        "name": "Albireo",
+        "category": "solver",
+        "captcha_type": "serverless_signed_pow",
+        "status": "alpha",
+        "output": "nonce/response form body / albireo_solved cookie",
+        "scope": "Albireo serverless PoW：解析 HTML 与 albireo_challenge HMAC cookie，兼容 CF v2 的 difficulty/fp_nonce 绑定和 Netlify/Vercel v1，补真实浏览器请求头后复现 SHA256(challenge+nonce) leading-zero PoW 并 POST 表单换 albireo_solved；不启动浏览器。",
+    },
     "auro": {
         "provider": "auro",
         "name": "Auro.Network",

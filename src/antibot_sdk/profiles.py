@@ -115,6 +115,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "altcha"
     if any(x in u or x in host for x in ("anubis", ".within.website/x/cmd/anubis", "techaro.lol-anubis")):
         return "anubis"
+    if any(x in u or x in host for x in ("albireo", "albireo_challenge", "albireo_solved", "albireo-trap-")):
+        return "albireo"
     if any(x in u or x in host for x in ("auro.network", "auro-captcha", "/api/pow/setup", "/api/pow/validate")):
         return "auro"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
@@ -279,6 +281,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "anubis-sha256-pow-protocol-solver",
                 "successFields": ["pass-challenge params", "Anubis auth cookie"],
                 "endpoints": ["/make-challenge", "/pass-challenge"],
+            }
+        },
+        "albireo": {
+            "serverless_signed_pow": {
+                "patterns": ["albireo", "albireo_challenge", "albireo_solved", "FP_NONCE", "albireo-trap-"],
+                "mode": "hmac-cookie-bound-sha256-leading-zero-pow-solver",
+                "successFields": ["nonce", "response", "albireo_solved"],
+                "endpoints": ["GET protected page", "POST same URL with nonce/response/verify/fp_nonce"],
             }
         },
         "auro": {

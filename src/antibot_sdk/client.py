@@ -5,6 +5,7 @@ from typing import Any
 from .models import BrowserResult, CaptchaResult
 from .profiles import detect_provider_for_url
 from .providers.aliyun import AliyunCaptchaSolver
+from .providers.albireo import AlbireoSolver
 from .providers.activehashcash import ActiveHashcashSolver
 from .providers.ajcaptcha import AJCaptchaSolver
 from .providers.altcha import AltchaSolver
@@ -66,6 +67,7 @@ class AntibotClient:
         self.browser_binary = browser_binary
         self.browser = BrowserAutomation()
         self.activehashcash = ActiveHashcashSolver()
+        self.albireo = AlbireoSolver()
         self.botcha = BotchaSolver()
         self.btx = BtxSolver()
         self.cap = CapSolver()
@@ -165,6 +167,9 @@ class AntibotClient:
 
     async def solve_altcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.altcha.solve(**kwargs)
+
+    async def solve_albireo(self, **kwargs: Any) -> CaptchaResult:
+        return await self.albireo.solve(**kwargs)
 
     async def solve_anubis(self, **kwargs: Any) -> CaptchaResult:
         return await self.anubis.solve(**kwargs)
@@ -479,6 +484,33 @@ class AntibotClient:
             }
             altcha_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_altcha(**altcha_kwargs)
+        if provider == "albireo":
+            albireo_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "page_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_cookie",
+                    "submit_url",
+                    "submit",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "chunk_size",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            albireo_kwargs.setdefault("base_url", target_url)
+            albireo_kwargs.setdefault("submit", True)
+            return await self.solve_albireo(**albireo_kwargs)
         if provider == "anubis":
             anubis_kwargs = {
                 k: v

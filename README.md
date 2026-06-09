@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -14,6 +14,7 @@
 - AJ-Captcha / Anji：新增纯 HTTP 协议 solver，走 `/captcha/get` 图像缺口定位、AES `pointJson`、`/captcha/check`，输出二次校验用的 `captchaVerification`，不启动浏览器。
 - ActiveHashcash：新增 Rails 中间件级 Hashcash solver，解析 `input[data-hashcash]` 的 `resource/bits/date`，复现 Web Worker 的 `SHA256(stamp)` 前导零 bit counter 搜索，输出 `hashcash` 隐藏字段，不启动浏览器。
 - ALTCHA：升级 v1/v2 PoW 协议 solver，v1 反查 `hash(salt+number)`，v2 复现 `PBKDF2/SHA-* / SCRYPT / ARGON2ID` KDF challenge、HMAC 签名与 verify-compatible fast path，输出表单 base64 payload 或 M2M Authorization header，不启动浏览器。
+- Albireo：新增 serverless signed PoW 协议 solver，解析 `albireo_challenge` HMAC cookie、Cloudflare v2 `difficulty/fp_nonce` 绑定和 Netlify/Vercel v1 cookie，补浏览器请求头后复现 `SHA256(challenge+nonce)` leading-zero PoW，POST 换 `albireo_solved`，不启动浏览器。
 - Anubis：新增 `fast/slow` PoW 协议 solver，解析 challenge 页面或 make-challenge JSON，计算 `SHA256(randomData+nonce)` 前导零，可生成 `pass-challenge` 参数或直接换取 auth cookie，不启动浏览器。
 - Auro.Network：新增 AES-GCM 行为数据 + PoW 协议 solver，获取 `/enckey`，生成鼠标 telemetry 并 AES-GCM 加密，提交 `/api/pow/setup` 后搜索 `SHA256(prefix+nonce)`，可 `/api/pow/validate`，不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
@@ -73,6 +74,7 @@
 | AJ-Captcha / Anji | 协议 solver | `slider_protocol` | alpha | `captchaVerification/token` |
 | ActiveHashcash | 协议 solver | `rails_hashcash_sha256` | alpha | `hashcash` hidden field / validated response |
 | ALTCHA | 协议 solver | `proof_of_work` | alpha | base64 payload / Authorization header |
+| Albireo | 协议 solver | `serverless_signed_pow` | alpha | nonce/response / `albireo_solved` cookie |
 | Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
 | Auro.Network | 协议 solver | `encrypted_behavior_pow` | alpha | validate body / Auro token |
 | FriendlyCaptcha | 协议 solver | `proof_of_work` | alpha | `frc-captcha-solution` payload |
@@ -759,6 +761,77 @@ async with AntibotClient() as client:
 - `ticket` 在默认 `form` 模式下是 base64 payload；v1 `m2m` 模式下是 `Authorization: Altcha challenge={...}` header。
 - v2 默认 `auto` 策略会优先走官方 verifier 兼容快速路径；需要真实 prefix 命中时使用 `--v2-strategy prefix`。
 - 如果服务端启用了高 `maxnumber`、高 PBKDF2 cost、SCRYPT 或 ARGON2ID，建议按 VPS 资源显式设置 `--workers` 和 `--timeout`。
+
+---
+
+### Albireo serverless signed PoW
+
+Albireo 是一类 serverless 中间件 PoW 防护，核心不是图片或鼠标，而是服务端签发一个带 HMAC 的 `albireo_challenge` cookie，前端 Worker 搜索 nonce 后把结果 POST 回原路径。
+
+当前 SDK 复现两条主要链路：
+
+- Cloudflare Pages v2：cookie payload 为 `challenge.ts.diff.fpNonce.sig`，HTML 同时暴露 `CHALLENGE / DIFFICULTY / ORIG / FP_NONCE`。
+- Netlify/Vercel v1：cookie payload 为 `challenge.ts.sig`，difficulty 从 HTML 或显式参数获得。
+
+PoW 规则：
+
+```text
+response = SHA256(challenge + String(nonce)).hexdigest()
+pass iff response.startswith("0" * difficulty)
+```
+
+提交字段：
+
+```text
+nonce=<nonce>
+response=<hash>
+verify=true
+original_path=<path>
+fp_score=0
+fp_nonce=<FP_NONCE>   # CF v2 才需要
+```
+
+能力：
+
+- 解析完整 `Set-Cookie:` / `Cookie:` / 裸 cookie value / HTML / JSON fixture。
+- 兼容 CF v2 的 `fp_nonce` 绑定；v1 不携带 `fp_nonce`。
+- 默认补 `User-Agent / Accept / Accept-Language / Sec-Fetch-*`，避免 serverless middleware 因缺少基础浏览器头直接给 403。
+- `--submit` 时 POST 同 URL 或显式 `--submit-url`，拿 `albireo_solved` cookie；全程不启动浏览器。
+- 支持 `workers/chunk-size/max-attempts`，VPS 上默认单 worker，避免 CPU 打满。
+- 支持 artifact：`albireo_run.json`。
+
+命令示例：
+
+```bash
+antibot solve albireo \
+  --base-url 'https://target.example/protected' \
+  --submit \
+  --timeout 10
+```
+
+直接传 fixture：
+
+```bash
+antibot solve albireo \
+  --challenge-json '{"challenge":"albireo-fixture","difficulty":3,"fp_nonce":"fpnoncefixture","original_path":"/docs"}' \
+  --max-attempts 10000
+```
+
+压测：
+
+```bash
+antibot stress albireo \
+  --challenge-json '{"challenge":"albireo-fixture","difficulty":3,"fp_nonce":"fpnoncefixture","original_path":"/docs"}' \
+  --runs 20 \
+  --concurrency 4 \
+  --max-attempts 10000
+```
+
+当前定位：
+
+- 这是协议层 PoW solver，不是浏览器 headless 绕过。
+- 已基于 Albireo 源码和本地 mock 验证 CF v2/v1 两条提交路径；没有把它写成公网 live 通过。
+- 难度每加 1 平均搜索空间约乘 16；VPS 上建议优先控 `--concurrency`，再决定是否开 `--workers`。
 
 ---
 
@@ -3429,6 +3502,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - AJ-Captcha / Anji / `/captcha/get` 相关 URL -> `ajcaptcha`
 - ActiveHashcash / `active_hashcash` / `input[data-hashcash]` 相关 URL -> `activehashcash`
 - ALTCHA 相关 URL -> `altcha`
+- Albireo / `albireo_challenge` / `albireo_solved` / `albireo-trap-` 相关 URL -> `albireo`
 - Anubis / `.within.website/x/cmd/anubis` 相关 URL -> `anubis`
 - Auro.Network / `/api/pow/setup` / `/api/pow/validate` 相关 URL -> `auro`
 - FriendlyCaptcha / `frc-captcha` 相关 URL -> `friendlycaptcha`
@@ -3718,6 +3792,11 @@ antibot stress donatello --challenge-json '{"id":"donatello-fixture","first_task
 antibot solve altcha --challenge-url 'https://target.example/altcha/challenge'
 antibot stress altcha --challenge-url 'https://target.example/altcha/challenge' --runs 50 --concurrency 5
 
+# Albireo
+antibot solve albireo --base-url 'https://target.example/protected' --submit --timeout 10
+antibot solve albireo --challenge-json '{"challenge":"albireo-fixture","difficulty":3,"fp_nonce":"fpnoncefixture","original_path":"/docs"}' --max-attempts 10000
+antibot stress albireo --challenge-json '{"challenge":"albireo-fixture","difficulty":3,"fp_nonce":"fpnoncefixture","original_path":"/docs"}' --runs 20 --concurrency 4 --max-attempts 10000
+
 # Anubis
 antibot solve anubis --page-url 'https://target.example/path-with-anubis' --submit
 antibot solve anubis --challenge 'randomDataHex' --difficulty 4
@@ -3918,7 +3997,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / H33 BotShield / BOTCHA / Donatello / FCaptcha / TrustCaptcha / @strav/captcha / Cap / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Albireo / Anubis / FriendlyCaptcha / H33 BotShield / BOTCHA / Donatello / FCaptcha / TrustCaptcha / @strav/captcha / Cap / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -3926,6 +4005,7 @@ turnstile_page.png / hcaptcha_page.png / recaptcha_page.png / geetest_page.png
 turnstile_page.html / hcaptcha_page.html / recaptcha_page.html / geetest_page.html
 ajcaptcha_run.json / ajcaptcha_original.png / ajcaptcha_jigsaw.png
 altcha_run.json
+albireo_run.json
 anubis_run.json
 friendlycaptcha_run.json
 botcha_run.json
@@ -3995,6 +4075,7 @@ src/antibot_sdk/
     ajcaptcha.py            # AJ-Captcha blockPuzzle protocol solver
     activehashcash.py       # ActiveHashcash Rails Hashcash SHA-256 hidden-field solver
     altcha.py               # ALTCHA PoW protocol solver
+    albireo.py              # Albireo HMAC-cookie-bound serverless SHA-256 PoW solver
     anubis.py               # Anubis SHA-256 PoW protocol solver
     auro.py                 # Auro AES-GCM mouse telemetry + SHA-256 PoW protocol solver
     friendlycaptcha.py      # FriendlyCaptcha classic PoW protocol solver
@@ -4047,6 +4128,7 @@ tests/
   test_verification.py
   test_ajcaptcha.py
   test_altcha.py
+  test_albireo.py
   test_anubis.py
   test_friendlycaptcha.py
   test_fcaptcha.py
@@ -4084,7 +4166,7 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 179 passed
+pytest: 185 passed
 ruff check src tests: passed
 uv build: success
 Vulcan fixture/html/CLI/stress: chained SHA256 uint32-target PoW，solution=1136;5242;945，4/4 stress 验证通过
@@ -4104,6 +4186,7 @@ FCaptcha fixture/mock/stress: signalsHash-bound PoW、本地 /api/pow/challenge 
 H33 BotShield live/script/mock/CLI：确认 script.js challenge/solve 链路、x-h33 post-quantum receipt headers、SHA256(nonce+counter) leading-zero-bit PoW；live submit ok=true，成功返回 h33_bot_token。
 BOTCHA source/live/CLI/stress：dupe-com/botcha packages/go/challenge.go + src/challenges/speed.ts 交叉确认 sha256_first8；/api/speed-challenge live submit ok=true；/api/challenge live prime+salt submit ok=true；fixture answers [8d969eef,29be3ceb,73475cb4] 验证通过。
 Donatello source/local/CLI/stress：Litebrowsers/donatello cmd/resources/internal tasks 交叉确认 challenge_id -> /challenge -> POST 链路；fixture totalHash1=3c92c1f19799b1a31651a4b9315c62a61b7a998598559fedfa776d78990ae8fc；本地 Go server submit ok=true；错误 hash + copyMismatch=false 仍 status=ok，确认 validation gap。
+Albireo source/mock/CLI/stress：51511/Albireo functions/_middleware.ts + Netlify/Vercel middleware 交叉确认 HMAC cookie + SHA256(challenge+nonce) hex-prefix PoW；fixture nonce=508,response=0002c969...；CF v2 fp_nonce 和 v1 cookie 本地 mock submit 均 ok=true；默认请求头补齐避免 suspicion score 403；raw HTML / full Set-Cookie / Cookie header 输入回归通过。
 
 H33 BotShield：
 
@@ -4206,6 +4289,17 @@ M2M header 解析：WWW-Authenticate -> AltchaChallenge -> Authorization header�
 固定 SHA-256 challenge：成功定位 number，并可反解 payload JSON。
 ALTCHA v2 官方 KDF 向量：PBKDF2/SHA-256、SHA-256、SCRYPT、ARGON2ID 全部对齐。
 ALTCHA v2 verify-compatible fast path：无 keySignature 分支 counter=0 单次派生可生成官方 verifier 兼容 payload；strict prefix 模式可命中 counter=123 fixture。
+```
+
+Albireo：
+
+```text
+51511/Albireo functions/_middleware.ts + For_Netlify/For_Vercel middleware：确认 albireo_challenge HMAC cookie、CF v2 difficulty/fp_nonce 绑定、v1 challenge.ts.sig cookie。
+PoW fixture：challenge=albireo-fixture,difficulty=3 -> nonce=508,response=0002c9691ece2efacea3150519c5865165f656b4386efcab4d326cde32108886。
+本地 mock CF v2 submit：ok=true，fp_nonce 校验通过并返回 albireo_solved。
+本地 mock v1 submit：ok=true，无 fp_nonce 字段也能换 solved cookie。
+CLI fixture stress：10/10 ok；raw HTML / full Set-Cookie / Cookie header 输入回归通过。
+公网 live evidence gap：当前未把 Albireo 写成真实公网 live 通过，只记录源码 + 本地协议闭环。
 ```
 
 Anubis：
@@ -4376,6 +4470,7 @@ stress recaptcha mock 2 轮：2/2。
 - Qoder/Aliyun 的 `F001` 常和出口 IP / session reputation / 当前页面状态有关。
 - AJ-Captcha 的主要误差来自白色描边过弱、服务端自定义模板/尺寸、以及干扰图与真实模板相似；优先调 `--min-score`、保存 `ajcaptcha_original.png / ajcaptcha_jigsaw.png` 复盘。
 - ALTCHA 是 PoW，不是识图；耗时主要由 `maxnumber`、命中位置和 `workers` 决定。VPS 上默认单 worker，避免把 CPU 打满。
+- Albireo 是 HMAC cookie 绑定的 SHA-256 前导零 PoW；CF v2 还绑定 `fp_nonce`。默认不启动浏览器，只补基础请求头；difficulty 每加 1，平均搜索空间约乘 16。
 - Anubis 是 SHA-256 前导零 PoW；difficulty 每加 1，平均搜索空间约乘 16。页面解析和提交 cookie 是协议闭环，但高 difficulty 仍会吃 CPU。
 - Auro.Network 多一层 AES-GCM 行为 telemetry；如果只给 `prefix/difficulty` 就是纯 PoW，如果走完整 `/enckey -> setup -> validate`，要保证 `x-client` 全程一致。
 - FriendlyCaptcha classic 也是 PoW；耗时主要由 difficulty、solution count、命中位置和 worker 数决定。默认 `10,000,000` 次/段 solution 上限，真实站点不够时调 `--max-attempts-per-solution`。

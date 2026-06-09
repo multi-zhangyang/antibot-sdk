@@ -27,6 +27,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://captcha.example/api/pow/challenge?siteKey=site-key") == "fcaptcha"
     assert detect_provider_for_url("https://example.com/active_hashcash/session") == "activehashcash"
     assert detect_provider_for_url("https://auro.network/api/pow/setup") == "auro"
+    assert detect_provider_for_url("https://example.com/albireo?albireo_challenge=x") == "albireo"
     assert detect_provider_for_url("https://captcha.example/crypto-puzzle/challenge") == "cryptopuzzle"
     assert detect_provider_for_url("https://captcha.example/challenge/simp") == "captxa"
     assert detect_provider_for_url("https://get.crovly.com/widget.js") == "crovly"
@@ -90,6 +91,7 @@ def test_generic_provider_detection():
     assert "signed_hashcash_pow" in list_profiles()["spow"]
     assert "tollbooth_protocol" in list_profiles()["tollbooth"]
     assert "signals_bound_pow" in list_profiles()["fcaptcha"]
+    assert "serverless_signed_pow" in list_profiles()["albireo"]
     assert "encrypted_behavior_pow" in list_profiles()["auro"]
     assert "target_match_pow" in list_profiles()["chpiopow"]
     assert "argon2id_pow" in list_profiles()["impost"]
