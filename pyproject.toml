@@ -5,12 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "antibot-sdk"
 version = "0.1.0"
-description = "Lean slider captcha SDK for Aliyun Captcha V3 and Tencent Captcha."
+description = "Human verification SDK for Cloudflare browser flows plus Aliyun/Tencent slider captchas."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [{ name = "multi-zhangyang" }]
 dependencies = [
+  "pydoll-python>=2.23.0",
   "requests>=2.31",
   "Pillow>=10.0",
   "playwright>=1.40",

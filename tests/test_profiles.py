@@ -18,12 +18,15 @@ def test_provider_detection_is_lean() -> None:
     assert detect_provider_for_url("https://cloud.tencent.com/product/captcha") == "tencent"
     assert detect_provider_for_url("https://captcha.gtimg.com/TCaptcha.js") == "tencent"
     assert detect_provider_for_url("https://example.aliyun.com/captcha") == "aliyun"
+    assert detect_provider_for_url("https://developers.cloudflare.com/cloudflare-challenges/") == "cloudflare"
+    assert detect_provider_for_url("https://example.com/cdn-cgi/challenge-platform/h/b/orchestrate/jsch/v1") == "cloudflare"
     assert detect_provider_for_url("https://example.com") == "unknown"
 
 
 def test_list_profiles_only_slider_targets() -> None:
     profiles = list_profiles()
-    assert set(profiles) == {"aliyun", "tencent"}
+    assert set(profiles) == {"cloudflare", "aliyun", "tencent"}
+    assert "managed" in profiles["cloudflare"]
     assert "qoder_signup" in profiles["aliyun"]
     assert "cloud_product" in profiles["tencent"]
     assert "matrix_ai_detect" in profiles["tencent"]

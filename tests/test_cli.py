@@ -1,7 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
-from antibot_sdk.models import CaptchaResult
+from antibot_sdk.models import BrowserResult, CaptchaResult
 import antibot_sdk.cli as cli
 
 
@@ -50,6 +50,42 @@ class _FakeTencent:
         raise AssertionError("stress tencent should reuse solve_with_pool, not solve()")
 
 
+class _FakeCloudflareClient:
+    last = None
+
+    def __init__(self, **kwargs) -> None:
+        self.kwargs = kwargs
+        self.open_calls = []
+        self.solve_cloudflare_calls = []
+        _FakeCloudflareClient.last = self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def open(self, url, **kwargs):
+        self.open_calls.append((url, kwargs))
+        return BrowserResult(
+            ok=True,
+            state="clear",
+            url=url,
+            final_url=url + "/done",
+            diagnostics={"mode": kwargs.get("mode")},
+        )
+
+    async def solve_cloudflare(self, target_url, **kwargs):
+        self.solve_cloudflare_calls.append((target_url, kwargs))
+        return BrowserResult(
+            ok=True,
+            state="clear",
+            url=target_url,
+            final_url=target_url + "/done",
+            diagnostics={"mode": kwargs.get("mode")},
+        )
+
+
 class _FakeClient:
     last = None
 
@@ -93,3 +129,54 @@ def test_tencent_stress_reuses_single_browser_pool(monkeypatch, capsys) -> None:
     assert client.tencent.pool.started == 1
     assert client.tencent.pool.stopped == 1
     assert '"success_rate": 1.0' in capsys.readouterr().out
+
+
+def test_run_cloudflare_uses_browser_flow(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "AntibotClient", _FakeCloudflareClient)
+
+    rc = asyncio.run(
+        cli.amain(
+            [
+                "run",
+                "https://example.com",
+                "--mode",
+                "managed",
+                "--headless",
+                "false",
+                "--selector",
+                "title=h1",
+            ]
+        )
+    )
+
+    assert rc == 0
+    client = _FakeCloudflareClient.last
+    assert client is not None
+    assert client.open_calls[0][0] == "https://example.com"
+    assert client.open_calls[0][1]["mode"] == "managed"
+    assert client.open_calls[0][1]["selectors"] == {"title": "h1"}
+    assert '"state": "clear"' in capsys.readouterr().out
+
+
+def test_solve_cloudflare_uses_cloudflare_entrypoint(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cli, "AntibotClient", _FakeCloudflareClient)
+
+    rc = asyncio.run(
+        cli.amain(
+            [
+                "solve",
+                "cloudflare",
+                "--target-url",
+                "https://example.com",
+                "--mode",
+                "auto",
+            ]
+        )
+    )
+
+    assert rc == 0
+    client = _FakeCloudflareClient.last
+    assert client is not None
+    assert client.solve_cloudflare_calls[0][0] == "https://example.com"
+    assert client.solve_cloudflare_calls[0][1]["mode"] == "auto"
+    assert '"final_url": "https://example.com/done"' in capsys.readouterr().out

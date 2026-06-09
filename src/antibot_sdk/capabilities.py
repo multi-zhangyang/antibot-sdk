@@ -3,6 +3,15 @@ from __future__ import annotations
 from typing import Any
 
 CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
+    "cloudflare": {
+        "provider": "cloudflare",
+        "name": "Cloudflare browser human-verification flow",
+        "category": "browser_flow",
+        "captcha_type": "managed_challenge",
+        "status": "active",
+        "output": "BrowserResult / final page state / artifacts",
+        "scope": "Cloudflare/Turnstile 页面级人机验证浏览器流：Pydoll/CDP 启动 Chrome，补 UA/CH/指纹，等待 challenge 稳定，提取页面状态；不是纯协议 token solver。",
+    },
     "tencent": {
         "provider": "tencent",
         "name": "Tencent Captcha",
@@ -25,5 +34,7 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
 
 
 def list_capabilities() -> dict[str, list[dict[str, Any]]]:
-    solvers = [dict(item) for item in CAPABILITY_MATRIX.values()]
-    return {"solvers": solvers, "flow_observers": [], "unsupported": []}
+    items = [dict(item) for item in CAPABILITY_MATRIX.values()]
+    solvers = [item for item in items if item.get("category") == "solver"]
+    browser_flows = [item for item in items if item.get("category") == "browser_flow"]
+    return {"solvers": solvers, "browser_flows": browser_flows, "flow_observers": browser_flows, "unsupported": []}

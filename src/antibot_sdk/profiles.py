@@ -102,6 +102,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "aliyun"
     if any(x in u or x in host for x in ("tencent", "gtimg", "qcloud", "tcaptcha", "turing.captcha")):
         return "tencent"
+    if any(x in u or x in host for x in ("cloudflare", "cf-challenge", "cf_clearance", "cdn-cgi", "turnstile")):
+        return "cloudflare"
     return "unknown"
 
 
@@ -109,6 +111,11 @@ def list_profiles() -> dict[str, dict[str, Any]]:
     from .vendor.tencent.site_profiles import PROFILES as TENCENT_PROFILES
 
     return {
+        "cloudflare": {
+            "managed": {"mode": "managed", "headless": "false"},
+            "auto": {"mode": "auto", "headless": "auto"},
+            "scrape": {"mode": "scrape", "headless": "true"},
+        },
         "aliyun": {name: asdict(profile) for name, profile in ALIYUN_SITE_PROFILES.items()},
         "tencent": {name: profile.to_dict() for name, profile in TENCENT_PROFILES.items()},
     }

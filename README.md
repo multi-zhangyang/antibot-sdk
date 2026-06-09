@@ -1,11 +1,12 @@
 # antibot-sdk
 
-一个精简版滑块验证码 SDK。当前只保留两条真正有用、可继续维护的链路：
+一个面向“过人机验证”的精简 SDK。当前只保留三条可维护链路：
 
+- **Cloudflare 浏览器人机验证流**：Pydoll/CDP 启动 Chrome，补 UA/CH/基础指纹，等待 Managed Challenge / Turnstile 页面状态稳定，输出 `BrowserResult` 与截图/HTML 等证据。
 - **阿里云 Captcha V3 滑块**：Node/Puppeteer runner、DOM hook、缺口定位、轨迹提交、失败策略。
 - **腾讯 Captcha 滑块**：Playwright runtime、缺口识别、轨迹生成、verify 响应捕获、浏览器池压测。
 
-之前堆进去的 PoW、WAF、VM、token widget、旧 demo/provider 已从仓库移除，避免“看着多、实际没用”的噪音。
+之前堆进去的 PoW、WAF、VM、旧 demo/provider 仍然保持删除；这次只把 Cloudflare 这种“人机验证浏览器流”加回，不恢复半成品。
 
 ## 安装
 
@@ -24,6 +25,41 @@ uv run antibot capabilities
 uv run antibot profiles
 uv run antibot diagnose
 ```
+
+### Cloudflare / 浏览器人机验证流
+
+```bash
+uv run antibot run 'https://example.com' \
+  --mode auto \
+  --headless auto \
+  --max-wait 90 \
+  --screenshot /tmp/cf.png \
+  --raw
+```
+
+等价入口：
+
+```bash
+uv run antibot solve cloudflare \
+  --target-url 'https://example.com' \
+  --mode managed \
+  --headless false \
+  --max-wait 120 \
+  --raw
+```
+
+常用参数：
+
+- `--mode auto|turnstile|managed|scrape`
+- `--headless auto|true|false`
+- `--browser-binary /path/to/chrome`
+- `--proxy host:port:user:pass` 或标准代理 URL
+- `--profile-dir` 复用浏览器 profile
+- `--selector key=css` 抽取页面字段
+- `--click css` 页面稳定后点击
+- `--screenshot` / `--html-output` / `--output-json` 保存证据
+
+注意：Cloudflare 这里是浏览器流，不是纯协议 token solver；真实通过率仍取决于浏览器、出口 IP、UA/CH、TLS/HTTP2 指纹和目标站策略。
 
 ### 腾讯滑块
 
@@ -68,9 +104,10 @@ uv run antibot solve aliyun \
 ```bash
 uv run antibot auto 'https://cloud.tencent.com/product/captcha' --raw
 uv run antibot auto 'https://qoder.com/users/sign-up' --raw
+uv run antibot auto 'https://example.cloudflare-protected.site' --provider cloudflare --raw
 ```
 
-自动路由只识别 `aliyun` 和 `tencent`，其他目标会明确返回 unsupported。
+自动路由现在支持：`cloudflare`、`aliyun`、`tencent`。
 
 ### 压测
 
@@ -92,6 +129,28 @@ VPS 上建议先 `concurrency=1`，不要盲目多开浏览器。
 
 ## SDK 用法
 
+### Cloudflare 浏览器流
+
+```python
+import asyncio
+from antibot_sdk import AntibotClient
+
+async def main():
+    async with AntibotClient() as client:
+        ret = await client.solve_cloudflare(
+            target_url="https://example.com",
+            mode="auto",
+            headless="auto",
+            max_wait=90,
+            screenshot="/tmp/cf.png",
+        )
+        print(ret.ok, ret.state, ret.final_url)
+
+asyncio.run(main())
+```
+
+### 腾讯滑块
+
 ```python
 import asyncio
 from antibot_sdk import AntibotClient
@@ -108,6 +167,8 @@ async def main():
 
 asyncio.run(main())
 ```
+
+### 阿里云滑块
 
 ```python
 import asyncio
@@ -127,9 +188,13 @@ asyncio.run(main())
 
 ## 仓库边界
 
-当前版本不再声称支持非滑块方向。没有稳定线上验证的内容已经删掉。
+当前主能力只有：
 
-后续要扩展时，必须先满足：
+1. Cloudflare/Pydoll 浏览器人机验证流；
+2. 腾讯滑块；
+3. 阿里云滑块。
+
+后续要扩展新的验证码，必须先满足：
 
 1. 有真实网站线上证据；
 2. 有可复现领取/提交链路；

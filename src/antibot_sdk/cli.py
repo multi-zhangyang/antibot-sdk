@@ -12,6 +12,7 @@ from .capabilities import list_capabilities
 from .client import AntibotClient
 from .profiles import detect_provider_for_url, list_profiles
 from .providers.aliyun import AliyunCaptchaSolver, discover_chrome
+from .providers.browser import BrowserAutomation
 from .stress import run_stress
 
 
@@ -65,6 +66,8 @@ def _compact_raw(raw: Any) -> Any:
         "attempts": raw.get("attempts"),
         "candidate": raw.get("candidate"),
         "error": raw.get("error"),
+        "state": raw.get("state"),
+        "final_url": raw.get("final_url"),
     }
     return {key: value for key, value in keep.items() if value not in (None, "", [], {})}
 
@@ -116,6 +119,65 @@ def _add_aliyun_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--keep-profile", action="store_true")
 
 
+def _add_cloudflare_args(parser: argparse.ArgumentParser, *, positional_url: bool = False) -> None:
+    if positional_url:
+        parser.add_argument("url")
+    else:
+        parser.add_argument("--target-url", required=True)
+    parser.add_argument("--mode", default="auto", choices=["auto", "turnstile", "managed", "scrape"])
+    parser.add_argument("--headless", default="auto", choices=["auto", "true", "false", "1", "0", "yes", "no"])
+    parser.add_argument("--browser-binary")
+    parser.add_argument("--proxy")
+    parser.add_argument("--profile-dir")
+    parser.add_argument("--accept-languages", default="en-US,en")
+    parser.add_argument("--user-agent")
+    parser.add_argument("--platform")
+    parser.add_argument("--viewport", default="1920,1080")
+    parser.add_argument("--startup-timeout", type=int, default=45)
+    parser.add_argument("--navigation-timeout", type=int, default=90)
+    parser.add_argument("--max-wait", type=int, default=90)
+    parser.add_argument("--captcha-wait", type=float, default=8.0)
+    parser.add_argument("--selector", action="append", default=[])
+    parser.add_argument("--click", action="append", default=[])
+    parser.add_argument("--wait-after-click", type=float, default=3.0)
+    parser.add_argument("--screenshot")
+    parser.add_argument("--html-output")
+    parser.add_argument("--output-json")
+    parser.add_argument("--block-resources", action="store_true")
+    parser.add_argument("--block-stylesheets", action="store_true")
+    parser.add_argument("--no-fingerprint-patch", action="store_true")
+    parser.add_argument("--no-human-probe", action="store_true")
+    parser.add_argument("--raw", action="store_true")
+
+
+def _cloudflare_kwargs(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "mode": args.mode,
+        "headless": str(args.headless),
+        "browser_binary": args.browser_binary,
+        "proxy": args.proxy,
+        "profile_dir": args.profile_dir,
+        "accept_languages": args.accept_languages,
+        "user_agent": args.user_agent,
+        "platform": args.platform,
+        "viewport": args.viewport,
+        "startup_timeout": args.startup_timeout,
+        "navigation_timeout": args.navigation_timeout,
+        "max_wait": args.max_wait,
+        "captcha_wait": args.captcha_wait,
+        "screenshot": args.screenshot,
+        "html_output": args.html_output,
+        "output_json": args.output_json,
+        "selectors": _kv(args.selector),
+        "clicks": args.click,
+        "wait_after_click": args.wait_after_click,
+        "block_resources": args.block_resources,
+        "block_stylesheets": args.block_stylesheets,
+        "inject_fingerprint_patch": not args.no_fingerprint_patch,
+        "human_probe": not args.no_human_probe,
+    }
+
+
 async def amain(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="antibot")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -125,9 +187,12 @@ async def amain(argv: list[str] | None = None) -> int:
     sub.add_parser("diagnose")
     sub.add_parser("install-js-deps")
 
+    run = sub.add_parser("run")
+    _add_cloudflare_args(run, positional_url=True)
+
     auto = sub.add_parser("auto")
     auto.add_argument("url")
-    auto.add_argument("--provider", default="auto", choices=["auto", "aliyun", "tencent"])
+    auto.add_argument("--provider", default="auto", choices=["auto", "aliyun", "tencent", "cloudflare"])
     auto.add_argument("--proxy")
     auto.add_argument("--timeout", type=int)
     auto.add_argument("--raw", action="store_true")
@@ -140,6 +205,7 @@ async def amain(argv: list[str] | None = None) -> int:
     solve_sub = solve.add_subparsers(dest="provider", required=True)
     _add_tencent_args(solve_sub.add_parser("tencent"))
     _add_aliyun_args(solve_sub.add_parser("aliyun"))
+    _add_cloudflare_args(solve_sub.add_parser("cloudflare"))
 
     stress = sub.add_parser("stress")
     stress_sub = stress.add_subparsers(dest="provider", required=True)
@@ -176,12 +242,18 @@ async def amain(argv: list[str] | None = None) -> int:
                 "chrome": discover_chrome(),
                 "playwright_python": True,
                 "aliyun_js_deps_installed": AliyunCaptchaSolver.js_deps_installed(),
+                "cloudflare": BrowserAutomation.diagnose(),
             },
             include_raw=True,
         )
         return 0
 
     async with AntibotClient(browser_binary=getattr(args, "chrome_path", None)) as client:
+        if args.cmd == "run":
+            ret = await client.open(args.url, **_cloudflare_kwargs(args))
+            emit(ret, include_raw=args.raw)
+            return 0 if ret.ok else 2
+
         if args.cmd == "auto":
             provider = detect_provider_for_url(args.url) if args.provider == "auto" else args.provider
             if provider == "aliyun":
@@ -202,8 +274,22 @@ async def amain(argv: list[str] | None = None) -> int:
                     proxy_server=args.proxy,
                     timeout_sec=args.timeout,
                 )
+            elif provider == "cloudflare":
+                ret = await client.solve_cloudflare(
+                    target_url=args.url,
+                    mode="auto",
+                    headless=str(args.headless),
+                    browser_binary=args.chrome_path,
+                    proxy=args.proxy,
+                    max_wait=args.timeout or 90,
+                )
             else:
                 ret = await client.solve_auto(args.url, provider=provider)
+            emit(ret, include_raw=args.raw)
+            return 0 if ret.ok else 2
+
+        if args.cmd == "solve" and args.provider == "cloudflare":
+            ret = await client.solve_cloudflare(args.target_url, **_cloudflare_kwargs(args))
             emit(ret, include_raw=args.raw)
             return 0 if ret.ok else 2
 
