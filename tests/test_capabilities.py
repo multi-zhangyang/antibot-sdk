@@ -1,5 +1,6 @@
 from dataclasses import asdict
 
+import antibot_sdk
 from antibot_sdk import list_capabilities
 from antibot_sdk.models import CaptchaResult
 
@@ -23,6 +24,9 @@ def test_capability_matrix_product_boundary() -> None:
         "shapow",
         "anubis",
         "auro",
+        "awswaf",
+        "wargon2",
+        "balooproxy",
         "fcaptcha",
         "friendlycaptcha",
         "getpowcaptcha",
@@ -79,6 +83,9 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["shapow"]["captcha_type"] == "nginx_ip_time_bound_pow"
     assert solvers["anubis"]["captcha_type"] == "proof_of_work"
     assert solvers["auro"]["captcha_type"] == "encrypted_behavior_pow"
+    assert solvers["awswaf"]["captcha_type"] == "encrypted_telemetry_scrypt_sha2_network_pow"
+    assert solvers["wargon2"]["captcha_type"] == "argon2id_prefix_pow_fingerprint"
+    assert solvers["balooproxy"]["captcha_type"] == "balooproxy_js_suffix_sha256_cookie"
     assert solvers["fcaptcha"]["captcha_type"] == "signals_bound_pow"
     assert solvers["friendlycaptcha"]["captcha_type"] == "proof_of_work"
     assert solvers["getpowcaptcha"]["captcha_type"] == "signals_bound_pow"
@@ -143,3 +150,13 @@ def test_captcha_result_schema_has_type_and_capability() -> None:
     assert data["capability"] == "solver"
     assert data["ticket"] == "ticket"
     assert data["randstr"] == "randstr"
+
+
+def test_new_protocol_solvers_are_top_level_sdk_exports() -> None:
+    assert antibot_sdk.AwsWafSolver
+    assert antibot_sdk.Wargon2Solver
+    assert antibot_sdk.BalooProxySolver
+    assert antibot_sdk.balooproxy_access_hash
+    assert antibot_sdk.derive_balooproxy_stage2_challenge
+    assert antibot_sdk.hex_suffix_by_index
+    assert antibot_sdk.validate_balooproxy_suffix

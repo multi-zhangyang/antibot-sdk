@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import html
 import json
+import multiprocessing as mp
 import os
 import re
 import secrets
@@ -131,12 +132,13 @@ def solve_guardianwaf_nonce(
             raise TimeoutError(f"no GuardianWAF nonce found within {max_attempts} attempts")
         return nonce, format(nonce, "x"), digest.hex(), attempts
 
-    workers = min(workers, max(1, os.cpu_count() or 1))
+    workers = _bounded_workers(workers)
     chunk_size = max(1_000, int(chunk_size))
     submitted = 0
     next_start = start
     futures: dict[Any, tuple[int, int]] = {}
-    with ProcessPoolExecutor(max_workers=workers) as pool:
+    pool_kwargs = _process_pool_kwargs(workers)
+    with ProcessPoolExecutor(**pool_kwargs) as pool:
         while submitted < max_attempts and len(futures) < workers:
             size = min(chunk_size, max_attempts - submitted)
             end = next_start + size
@@ -674,9 +676,11 @@ def _nonce_text(value: int | str) -> str:
         if ivalue < 0:
             raise ValueError("nonce must be non-negative")
         return format(ivalue, "x")
-    text = str(value).strip().lower()
-    if not re.fullmatch(r"[0-9a-f]+", text):
-        raise ValueError("GuardianWAF nonce must be a hex counter string")
+    text = str(value)
+    if text == "":
+        raise ValueError("GuardianWAF nonce must be non-empty")
+    if any(ord(ch) < 32 for ch in text):
+        raise ValueError("GuardianWAF nonce contains control characters")
     return text
 
 
@@ -835,6 +839,25 @@ def _load_json_arg(value: Any, file_path: str | None = None) -> Any:
             return _load_json_arg(None, text[1:])
         return json.loads(text) if text[0] in "[{" else text
     return value
+
+
+def _bounded_workers(requested: int) -> int:
+    cpu_cap = max(1, os.cpu_count() or 1)
+    try:
+        env_cap = int(os.environ.get("ANTIBOT_MAX_WORKERS", cpu_cap))
+    except (TypeError, ValueError):
+        env_cap = cpu_cap
+    return max(1, min(max(1, int(requested or 1)), cpu_cap, max(1, env_cap)))
+
+
+def _process_pool_kwargs(workers: int) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {"max_workers": workers}
+    method = os.environ.get("ANTIBOT_MP_CONTEXT", "forkserver")
+    try:
+        kwargs["mp_context"] = mp.get_context(method)
+    except ValueError:
+        pass
+    return kwargs
 
 
 def _extract_set_cookie_value(header: str, name: str) -> str | None:

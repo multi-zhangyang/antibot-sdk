@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / go-away js-pow-sha256 / GuardianWAF unsigned JS PoW / SHAPOW Nginx PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / NeoIRC resource/body-bound Hashcash / Hashptcha prefix hash-cracking task / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / php-anti-ddos stateless HMAC multi-PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / go-away js-pow-sha256 / GuardianWAF unsigned JS PoW / SHAPOW Nginx PoW / Anubis PoW / Auro AES-GCM 行为 PoW / AWS WAF encrypted telemetry PoW / Wargon2 Argon2id fingerprint PoW / balooProxy JS suffix cookie / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / NeoIRC resource/body-bound Hashcash / Hashptcha prefix hash-cracking task / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / php-anti-ddos stateless HMAC multi-PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -21,6 +21,9 @@
 - SHAPOW：新增 Nginx 模块 PoW 协议 solver，解析 `challenge-settings.js` 中 IP、服务端时间和 `random_challenge` 绑定的 `serverData`，复现 Worker 的 `SHA256(serverData||nonce16_le_counter)` 前导 bit 搜索，通过 `shapow-response` 查询参数进入 IP whitelist，不启动浏览器。
 - Anubis：新增 `fast/slow` PoW 协议 solver，解析 challenge 页面或 make-challenge JSON，计算 `SHA256(randomData+nonce)` 前导零，可生成 `pass-challenge` 参数或直接换取 auth cookie，不启动浏览器。
 - Auro.Network：新增 AES-GCM 行为数据 + PoW 协议 solver，获取 `/enckey`，生成鼠标 telemetry 并 AES-GCM 加密，提交 `/api/pow/setup` 后搜索 `SHA256(prefix+nonce)`，可 `/api/pow/validate`，不启动浏览器。
+- AWS WAF Challenge：新增 challenge.js 核心 solver，复现 CRC32 checksum、AES-256-GCM encrypted signals、NetworkBandwidth、SHA2 Hashcash 与 Scrypt Hashcash，输出 verify/mp_verify payload；当前不启动浏览器。
+- Wargon2 Captcha：新增 Argon2id memory-hard 前缀 PoW + AES-GCM fingerprint solver，复现 WASM `salt+nonce` 链路，可提交 `/api/v1/verify`，不启动浏览器。
+- balooProxy / balooPow：新增 JS suffix cookie solver，复现 accessKey + OTP + BLAKE3 派生与 `SHA256(publicSalt+suffix)` 精确匹配，输出 `_2__bProxy_v` clearance cookie；不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
 - powCAPTCHA：新增 widget 协议 solver，合成 fingerprint/signals 调 `/challenges/create`，复现 `SHA256(signature+problem+nonce)` 多 problem 前导零 PoW，输出 `powcaptcha-response` token，不启动浏览器。
 - FCaptcha：新增 behavior/environment signals + `signalsHash` 绑定 SHA-256 PoW 协议 solver，补齐 `meta.challengeNonce`、canonical `signalsJson` 和最小提交耗时，可提交 `/api/verify` 换 token，不启动浏览器。
@@ -1043,6 +1046,57 @@ antibot stress guardianwaf \
 - 这是纯协议 PoW solver，不启动 headless。
 - cookie 绑定服务端看到的 client IP；如果走真实页面提交，GET/POST 仍建议保持同一个出口和同一组 headers。
 - direct mode 依赖目标使用当前 GuardianWAF verify 逻辑；若后续版本加入 challenge 签名或服务端 nonce registry，需要退回页面解析路径。
+
+---
+
+### AWS WAF Challenge / Wargon2 / balooProxy
+
+这一组是本轮新增的协议层/内存硬化方向，定位是“能离线证明核心算法 + 本地 mock 可闭环”，不启动浏览器。
+
+- `awswaf`：解析 challenge JSON 或 deobfuscated `challenge.js`，合成 browser signals，计算 CRC32 checksum，并用 AES-256-GCM 生成 `AwsWafEncryptedSignals`；PoW 支持 `NetworkBandwidth`、SHA2 Hashcash、Scrypt Hashcash，输出 `/verify` 或 `/mp_verify` 可用 payload。
+- `wargon2`：复现 femshift/wargon2-captcha 的 Argon2id 参数链路：`password = salt_b64 + nonce`，`salt = base64_decode(salt_b64)`，命中 `target` 十六进制前缀；同时合成反向 base64 + AES-GCM fingerprint，可直接提交 `/api/v1/verify`。
+- `balooproxy`：复现 balooProxy/balooPow 的 suffix challenge：`publicSalt + suffix` 的 SHA-256 必须等于 challenge，成功后输出 `_2__bProxy_v` cookie value；accessKey/OTP 派生 helper 已作为 SDK API 暴露。
+
+命令示例：
+
+```bash
+antibot solve awswaf \
+  --challenge-json '{"challenge":{"input":"eyJjaGFsbGVuZ2VfdHlwZSI6Ikhhc2hjYXNoIn0=","hmac":"fixture","region":"us-east-1"},"challenge_type":"h7b0c470faaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","difficulty":12,"memory":16}' \
+  --checksum 1a2b3c4d \
+  --max-attempts 10000
+
+antibot solve wargon2 \
+  --challenge-json @challenge.json \
+  --max-attempts 100000 \
+  --timeout 20
+
+antibot solve balooproxy \
+  --challenge-json '{"publicSalt":"abcdef","challenge":"<64-hex-sha256>","difficulty":2}' \
+  --max-attempts 256
+```
+
+压测示例：
+
+```bash
+antibot stress awswaf --challenge-json @awswaf-challenge.json --checksum 1a2b3c4d --runs 10 --concurrency 2
+antibot stress wargon2 --challenge-json @wargon2-challenge.json --runs 5 --concurrency 1 --timeout 30
+antibot stress balooproxy --challenge-json @balooproxy-challenge.json --runs 20 --concurrency 4
+```
+
+当前限制：AWS WAF 的 live `challenge.js` 混淆版本会变化，SDK 目前吃解析后的 JS/JSON fixture；balooProxy 已支持 GET 真实 challenge 页面、求 suffix、带 `_2__bProxy_v` cookie 二次请求的无浏览器闭环。
+
+SDK 顶层也暴露这批 solver 和 helper，适合直接嵌到业务代码：
+
+```python
+from antibot_sdk import (
+    AwsWafSolver,
+    BalooProxySolver,
+    Wargon2Solver,
+    derive_balooproxy_stage2_challenge,
+)
+```
+
+资源保护：`workers` 默认保守；需要并行时可设置 `ANTIBOT_MAX_WORKERS` 控制进程上限，`ANTIBOT_MEMORY_RESERVE_MIB` 给 Argon2/scrypt 类 memory-hard solver 预留内存。
 
 ---
 
@@ -3959,6 +4013,9 @@ SDK 可以根据 URL 粗略判断 provider：
 - SHAPOW / `shapow_internal` / `challenge-settings.js` / `shapow-response` 相关 URL -> `shapow`
 - Anubis / `.within.website/x/cmd/anubis` 相关 URL -> `anubis`
 - Auro.Network / `/api/pow/setup` / `/api/pow/validate` 相关 URL -> `auro`
+- AWS WAF / `sdk.awswaf.com` / `aws-waf-token` / `challenge.js` 相关 URL -> `awswaf`
+- Wargon2 / `wargon2-captcha` / `argon2-captcha` 相关 URL -> `wargon2`
+- balooProxy / balooPow / `_2__bProxy_v` / `publicSalt` 相关 URL -> `balooproxy`
 - FriendlyCaptcha / `frc-captcha` 相关 URL -> `friendlycaptcha`
 - powCAPTCHA / `js.powcaptcha.com` / `api.powcaptcha.com` / `powcaptcha-response` -> `getpowcaptcha`
 - FCaptcha / `/api/pow/challenge` / `/api/verify` 相关 URL -> `fcaptcha`
@@ -4268,6 +4325,12 @@ antibot stress goaway --challenge-json '{"Key":"Pl02g55pPapXdVc3SVfMZQGymmyE0dTC
 antibot solve guardianwaf --base-url 'https://target.example/protected' --submit --timeout 30 --max-attempts 5000000
 antibot solve guardianwaf --challenge-json '{"challenge":"0123456789abcdef0123456789abcdef","difficulty":16,"redirect":"/"}' --max-attempts 100000
 antibot stress guardianwaf --challenge-json '{"challenge":"0123456789abcdef0123456789abcdef","difficulty":16,"redirect":"/"}' --runs 10 --concurrency 2 --max-attempts 100000
+
+# AWS WAF / Wargon2 / balooProxy
+antibot solve awswaf --challenge-json @awswaf-challenge.json --checksum 1a2b3c4d --max-attempts 10000
+antibot solve wargon2 --challenge-json @wargon2-challenge.json --max-attempts 100000 --timeout 20
+antibot solve balooproxy --challenge-json @balooproxy-challenge.json --max-attempts 100000
+antibot solve balooproxy --base-url 'https://target.example/protected' --submit --max-attempts 100000
 
 # SHAPOW Nginx PoW
 antibot solve shapow --base-url 'https://target.example/protected' --submit --timeout 30 --max-attempts 20000000

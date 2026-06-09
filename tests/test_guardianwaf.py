@@ -52,6 +52,7 @@ def test_guardianwaf_source_style_fixture_and_cookie() -> None:
     assert attempts == VALID_NONCE + 1
     assert guardianwaf_hash_hex(CHALLENGE, nonce_text) == VALID_DIGEST
     assert verify_guardianwaf_pow(CHALLENGE, nonce_text, DIFFICULTY)
+    assert not verify_guardianwaf_pow(CHALLENGE, nonce_text.upper(), DIFFICULTY)
     assert not verify_guardianwaf_pow(CHALLENGE, "f9cc", DIFFICULTY)
 
     cookie = make_guardianwaf_cookie(secret=SECRET, client_ip="127.0.0.1", ttl=3600, now=1_700_000_000)
@@ -101,6 +102,14 @@ def test_guardianwaf_parallel_attempts_hint_is_precise() -> None:
     assert nonce_text == VALID_NONCE_HEX
     assert digest_hex == VALID_DIGEST
     assert attempts == VALID_NONCE + 1
+
+
+def test_guardianwaf_json_and_direct_accept_zero_difficulty() -> None:
+    parsed = parse_guardianwaf_challenge({"challenge": CHALLENGE, "difficulty": 0})
+    solution = solve_guardianwaf_challenge(parsed, max_attempts=1)
+    assert parsed.difficulty == 0
+    assert solution.nonce == 0
+    assert solution.nonce_text == "0"
 
 
 class _GuardianWafHandler(BaseHTTPRequestHandler):

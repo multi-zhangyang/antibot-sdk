@@ -50,6 +50,13 @@ def _load_token(path: str | None) -> str | None:
     return None
 
 
+def _json_arg(value: str | None):
+    if not value:
+        return None
+    text = Path(value[1:]).read_text(encoding="utf-8") if value.startswith("@") else value
+    return json.loads(text)
+
+
 def _headless(value: str):
     if value in ("", "auto", None):
         return None
@@ -139,6 +146,9 @@ async def amain(argv: list[str] | None = None) -> int:
             "shapow",
             "anubis",
             "auro",
+            "awswaf",
+            "wargon2",
+            "balooproxy",
             "aliyun",
             "tencent",
             "friendlycaptcha",
@@ -396,6 +406,58 @@ async def amain(argv: list[str] | None = None) -> int:
     gwaf.add_argument("--proxy")
     gwaf.add_argument("--output-dir")
     gwaf.add_argument("--raw", action="store_true")
+
+    awaf = solve_sub.add_parser("awswaf")
+    awaf.add_argument("--challenge-json", help="inline challenge JSON, or @/path")
+    awaf.add_argument("--challenge-file")
+    awaf.add_argument("--challenge-js", help="inline deobfuscated challenge.js, or @/path")
+    awaf.add_argument("--crypto-json", help="inline {key,identifier} JSON, key hex, or @/path")
+    awaf.add_argument("--crypto-file")
+    awaf.add_argument("--checksum")
+    awaf.add_argument("--signals-json", help="inline browser signals JSON, or @/path")
+    awaf.add_argument("--aes-key-hex")
+    awaf.add_argument("--identifier")
+    awaf.add_argument("--signal-version", default="2.4.0")
+    awaf.add_argument("--start", type=int, default=0)
+    awaf.add_argument("--max-attempts", type=int, default=5_000_000)
+    awaf.add_argument("--workers", type=int, default=1)
+    awaf.add_argument("--chunk-size", type=int, default=100_000)
+    awaf.add_argument("--timeout", type=int, default=30)
+    awaf.add_argument("--proxy")
+    awaf.add_argument("--output-dir")
+    awaf.add_argument("--raw", action="store_true")
+
+    warg = solve_sub.add_parser("wargon2")
+    warg.add_argument("--base-url")
+    warg.add_argument("--challenge-json", help="inline challenge JSON, or @/path")
+    warg.add_argument("--challenge-file")
+    warg.add_argument("--challenge-url")
+    warg.add_argument("--verify-url")
+    warg.add_argument("--submit", action="store_true")
+    warg.add_argument("--start", type=int, default=0)
+    warg.add_argument("--max-attempts", type=int, default=10_000_000)
+    warg.add_argument("--workers", type=int, default=1)
+    warg.add_argument("--chunk-size", type=int, default=128)
+    warg.add_argument("--timeout", type=int, default=20)
+    warg.add_argument("--aes-key")
+    warg.add_argument("--fingerprint", action="append", default=[], help="override fingerprint key=value")
+    warg.add_argument("--proxy")
+    warg.add_argument("--raw", action="store_true")
+
+    baloo = solve_sub.add_parser("balooproxy")
+    baloo.add_argument("--challenge-json", help="inline challenge JSON/HTML, or @/path")
+    baloo.add_argument("--challenge-file")
+    baloo.add_argument("--challenge-html", help="inline HTML, or @/path")
+    baloo.add_argument("--base-url", help="protected page; solver GETs page and retries with cookie when --submit")
+    baloo.add_argument("--submit", action="store_true")
+    baloo.add_argument("--start", type=int, default=0)
+    baloo.add_argument("--max-attempts", type=int, default=1_000_000)
+    baloo.add_argument("--workers", type=int, default=1)
+    baloo.add_argument("--chunk-size", type=int, default=50_000)
+    baloo.add_argument("--timeout", type=int, default=10)
+    baloo.add_argument("--proxy")
+    baloo.add_argument("--output-dir")
+    baloo.add_argument("--raw", action="store_true")
 
     shpw = solve_sub.add_parser("shapow")
     shpw.add_argument("--base-url", default="https://example.com")
@@ -1584,6 +1646,67 @@ async def amain(argv: list[str] | None = None) -> int:
     sgwaf.add_argument("--output-json")
     sgwaf.add_argument("--full", action="store_true")
 
+    sawaf = stress_sub.add_parser("awswaf")
+    sawaf.add_argument("--challenge-json")
+    sawaf.add_argument("--challenge-file")
+    sawaf.add_argument("--challenge-js")
+    sawaf.add_argument("--crypto-json")
+    sawaf.add_argument("--crypto-file")
+    sawaf.add_argument("--checksum")
+    sawaf.add_argument("--signals-json")
+    sawaf.add_argument("--aes-key-hex")
+    sawaf.add_argument("--identifier")
+    sawaf.add_argument("--signal-version", default="2.4.0")
+    sawaf.add_argument("--start", type=int, default=0)
+    sawaf.add_argument("--max-attempts", type=int, default=5_000_000)
+    sawaf.add_argument("--workers", type=int, default=1)
+    sawaf.add_argument("--chunk-size", type=int, default=100_000)
+    sawaf.add_argument("--runs", type=int, default=10)
+    sawaf.add_argument("--concurrency", type=int, default=2)
+    sawaf.add_argument("--timeout", type=int, default=30)
+    sawaf.add_argument("--proxy")
+    sawaf.add_argument("--output-dir")
+    sawaf.add_argument("--output-json")
+    sawaf.add_argument("--full", action="store_true")
+
+    swarg = stress_sub.add_parser("wargon2")
+    swarg.add_argument("--base-url")
+    swarg.add_argument("--challenge-json")
+    swarg.add_argument("--challenge-file")
+    swarg.add_argument("--challenge-url")
+    swarg.add_argument("--verify-url")
+    swarg.add_argument("--submit", action="store_true")
+    swarg.add_argument("--start", type=int, default=0)
+    swarg.add_argument("--max-attempts", type=int, default=10_000_000)
+    swarg.add_argument("--workers", type=int, default=1)
+    swarg.add_argument("--chunk-size", type=int, default=128)
+    swarg.add_argument("--runs", type=int, default=10)
+    swarg.add_argument("--concurrency", type=int, default=2)
+    swarg.add_argument("--timeout", type=int, default=20)
+    swarg.add_argument("--aes-key")
+    swarg.add_argument("--fingerprint", action="append", default=[])
+    swarg.add_argument("--proxy")
+    swarg.add_argument("--output-json")
+    swarg.add_argument("--full", action="store_true")
+
+    sbaloo = stress_sub.add_parser("balooproxy")
+    sbaloo.add_argument("--challenge-json")
+    sbaloo.add_argument("--challenge-file")
+    sbaloo.add_argument("--challenge-html")
+    sbaloo.add_argument("--base-url")
+    sbaloo.add_argument("--submit", action="store_true")
+    sbaloo.add_argument("--start", type=int, default=0)
+    sbaloo.add_argument("--max-attempts", type=int, default=1_000_000)
+    sbaloo.add_argument("--workers", type=int, default=1)
+    sbaloo.add_argument("--chunk-size", type=int, default=50_000)
+    sbaloo.add_argument("--runs", type=int, default=10)
+    sbaloo.add_argument("--concurrency", type=int, default=2)
+    sbaloo.add_argument("--timeout", type=int, default=10)
+    sbaloo.add_argument("--proxy")
+    sbaloo.add_argument("--output-dir")
+    sbaloo.add_argument("--output-json")
+    sbaloo.add_argument("--full", action="store_true")
+
     sshpw = stress_sub.add_parser("shapow")
     sshpw.add_argument("--base-url", default="https://example.com")
     sshpw.add_argument("--page-url")
@@ -2760,6 +2883,9 @@ async def amain(argv: list[str] | None = None) -> int:
             "guardianwaf",
             "shapow",
             "anubis",
+            "awswaf",
+            "wargon2",
+            "balooproxy",
         ):
             common.update({
                 "site_profile": args.site_profile,
@@ -3000,6 +3126,64 @@ async def amain(argv: list[str] | None = None) -> int:
             client_ip=args.client_ip,
             cookie_name=args.cookie_name,
             cookie_ttl=args.cookie_ttl,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            chunk_size=args.chunk_size,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "awswaf":
+        ret = await client.solve_awswaf(
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_js=args.challenge_js,
+            crypto_json=args.crypto_json,
+            crypto_file=args.crypto_file,
+            checksum=args.checksum,
+            signals_json=args.signals_json,
+            aes_key_hex=args.aes_key_hex,
+            identifier=args.identifier,
+            signal_version=args.signal_version,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            chunk_size=args.chunk_size,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "wargon2":
+        ret = await client.solve_wargon2(
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            base_url=args.base_url,
+            verify_url=args.verify_url,
+            submit=args.submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            chunk_size=args.chunk_size,
+            timeout_sec=args.timeout,
+            fingerprint=_kv(args.fingerprint),
+            aes_key=args.aes_key,
+            proxy_server=args.proxy,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "balooproxy":
+        ret = await client.solve_balooproxy(
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_html=args.challenge_html,
+            base_url=args.base_url,
+            submit=args.submit,
             start=args.start,
             max_attempts=args.max_attempts,
             workers=args.workers,
@@ -4347,6 +4531,87 @@ async def amain(argv: list[str] | None = None) -> int:
                 client_ip=args.client_ip,
                 cookie_name=args.cookie_name,
                 cookie_ttl=args.cookie_ttl,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                chunk_size=args.chunk_size,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "awswaf":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="awswaf",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_awswaf(
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_js=args.challenge_js,
+                crypto_json=args.crypto_json,
+                crypto_file=args.crypto_file,
+                checksum=args.checksum,
+                signals_json=args.signals_json,
+                aes_key_hex=args.aes_key_hex,
+                identifier=args.identifier,
+                signal_version=args.signal_version,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                chunk_size=args.chunk_size,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "wargon2":
+        ret = await run_stress(
+            name="wargon2",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda _i: client.solve_wargon2(
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                base_url=args.base_url,
+                verify_url=args.verify_url,
+                submit=args.submit,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                chunk_size=args.chunk_size,
+                timeout_sec=args.timeout,
+                fingerprint=_kv(args.fingerprint),
+                aes_key=args.aes_key,
+                proxy_server=args.proxy,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "balooproxy":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="balooproxy",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_balooproxy(
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_html=args.challenge_html,
+                base_url=args.base_url,
+                submit=args.submit,
                 start=args.start,
                 max_attempts=args.max_attempts,
                 workers=args.workers,

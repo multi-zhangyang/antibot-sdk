@@ -136,6 +136,12 @@ def detect_provider_for_url(url: str | None) -> str:
         return "shapow"
     if any(x in u or x in host for x in ("auro.network", "auro-captcha", "/api/pow/setup", "/api/pow/validate")):
         return "auro"
+    if any(x in u or x in host for x in ("awswaf", "sdk.awswaf.com", "aws-waf-token", "challenge.js")):
+        return "awswaf"
+    if any(x in u or x in host for x in ("wargon2", "wargon2-captcha", "argon2-captcha")):
+        return "wargon2"
+    if any(x in u or x in host for x in ("balooproxy", "baloopow", "_2__bproxy_v", "publicsalt")):
+        return "balooproxy"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
         return "gunslol"
     if any(x in u or x in host for x in ("h33.ai", "botshield", "h33_bot_token", "/v1/botshield/")):
@@ -352,6 +358,30 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "aes-gcm-mouse-telemetry-plus-sha256-pow-protocol-solver",
                 "successFields": ["validate body", "Auro token/status"],
                 "endpoints": ["/enckey", "/api/pow/setup", "/api/pow/validate"],
+            }
+        },
+        "awswaf": {
+            "encrypted_telemetry_scrypt_sha2_network_pow": {
+                "patterns": ["sdk.awswaf.com", "aws-waf-token", "challenge.js", "mp_verify", "verify"],
+                "mode": "aes-gcm-signals-plus-scrypt-sha2-network-pow-core-solver",
+                "successFields": ["solution", "encrypted signals", "aws-waf-token"],
+                "endpoints": ["GET challenge.js", "POST /verify or /mp_verify"],
+            }
+        },
+        "wargon2": {
+            "argon2id_prefix_pow_fingerprint": {
+                "patterns": ["wargon2", "wargon2-captcha", "argon2-captcha", "/api/v1/challenge"],
+                "mode": "argon2id-prefix-pow-plus-aes-gcm-fingerprint-protocol-solver",
+                "successFields": ["nonce", "hash", "fingerprint", "valid"],
+                "endpoints": ["GET /api/v1/challenge", "POST /api/v1/verify"],
+            }
+        },
+        "balooproxy": {
+            "balooproxy_js_suffix_sha256_cookie": {
+                "patterns": ["balooProxy", "balooPow", "_2__bProxy_v", "publicSalt"],
+                "mode": "blake3-access-key-derived-sha256-suffix-cookie-solver",
+                "successFields": ["suffix", "_2__bProxy_v cookie"],
+                "endpoints": ["GET protected page", "set cookie and retry"],
             }
         },
         "friendlycaptcha": {

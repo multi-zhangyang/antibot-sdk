@@ -11,6 +11,8 @@ from .providers.ajcaptcha import AJCaptchaSolver
 from .providers.altcha import AltchaSolver
 from .providers.anubis import AnubisSolver
 from .providers.auro import AuroSolver
+from .providers.awswaf import AwsWafSolver
+from .providers.balooproxy import BalooProxySolver
 from .providers.browser import BrowserAutomation
 from .providers.botcha import BotchaSolver
 from .providers.btx import BtxSolver
@@ -61,6 +63,7 @@ from .providers.tollbooth import TollboothSolver
 from .providers.trustcaptcha import TrustcaptchaSolver
 from .providers.turnstile import TurnstileSolver
 from .providers.vulcan import VulcanSolver
+from .providers.wargon2 import Wargon2Solver
 from .providers.yourcaptcha import YourCaptchaSolver
 from .providers.yidun import YidunCaptchaSolver
 from .providers.wicketkeeper import WicketkeeperSolver
@@ -87,6 +90,8 @@ class AntibotClient:
         self.altcha = AltchaSolver()
         self.anubis = AnubisSolver()
         self.auro = AuroSolver()
+        self.awswaf = AwsWafSolver()
+        self.balooproxy = BalooProxySolver()
         self.fcaptcha = FCaptchaSolver()
         self.cryptopuzzle = CryptoPuzzleSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
@@ -120,6 +125,7 @@ class AntibotClient:
         self.tollbooth = TollboothSolver()
         self.trustcaptcha = TrustcaptchaSolver()
         self.vulcan = VulcanSolver()
+        self.wargon2 = Wargon2Solver()
         self.aliyun = AliyunCaptchaSolver()
         self.geetest = GeeTestCaptchaSolver()
         self.turnstile = TurnstileSolver()
@@ -190,6 +196,12 @@ class AntibotClient:
 
     async def solve_auro(self, **kwargs: Any) -> CaptchaResult:
         return await self.auro.solve(**kwargs)
+
+    async def solve_awswaf(self, **kwargs: Any) -> CaptchaResult:
+        return await self.awswaf.solve(**kwargs)
+
+    async def solve_balooproxy(self, **kwargs: Any) -> CaptchaResult:
+        return await self.balooproxy.solve(**kwargs)
 
     async def solve_cryptopuzzle(self, **kwargs: Any) -> CaptchaResult:
         return await self.cryptopuzzle.solve(**kwargs)
@@ -274,6 +286,9 @@ class AntibotClient:
 
     async def solve_vulcan(self, **kwargs: Any) -> CaptchaResult:
         return await self.vulcan.solve(**kwargs)
+
+    async def solve_wargon2(self, **kwargs: Any) -> CaptchaResult:
+        return await self.wargon2.solve(**kwargs)
 
     async def solve_turnstile(self, **kwargs: Any) -> CaptchaResult:
         return await self.turnstile.solve(**kwargs)
@@ -730,6 +745,59 @@ class AntibotClient:
             if not auro_kwargs.get("base_url") and not auro_kwargs.get("enckey_url"):
                 auro_kwargs["base_url"] = target_url
             return await self.solve_auro(**auro_kwargs)
+        if provider == "awswaf":
+            awswaf_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_js",
+                    "crypto_json",
+                    "crypto_file",
+                    "checksum",
+                    "signals_json",
+                    "aes_key_hex",
+                    "identifier",
+                    "signal_version",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "chunk_size",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            return await self.solve_awswaf(**awswaf_kwargs)
+        if provider == "balooproxy":
+            baloo_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "submit",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_html",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "chunk_size",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            baloo_kwargs.setdefault("base_url", target_url)
+            baloo_kwargs.setdefault("submit", True)
+            return await self.solve_balooproxy(**baloo_kwargs)
         if provider == "friendlycaptcha":
             frc_kwargs = {
                 k: v
@@ -1174,6 +1242,43 @@ class AntibotClient:
             }
             vulcan_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_vulcan(**vulcan_kwargs)
+        if provider == "wargon2":
+            wargon2_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "base_url",
+                    "verify_url",
+                    "submit",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "chunk_size",
+                    "timeout_sec",
+                    "fingerprint",
+                    "aes_key",
+                    "proxy_server",
+                    "headers",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not wargon2_kwargs.get("base_url") and not wargon2_kwargs.get("challenge_url"):
+                if target_lower.rstrip("/").endswith("/api/v1/challenge"):
+                    wargon2_kwargs["challenge_url"] = target_url
+                    wargon2_kwargs["base_url"] = target_url[: target_lower.rindex("/api/v1/challenge")]
+                elif target_lower.rstrip("/").endswith("/api/v1/verify"):
+                    wargon2_kwargs["verify_url"] = target_url
+                    wargon2_kwargs["base_url"] = target_url[: target_lower.rindex("/api/v1/verify")]
+                else:
+                    wargon2_kwargs["base_url"] = target_url
+            wargon2_kwargs.setdefault("submit", True)
+            return await self.solve_wargon2(**wargon2_kwargs)
         if provider == "cap":
             cap_kwargs = {
                 k: v

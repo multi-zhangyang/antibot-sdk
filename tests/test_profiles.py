@@ -32,6 +32,9 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://gate.example/go-away/challenge/js-pow-sha256/script.mjs") == "goaway"
     assert detect_provider_for_url("https://gate.example/__guardianwaf/challenge/verify") == "guardianwaf"
     assert detect_provider_for_url("https://gate.example/shapow_internal/challenge-settings.js") == "shapow"
+    assert detect_provider_for_url("https://d8c14d4960ca.edge.sdk.awswaf.com/abc/challenge.js") == "awswaf"
+    assert detect_provider_for_url("https://wargon2.example/api/v1/challenge") == "wargon2"
+    assert detect_provider_for_url("https://gate.example/balooproxy/challenge?publicSalt=abc") == "balooproxy"
     assert detect_provider_for_url("https://captcha.example/crypto-puzzle/challenge") == "cryptopuzzle"
     assert detect_provider_for_url("https://captcha.example/challenge/simp") == "captxa"
     assert detect_provider_for_url("https://get.crovly.com/widget.js") == "crovly"
@@ -104,6 +107,9 @@ def test_generic_provider_detection():
     assert "unsigned_js_pow_hmac_cookie" in list_profiles()["guardianwaf"]
     assert "nginx_ip_time_bound_pow" in list_profiles()["shapow"]
     assert "encrypted_behavior_pow" in list_profiles()["auro"]
+    assert "encrypted_telemetry_scrypt_sha2_network_pow" in list_profiles()["awswaf"]
+    assert "argon2id_prefix_pow_fingerprint" in list_profiles()["wargon2"]
+    assert "balooproxy_js_suffix_sha256_cookie" in list_profiles()["balooproxy"]
     assert "target_match_pow" in list_profiles()["chpiopow"]
     assert "argon2id_pow" in list_profiles()["impost"]
     assert "u128_score_pow" in list_profiles()["kerberus"]
