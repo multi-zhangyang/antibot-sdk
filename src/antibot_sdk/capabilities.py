@@ -176,6 +176,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "sensor_data / mn_r / _abck Set-Cookie",
         "scope": "Akamai BM experimental：从 bm_sz 提取 transform keys，复现 LCG string shift 与字段 shuffle，支持 minimal v3-style sensor JSON encode/decode 和 /_bm/_data mock submit；可解析 _abck 的 mn_* challenge 并复现 SHA-256 byte-wise modulo PoW 生成 mn_r；不启动浏览器，不宣称完整 _abck/reese 风控绕过。",
     },
+    "arkose": {
+        "provider": "arkose",
+        "name": "Arkose Labs / FunCaptcha",
+        "category": "solver",
+        "captcha_type": "arkose_funcaptcha_bda_token",
+        "status": "experimental",
+        "output": "encrypted bda / session token primitive",
+        "scope": "Arkose/FunCaptcha experimental：复现 public_key token 初始化所需的 browser data array(BDA) 结构、FingerprintJS x64 MurmurHash128、OpenSSL EVP_BytesToKey 风格 AES-256-CBC 加密与 /fc/gt2/public_key/{pkey} 表单提交，解析 token/session/sup 状态；不做视觉游戏自动答题，不宣称完整 FunCaptcha 绕过。",
+    },
     "vercel_botid": {
         "provider": "vercel_botid",
         "name": "Vercel BotID / X-Is-Human",

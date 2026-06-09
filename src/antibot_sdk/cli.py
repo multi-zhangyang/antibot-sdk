@@ -159,6 +159,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "acwscv2",
             "pingoo",
             "akamai_bm",
+            "arkose",
             "vercel_botid",
             "aliyun",
             "tencent",
@@ -543,6 +544,22 @@ async def amain(argv: list[str] | None = None) -> int:
     akbm.add_argument("--header", action="append", default=[], help="extra submit header KEY=VALUE")
     akbm.add_argument("--timeout", type=int, default=10)
     akbm.add_argument("--raw", action="store_true")
+
+    ark = solve_sub.add_parser("arkose")
+    ark.add_argument("--pkey", required=True, help="Arkose public key UUID")
+    ark.add_argument("--surl", default="https://client-api.arkoselabs.com", help="Arkose service origin")
+    ark.add_argument("--site", help="embedding page URL/origin")
+    ark.add_argument("--user-agent", default=None)
+    ark.add_argument("--language", default="en")
+    ark.add_argument("--data-json", help="extra Arkose data object, e.g. {'blob':'...'}, or @/path")
+    ark.add_argument("--bda", help="prebuilt encrypted BDA")
+    ark.add_argument("--token-response-json", help="offline token endpoint response JSON, or @/path")
+    ark.add_argument("--submit", action="store_true", help="POST BDA form to /fc/gt2/public_key/{pkey}")
+    ark.add_argument("--header", action="append", default=[], help="extra request header KEY=VALUE")
+    ark.add_argument("--timeout", type=int, default=15)
+    ark.add_argument("--proxy")
+    ark.add_argument("--output-dir")
+    ark.add_argument("--raw", action="store_true")
 
     botid = solve_sub.add_parser("vercel_botid")
     botid_source = botid.add_mutually_exclusive_group(required=True)
@@ -1902,6 +1919,25 @@ async def amain(argv: list[str] | None = None) -> int:
     sakbm.add_argument("--timeout", type=int, default=10)
     sakbm.add_argument("--output-json")
     sakbm.add_argument("--full", action="store_true")
+
+    sark = stress_sub.add_parser("arkose")
+    sark.add_argument("--pkey", required=True)
+    sark.add_argument("--surl", default="https://client-api.arkoselabs.com")
+    sark.add_argument("--site")
+    sark.add_argument("--user-agent", default=None)
+    sark.add_argument("--language", default="en")
+    sark.add_argument("--data-json")
+    sark.add_argument("--bda")
+    sark.add_argument("--token-response-json")
+    sark.add_argument("--submit", action="store_true")
+    sark.add_argument("--header", action="append", default=[])
+    sark.add_argument("--runs", type=int, default=10)
+    sark.add_argument("--concurrency", type=int, default=2)
+    sark.add_argument("--timeout", type=int, default=15)
+    sark.add_argument("--proxy")
+    sark.add_argument("--output-dir")
+    sark.add_argument("--output-json")
+    sark.add_argument("--full", action="store_true")
 
     sbotid = stress_sub.add_parser("vercel_botid")
     sbotid_source = sbotid.add_mutually_exclusive_group(required=True)
@@ -3512,6 +3548,25 @@ async def amain(argv: list[str] | None = None) -> int:
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "arkose":
+        arkose_headers = _kv(args.header)
+        ret = await client.solve_arkose(
+            pkey=args.pkey,
+            surl=args.surl,
+            site=args.site,
+            user_agent=args.user_agent or None,
+            language=args.language,
+            data_json=args.data_json,
+            bda=args.bda,
+            token_response_json=args.token_response_json,
+            submit=args.submit,
+            timeout_sec=args.timeout,
+            headers=arkose_headers,
+            proxy=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
     if args.cmd == "solve" and args.provider == "vercel_botid":
         botid_headers = _kv(args.header)
         if args.user_agent:
@@ -5096,6 +5151,34 @@ async def amain(argv: list[str] | None = None) -> int:
                 submit_url=args.submit_url,
                 timeout_sec=args.timeout,
                 headers=akamai_headers,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+
+    if args.cmd == "stress" and args.provider == "arkose":
+        root = Path(args.output_dir) if args.output_dir else None
+        arkose_headers = _kv(args.header)
+        ret = await run_stress(
+            name="arkose",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_arkose(
+                pkey=args.pkey,
+                surl=args.surl,
+                site=args.site,
+                user_agent=args.user_agent or None,
+                language=args.language,
+                data_json=args.data_json,
+                bda=args.bda,
+                token_response_json=args.token_response_json,
+                submit=args.submit,
+                timeout_sec=args.timeout,
+                headers=arkose_headers,
+                proxy=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
             ),
         )
         emit_stress(ret, full=args.full)

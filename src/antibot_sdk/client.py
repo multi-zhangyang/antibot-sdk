@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlsplit
 
 from .models import BrowserResult, CaptchaResult
 from .profiles import detect_provider_for_url
@@ -16,6 +17,7 @@ from .providers.balooproxy import BalooProxySolver
 from .providers.basedflare import BasedFlareSolver
 from .providers.acwscv2 import AcwScV2Solver
 from .providers.akamai_bm import AkamaiBmSolver
+from .providers.arkose import ArkoseSolver
 from .providers.pingoo import PingooSolver
 from .providers.vercel_botid import VercelBotIdSolver
 from .providers.browser import BrowserAutomation
@@ -100,6 +102,7 @@ class AntibotClient:
         self.basedflare = BasedFlareSolver()
         self.acwscv2 = AcwScV2Solver()
         self.akamai_bm = AkamaiBmSolver()
+        self.arkose = ArkoseSolver()
         self.pingoo = PingooSolver()
         self.vercel_botid = VercelBotIdSolver()
         self.fcaptcha = FCaptchaSolver()
@@ -221,6 +224,9 @@ class AntibotClient:
 
     async def solve_akamai_bm(self, **kwargs: Any) -> CaptchaResult:
         return await self.akamai_bm.solve(**kwargs)
+
+    async def solve_arkose(self, **kwargs: Any) -> CaptchaResult:
+        return await self.arkose.solve(**kwargs)
 
     async def solve_pingoo(self, **kwargs: Any) -> CaptchaResult:
         return await self.pingoo.solve(**kwargs)
@@ -937,6 +943,38 @@ class AntibotClient:
             }
             akamai_kwargs.setdefault("page_url", target_url)
             return await self.solve_akamai_bm(**akamai_kwargs)
+        if provider == "arkose":
+            arkose_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "pkey",
+                    "surl",
+                    "site",
+                    "user_agent",
+                    "language",
+                    "data",
+                    "data_json",
+                    "bda",
+                    "token_response_json",
+                    "submit",
+                    "timeout_sec",
+                    "headers",
+                    "proxy",
+                    "now",
+                    "salt",
+                    "output_dir",
+                }
+                and v is not None
+            }
+            parsed = urlsplit(target_url)
+            if not arkose_kwargs.get("pkey") and "/public_key/" in parsed.path:
+                arkose_kwargs["pkey"] = parsed.path.rsplit("/public_key/", 1)[-1].split("/", 1)[0]
+            if not arkose_kwargs.get("surl") and parsed.scheme and parsed.netloc:
+                arkose_kwargs["surl"] = f"{parsed.scheme}://{parsed.netloc}"
+            arkose_kwargs.setdefault("site", target_url)
+            return await self.solve_arkose(**arkose_kwargs)
         if provider == "vercel_botid":
             botid_kwargs = {
                 k: v

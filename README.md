@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / go-away js-pow-sha256 / GuardianWAF unsigned JS PoW / SHAPOW Nginx PoW / Anubis PoW / Auro AES-GCM 行为 PoW / AWS WAF encrypted telemetry PoW / Wargon2 Argon2id fingerprint PoW / balooProxy JS suffix cookie / BasedFlare HAProxy PoW / Aliyun acw_sc__v2 JS Cookie / Pingoo JWT PoW / Akamai BM sensor experimental / Vercel BotID X-Is-Human / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / NeoIRC resource/body-bound Hashcash / Hashptcha prefix hash-cracking task / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / php-anti-ddos stateless HMAC multi-PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / go-away js-pow-sha256 / GuardianWAF unsigned JS PoW / SHAPOW Nginx PoW / Anubis PoW / Auro AES-GCM 行为 PoW / AWS WAF encrypted telemetry PoW / Wargon2 Argon2id fingerprint PoW / balooProxy JS suffix cookie / BasedFlare HAProxy PoW / Aliyun acw_sc__v2 JS Cookie / Pingoo JWT PoW / Akamai BM sensor experimental / Arkose FunCaptcha BDA token primitive / Vercel BotID X-Is-Human / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / NeoIRC resource/body-bound Hashcash / Hashptcha prefix hash-cracking task / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / php-anti-ddos stateless HMAC multi-PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -28,6 +28,7 @@
 - Aliyun / acw_sc__v2：新增阿里云/加速乐类 JS cookie challenge solver，解析 `arg1`、混淆 string table、RC4 key 与 40 位 shuffle，本地生成 `acw_sc__v2` clearance cookie，可带 cookie 重试原页面；不启动浏览器。
 - Pingoo Captcha：新增反向代理 JWT challenge cookie + SHA-256 前缀 PoW solver，GET `/__pingoo/captcha/api/init` 领取 challenge，POST `/__pingoo/captcha/api/verify` 换 `__pingoo_captcha_verified` cookie；不启动浏览器。
 - Akamai Bot Manager：新增 experimental sensor primitive，提取 `bm_sz` 末尾 transform keys，复现 LCG string shift / shuffle，支持 minimal v3-style `sensor_data` encode/decode、`/_bm/_data` mock submit，并解析 `_abck` 的 `mn_*` SHA-256 modulo PoW 生成 `mn_r`；不启动浏览器，不宣称完整 `_abck` 绕过。
+- Arkose / FunCaptcha：新增 experimental BDA/token primitive，复现 public_key 初始化链路中的 browser data array、FingerprintJS x64 MurmurHash128、AES-256-CBC 加密与 `/fc/gt2/public_key/{pkey}` 表单提交，可解析 token/session/sup 状态；不做视觉游戏自动答题，不宣称完整 FunCaptcha 绕过。
 - Vercel BotID：升级 `X-Is-Human` header solver，从 BotID 脚本/JSON context 提取 key、seed、signature、version，合成低风险 fingerprint，复现 PBKDF2-SHA256 + AES-256-GCM；raw 混淆 `c.js` 可走 Node VM 最小浏览器环境补全并执行 `V_C` callback，可选提交 `X-Is-Human/X-Path/X-Method` 验证闭环，不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
 - powCAPTCHA：新增 widget 协议 solver，合成 fingerprint/signals 调 `/challenges/create`，复现 `SHA256(signature+problem+nonce)` 多 problem 前导零 PoW，输出 `powcaptcha-response` token，不启动浏览器。
@@ -98,6 +99,7 @@
 | Aliyun / acw_sc__v2 JS Cookie | 协议 solver | `aliyun_acw_sc_v2_js_cookie` | alpha | `acw_sc__v2` cookie |
 | Pingoo Captcha | 协议 solver | `jwt_cookie_sha256_pow` | alpha | `__pingoo_captcha_verified` cookie / verify body |
 | Akamai Bot Manager | 协议 primitive | `akamai_bm_sensor_experimental` | experimental | `sensor_data` / `mn_r` / `_abck` Set-Cookie |
+| Arkose / FunCaptcha | 协议 primitive | `arkose_funcaptcha_bda_token` | experimental | encrypted BDA / session token primitive |
 | Vercel BotID / X-Is-Human | 协议 solver | `x_is_human_aes_gcm_fingerprint` | prototype | `X-Is-Human` header JSON / submitted response |
 | Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
 | Auro.Network | 协议 solver | `encrypted_behavior_pow` | alpha | validate body / Auro token |
@@ -1059,7 +1061,7 @@ antibot stress guardianwaf \
 
 ---
 
-### AWS WAF Challenge / Wargon2 / balooProxy / BasedFlare / acw_sc__v2 / Pingoo / Akamai BM / Vercel BotID
+### AWS WAF Challenge / Wargon2 / balooProxy / BasedFlare / acw_sc__v2 / Pingoo / Akamai BM / Arkose / Vercel BotID
 
 这一组是本轮新增的协议层/内存硬化方向，定位是“能离线证明核心算法 + 本地 mock 可闭环”，不启动浏览器。
 
@@ -1070,6 +1072,7 @@ antibot stress guardianwaf \
 - `acwscv2`：复现阿里云/加速乐类 `acw_sc__v2` JS cookie challenge：从 HTML 中解析 `arg1`、`_0x4818` string table、rotation、`_0x55f3(index,key)` RC4 key 与 40 位 shuffle，计算 `hex_xor(unbox(arg1), xor_key)` 得到 `acw_sc__v2`，可带 cookie 重试 protected page。
 - `pingoo`：复现 pingooio/pingoo 的 CAPTCHA flow：`/__pingoo/captcha/api/init` 返回 challenge 和 `__pingoo_captcha` EdDSA JWT cookie，客户端计算 `SHA256(challenge + nonce)` 十六进制前缀零，`POST /__pingoo/captcha/api/verify` 后拿 `__pingoo_captcha_verified` JWT cookie。该 token 由服务端签名并绑定 IP/User-Agent/Host，SDK 走协议提交而不是伪造签名。
 - `akamai_bm`：experimental provider，只落地 Akamai Bot Manager 的可验证底层原语：从 `bm_sz` 或 Cookie header 提取末尾两个 integer keys，复现 `abck-tools` LCG alphabet shift 和 sensor field shuffle，可构造 minimal v3-style `sensor_data` JSON envelope，并能 POST 到 `/_bm/_data` mock/受控接口；支持 `/_bm/get_params` 的 `k/t/e/a` 状态解析/拉取并注入 sensor，solver 会复用同一个 HTTP session，把 get_params 下发的 cookie 带到后续 `/_bm/_data`，且 `--submit` 未传 `--submit-url` 时可由 `--page-url` 或绝对 `--get-params-url` 自动推导 origin 根路径的 `/_bm/_data`；新增 `_abck` 第 5 段里 `mn_*` challenge 的解析与 SHA-256 byte-wise modulo PoW 求解，输出可嵌入 sensor 的 `mn_r`。它不是完整 Akamai bypass，真实 `_abck` 状态、动态 `bmak`/VM extractor、TLS/HTTP2 指纹仍是后续攻坚点。
+- `arkose`：experimental provider，只落地 Arkose/FunCaptcha 的 token 初始化 primitive：构造 `bda` browser data array，复现 FingerprintJS x64 MurmurHash128、OpenSSL EVP_BytesToKey 风格 AES-256-CBC 加密、base64 包装和 `/fc/gt2/public_key/{pkey}` 表单提交，解析返回 token 中的 session id、public key、analytics tier 与 `sup=1` 状态。它不是完整 FunCaptcha 绕过，不自动解 3D/图片/语义游戏，也不伪造业务后端下发的 blob。
 - `vercel_botid`：复现 Vercel BotID `X-Is-Human` header 的核心生成链：解析 BotID 脚本或 JSON context 中的 `key/seed/b/d/v/e/vr`，合成 `p/S/w/s/h/b/d` fingerprint，使用 `PBKDF2-SHA256(key,salt,100000)` 派生 AES-256-GCM key，加密 fingerprint 后输出 header JSON；对 raw/obfuscated `c.js` 新增 `--raw-vm`，用 Node `vm` 补最小 `window/document/WebGL/WebCrypto/navigator` 环境并执行 `V_C` callback，避免启动真实浏览器。新增 `--submit-url/--x-path/--x-method` 协议提交闭环，会把生成的 `X-Is-Human` 连同路由 header 发给受保护接口，并用 HTTP 状态、阻断 marker、可选 `--success-contains` 判断是否通过。
 
 命令示例：
@@ -1115,6 +1118,19 @@ antibot solve akamai_bm \
   --abck '89E9305CB44AD0606B67BE2A31F9367C~-1~YAAQfixture~-1~||1-jaHBmBrjqk-2-10-1000-2||~-1' \
   --solve-mn \
   --mn-rounds 10 \
+  --raw
+
+antibot solve arkose \
+  --pkey 476068BF-9607-4799-B53D-966BE98E2B81 \
+  --surl https://client-api.arkoselabs.com \
+  --site https://target.example/login \
+  --raw
+
+antibot solve arkose \
+  --pkey 476068BF-9607-4799-B53D-966BE98E2B81 \
+  --surl https://client-api.arkoselabs.com \
+  --data-json '{"blob":"business-issued-blob"}' \
+  --submit \
   --raw
 
 antibot solve vercel_botid \

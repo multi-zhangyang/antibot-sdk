@@ -151,6 +151,11 @@ def detect_provider_for_url(url: str | None) -> str:
         return "basedflare"
     if any(x in u or x in host for x in ("pingoo", "__pingoo/captcha", "__pingoo_captcha", "__pingoo_captcha_verified")):
         return "pingoo"
+    if any(
+        x in u or x in host
+        for x in ("arkoselabs", "funcaptcha", "/fc/gt2/public_key/", "/fc/gfct/", "fc-token")
+    ):
+        return "arkose"
     if any(x in u or x in host for x in ("vercel-botid", "botid", "x-is-human", "/_vercel/botid", "/botid/")):
         return "vercel_botid"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
@@ -759,6 +764,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "synthetic-behavior-telemetry-plus-sha256-exact-pow-solver",
                 "successFields": ["captcha payload", "verified result"],
                 "endpoints": ["/api/captcha/challenge", "/api/captcha/verify"],
+            }
+        },
+        "arkose": {
+            "bda_token_primitive": {
+                "patterns": ["arkoselabs", "funcaptcha", "/fc/gt2/public_key/", "/fc/gfct/", "fc-token"],
+                "mode": "encrypted-browser-data-array-token-init-primitive",
+                "successFields": ["encrypted bda", "token", "session id", "sup=1"],
+                "endpoints": ["POST /fc/gt2/public_key/{pkey}", "POST /fc/gfct/"],
             }
         },
         "silentchallenge": {
