@@ -203,6 +203,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "JS signal request / datadome cookie primitive",
         "scope": "DataDome experimental：用 Node VM 补最小浏览器环境执行 tags.js，捕获 /js/ 信号请求、datadome cookie 写入，可选 replay 到受控 endpoint 验证 Set-Cookie/x-set-cookie；不启动浏览器，不宣称完整 DataDome 绕过。",
     },
+    "perimeterx": {
+        "provider": "perimeterx",
+        "name": "PerimeterX / HUMAN PX",
+        "category": "solver",
+        "captcha_type": "perimeterx_px_sensor_experimental",
+        "status": "experimental",
+        "output": "PX collector request / _px cookies primitive",
+        "scope": "PerimeterX/HUMAN PX experimental：用 Node VM 补最小浏览器环境执行 px.js/collector 脚本，捕获 /api/v*/collector、fetch/XHR/beacon/image 请求与 _px/_px2/_px3/_pxvid cookie；可选 replay 到受控 endpoint 验证 Set-Cookie；不启动浏览器，不宣称完整 PX 绕过。",
+    },
     "vercel_botid": {
         "provider": "vercel_botid",
         "name": "Vercel BotID / X-Is-Human",

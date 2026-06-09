@@ -20,6 +20,7 @@ from .providers.akamai_bm import AkamaiBmSolver
 from .providers.arkose import ArkoseSolver
 from .providers.datadome import DataDomeSolver
 from .providers.kasada_kpsdk import KasadaKpsdkSolver
+from .providers.perimeterx import PerimeterXSolver
 from .providers.pingoo import PingooSolver
 from .providers.vercel_botid import VercelBotIdSolver
 from .providers.browser import BrowserAutomation
@@ -107,6 +108,7 @@ class AntibotClient:
         self.arkose = ArkoseSolver()
         self.datadome = DataDomeSolver()
         self.kasada_kpsdk = KasadaKpsdkSolver()
+        self.perimeterx = PerimeterXSolver()
         self.pingoo = PingooSolver()
         self.vercel_botid = VercelBotIdSolver()
         self.fcaptcha = FCaptchaSolver()
@@ -237,6 +239,9 @@ class AntibotClient:
 
     async def solve_kasada_kpsdk(self, **kwargs: Any) -> CaptchaResult:
         return await self.kasada_kpsdk.solve(**kwargs)
+
+    async def solve_perimeterx(self, **kwargs: Any) -> CaptchaResult:
+        return await self.perimeterx.solve(**kwargs)
 
     async def solve_pingoo(self, **kwargs: Any) -> CaptchaResult:
         return await self.pingoo.solve(**kwargs)
@@ -1054,6 +1059,41 @@ class AntibotClient:
             kasada_kwargs.setdefault("allow_network", True)
             kasada_kwargs.setdefault("page_url", target_url)
             return await self.solve_kasada_kpsdk(**kasada_kwargs)
+        if provider == "perimeterx":
+            perimeterx_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "script_js",
+                    "script_file",
+                    "script_url",
+                    "allow_network",
+                    "page_url",
+                    "collector_url",
+                    "cookie",
+                    "config",
+                    "config_json",
+                    "config_file",
+                    "profile",
+                    "profile_json",
+                    "profile_file",
+                    "submit",
+                    "submit_url",
+                    "success_contains",
+                    "node",
+                    "timeout_sec",
+                    "settle_ms",
+                    "proxy_server",
+                    "headers",
+                    "output_dir",
+                }
+                and v is not None
+            }
+            perimeterx_kwargs.setdefault("script_url", target_url)
+            perimeterx_kwargs.setdefault("allow_network", True)
+            perimeterx_kwargs.setdefault("page_url", target_url)
+            return await self.solve_perimeterx(**perimeterx_kwargs)
         if provider == "vercel_botid":
             botid_kwargs = {
                 k: v

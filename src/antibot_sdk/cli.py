@@ -162,6 +162,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "arkose",
             "datadome",
             "kasada_kpsdk",
+            "perimeterx",
             "vercel_botid",
             "aliyun",
             "tencent",
@@ -608,6 +609,30 @@ async def amain(argv: list[str] | None = None) -> int:
     kas.add_argument("--proxy")
     kas.add_argument("--output-dir")
     kas.add_argument("--raw", action="store_true")
+
+    px = solve_sub.add_parser("perimeterx")
+    px_source = px.add_mutually_exclusive_group(required=True)
+    px_source.add_argument("--script-js", help="inline PerimeterX/HUMAN PX script, or @/path")
+    px_source.add_argument("--script-file")
+    px_source.add_argument("--script-url")
+    px.add_argument("--allow-network", action="store_true", help="allow fetching --script-url")
+    px.add_argument("--page-url", default="https://example.test/")
+    px.add_argument("--collector-url", help="PX collector endpoint hint/override used inside the VM")
+    px.add_argument("--cookie", help="initial Cookie header or _px cookie value")
+    px.add_argument("--config-json", help="PX config JSON object, or @/path")
+    px.add_argument("--config-file")
+    px.add_argument("--profile-json", help="VM browser profile JSON object, or @/path")
+    px.add_argument("--profile-file")
+    px.add_argument("--submit", action="store_true", help="replay captured PX request to --submit-url or captured URL")
+    px.add_argument("--submit-url")
+    px.add_argument("--success-contains")
+    px.add_argument("--header", action="append", default=[], help="script fetch / submit header KEY=VALUE")
+    px.add_argument("--node", help="node executable")
+    px.add_argument("--settle-ms", type=int, default=100)
+    px.add_argument("--timeout", type=int, default=10)
+    px.add_argument("--proxy")
+    px.add_argument("--output-dir")
+    px.add_argument("--raw", action="store_true")
 
     botid = solve_sub.add_parser("vercel_botid")
     botid_source = botid.add_mutually_exclusive_group(required=True)
@@ -2039,6 +2064,33 @@ async def amain(argv: list[str] | None = None) -> int:
     skas.add_argument("--output-json")
     skas.add_argument("--full", action="store_true")
 
+    spx = stress_sub.add_parser("perimeterx")
+    spx_source = spx.add_mutually_exclusive_group(required=True)
+    spx_source.add_argument("--script-js")
+    spx_source.add_argument("--script-file")
+    spx_source.add_argument("--script-url")
+    spx.add_argument("--allow-network", action="store_true")
+    spx.add_argument("--page-url", default="https://example.test/")
+    spx.add_argument("--collector-url")
+    spx.add_argument("--cookie")
+    spx.add_argument("--config-json")
+    spx.add_argument("--config-file")
+    spx.add_argument("--profile-json")
+    spx.add_argument("--profile-file")
+    spx.add_argument("--submit", action="store_true")
+    spx.add_argument("--submit-url")
+    spx.add_argument("--success-contains")
+    spx.add_argument("--header", action="append", default=[])
+    spx.add_argument("--node")
+    spx.add_argument("--settle-ms", type=int, default=100)
+    spx.add_argument("--runs", type=int, default=10)
+    spx.add_argument("--concurrency", type=int, default=2)
+    spx.add_argument("--timeout", type=int, default=10)
+    spx.add_argument("--proxy")
+    spx.add_argument("--output-dir")
+    spx.add_argument("--output-json")
+    spx.add_argument("--full", action="store_true")
+
     sbotid = stress_sub.add_parser("vercel_botid")
     sbotid_source = sbotid.add_mutually_exclusive_group(required=True)
     sbotid_source.add_argument("--script-js")
@@ -3254,6 +3306,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "pingoo",
             "datadome",
             "kasada_kpsdk",
+            "perimeterx",
             "vercel_botid",
         ):
             common.update({
@@ -3721,6 +3774,35 @@ async def amain(argv: list[str] | None = None) -> int:
             timeout_sec=args.timeout,
             settle_ms=args.settle_ms,
             proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "perimeterx":
+        perimeterx_headers = _kv(args.header)
+        ret = await client.solve_perimeterx(
+            script_js=args.script_js,
+            script_file=args.script_file,
+            script_url=args.script_url,
+            allow_network=args.allow_network,
+            page_url=args.page_url,
+            collector_url=args.collector_url,
+            cookie=args.cookie,
+            config_json=args.config_json,
+            config_file=args.config_file,
+            profile=(
+                _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
+                if args.profile_file
+                else _json_arg(args.profile_json)
+            ),
+            submit=args.submit,
+            submit_url=args.submit_url,
+            success_contains=args.success_contains,
+            node=args.node,
+            timeout_sec=args.timeout,
+            settle_ms=args.settle_ms,
+            proxy_server=args.proxy,
+            headers=perimeterx_headers,
             output_dir=args.output_dir,
         )
         emit(ret, include_raw=args.raw)
@@ -5410,6 +5492,44 @@ async def amain(argv: list[str] | None = None) -> int:
                 timeout_sec=args.timeout,
                 settle_ms=args.settle_ms,
                 proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+
+    if args.cmd == "stress" and args.provider == "perimeterx":
+        perimeterx_headers = _kv(args.header)
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="perimeterx",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_perimeterx(
+                script_js=args.script_js,
+                script_file=args.script_file,
+                script_url=args.script_url,
+                allow_network=args.allow_network,
+                page_url=args.page_url,
+                collector_url=args.collector_url,
+                cookie=args.cookie,
+                config_json=args.config_json,
+                config_file=args.config_file,
+                profile=(
+                    _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
+                    if args.profile_file
+                    else _json_arg(args.profile_json)
+                ),
+                submit=args.submit,
+                submit_url=args.submit_url,
+                success_contains=args.success_contains,
+                node=args.node,
+                timeout_sec=args.timeout,
+                settle_ms=args.settle_ms,
+                proxy_server=args.proxy,
+                headers=perimeterx_headers,
                 output_dir=str(root / f"run_{i}") if root else None,
             ),
         )

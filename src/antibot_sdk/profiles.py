@@ -167,6 +167,11 @@ def detect_provider_for_url(url: str | None) -> str:
         return "kasada_kpsdk"
     if any(x in u or x in host for x in ("datadome", "api-js.datadome.co", "dd_cookie", "ddjskey")):
         return "datadome"
+    if any(
+        x in u or x in host
+        for x in ("perimeterx", "px-cloud", "_px3", "_pxvid", "px_app_id", "/api/v2/collector", "/api/v1/collector")
+    ):
+        return "perimeterx"
     if any(x in u or x in host for x in ("vercel-botid", "botid", "x-is-human", "/_vercel/botid", "/botid/")):
         return "vercel_botid"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
@@ -455,6 +460,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "browserless-node-vm-js-tag-signal-capture",
                 "successFields": ["JS signal body", "datadome cookie", "x-set-cookie"],
                 "endpoints": ["GET tags.js when explicitly allowed", "POST /js/"],
+            }
+        },
+        "perimeterx": {
+            "perimeterx_px_sensor_experimental": {
+                "patterns": ["PerimeterX", "HUMAN PX", "px-cloud.net", "_px3", "_pxvid", "/api/v2/collector"],
+                "mode": "browserless-node-vm-px-collector-capture",
+                "successFields": ["PX collector body", "_px/_px2/_px3/_pxvid cookies"],
+                "endpoints": ["GET px.js when explicitly allowed", "POST /api/v*/collector"],
             }
         },
         "acwscv2": {

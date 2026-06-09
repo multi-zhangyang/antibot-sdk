@@ -256,6 +256,15 @@ from .providers.acwscv2 import (
     unbox as acwscv2_unbox,
     verify_acwscv2_solution,
 )
+from .providers.perimeterx import (
+    PerimeterXCookie,
+    PerimeterXSolver,
+    extract_perimeterx_sdk_urls,
+    extract_px_requests,
+    parse_px_cookies,
+    parse_px_response,
+    run_perimeterx_px_vm,
+)
 from .providers.pingoo import (
     CHALLENGE_COOKIE as PINGOO_CHALLENGE_COOKIE,
     VERIFIED_COOKIE as PINGOO_VERIFIED_COOKIE,
@@ -913,6 +922,8 @@ __all__ = [
     "DataDomeCookie",
     "DataDomeSolver",
     "KasadaKpsdkSolver",
+    "PerimeterXCookie",
+    "PerimeterXSolver",
     "VercelBotIdScriptContext",
     "VercelBotIdSolution",
     "VercelBotIdSolver",
@@ -1133,6 +1144,11 @@ __all__ = [
     "extract_kpsdk_headers",
     "parse_kpsdk_done_messages",
     "run_kasada_kpsdk_vm",
+    "extract_perimeterx_sdk_urls",
+    "extract_px_requests",
+    "parse_px_cookies",
+    "parse_px_response",
+    "run_perimeterx_px_vm",
     "build_botid_fingerprint",
     "chpiopow_hash_bytes",
     "decrypt_auro_mouse_data",

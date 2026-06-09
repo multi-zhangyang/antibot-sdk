@@ -50,6 +50,7 @@ artifacts = [
   "src/antibot_sdk/vendor/aliyun/src/**/*.js",
   "src/antibot_sdk/vendor/datadome/**/*.mjs",
   "src/antibot_sdk/vendor/kasada_kpsdk/**/*.mjs",
+  "src/antibot_sdk/vendor/perimeterx/**/*.mjs",
   "src/antibot_sdk/vendor/vercel_botid/**/*.mjs",
   "src/antibot_sdk/vendor/tencent/upstream/**",
 ]

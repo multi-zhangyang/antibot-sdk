@@ -42,6 +42,8 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://target.example/kpsdk/ips.js") == "kasada_kpsdk"
     assert detect_provider_for_url("https://js.datadome.co/tags.js") == "datadome"
     assert detect_provider_for_url("https://api-js.datadome.co/js/") == "datadome"
+    assert detect_provider_for_url("https://client.px-cloud.net/PXFIXTURE/main.min.js") == "perimeterx"
+    assert detect_provider_for_url("https://collector.example/api/v2/collector") == "perimeterx"
     assert detect_provider_for_url("https://example.com/_vercel/botid/c.js?i=0&v=3") == "vercel_botid"
     assert detect_provider_for_url("https://captcha.example/crypto-puzzle/challenge") == "cryptopuzzle"
     assert detect_provider_for_url("https://captcha.example/challenge/simp") == "captxa"

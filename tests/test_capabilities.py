@@ -33,6 +33,7 @@ def test_capability_matrix_product_boundary() -> None:
         "akamai_bm",
         "arkose",
         "datadome",
+        "perimeterx",
         "kasada_kpsdk",
         "vercel_botid",
         "fcaptcha",
@@ -100,6 +101,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["akamai_bm"]["captcha_type"] == "akamai_bm_sensor_experimental"
     assert solvers["arkose"]["captcha_type"] == "arkose_funcaptcha_bda_token"
     assert solvers["datadome"]["captcha_type"] == "datadome_js_tag_signals_experimental"
+    assert solvers["perimeterx"]["captcha_type"] == "perimeterx_px_sensor_experimental"
     assert solvers["kasada_kpsdk"]["captcha_type"] == "kasada_kpsdk_headers_experimental"
     assert solvers["vercel_botid"]["captcha_type"] == "x_is_human_aes_gcm_fingerprint"
     assert solvers["fcaptcha"]["captcha_type"] == "signals_bound_pow"
@@ -207,6 +209,12 @@ def test_new_protocol_solvers_are_top_level_sdk_exports() -> None:
     assert antibot_sdk.extract_datadome_sdk_urls
     assert antibot_sdk.parse_datadome_cookie
     assert antibot_sdk.parse_datadome_response
+    assert antibot_sdk.PerimeterXSolver
+    assert antibot_sdk.run_perimeterx_px_vm
+    assert antibot_sdk.extract_px_requests
+    assert antibot_sdk.extract_perimeterx_sdk_urls
+    assert antibot_sdk.parse_px_cookies
+    assert antibot_sdk.parse_px_response
     assert antibot_sdk.KasadaKpsdkSolver
     assert antibot_sdk.run_kasada_kpsdk_vm
     assert antibot_sdk.extract_kasada_sdk_urls
