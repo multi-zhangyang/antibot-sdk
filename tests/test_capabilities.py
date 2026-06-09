@@ -50,6 +50,7 @@ def test_capability_matrix_product_boundary() -> None:
         "hashptcha",
         "paulpow",
         "pcaptcha",
+        "phpantiddos",
         "powcaptcha",
         "powbot",
         "powchallenge",
@@ -104,6 +105,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["hashptcha"]["captcha_type"] == "prefix_hash_cracking_task"
     assert solvers["paulpow"]["captcha_type"] == "bcrypt_pow"
     assert solvers["pcaptcha"]["captcha_type"] == "quadratic_residue_pow"
+    assert solvers["phpantiddos"]["captcha_type"] == "stateless_hmac_multi_pow_cookie"
     assert solvers["powcaptcha"]["captcha_type"] == "buffer_reconstruction_pow"
     assert solvers["powbot"]["captcha_type"] == "scrypt_pow"
     assert solvers["powchallenge"]["captcha_type"] == "argon2id_memory_pow"

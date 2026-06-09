@@ -39,6 +39,7 @@ from .providers.mcaptcha import MCaptchaSolver
 from .providers.neoirc import NeoIrcSolver
 from .providers.paulpow import PaulPowSolver
 from .providers.pcaptcha import PCaptchaSolver
+from .providers.phpantiddos import PhpAntiDdosSolver
 from .providers.powcaptcha import PowCaptchaSolver
 from .providers.powbot import PowBotSolver
 from .providers.powchallenge import PowChallengeSolver
@@ -97,6 +98,7 @@ class AntibotClient:
         self.neoirc = NeoIrcSolver()
         self.paulpow = PaulPowSolver()
         self.pcaptcha = PCaptchaSolver()
+        self.phpantiddos = PhpAntiDdosSolver()
         self.powcaptcha = PowCaptchaSolver()
         self.powbot = PowBotSolver()
         self.powchallenge = PowChallengeSolver()
@@ -219,6 +221,9 @@ class AntibotClient:
 
     async def solve_pcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.pcaptcha.solve(**kwargs)
+
+    async def solve_phpantiddos(self, **kwargs: Any) -> CaptchaResult:
+        return await self.phpantiddos.solve(**kwargs)
 
     async def solve_powcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.powcaptcha.solve(**kwargs)
@@ -1466,6 +1471,37 @@ class AntibotClient:
             }
             pc_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_pcaptcha(**pc_kwargs)
+        if provider == "phpantiddos":
+            pad_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_html",
+                    "challenge_url",
+                    "submit_url",
+                    "submit",
+                    "secret",
+                    "fingerprint",
+                    "client_ip",
+                    "user_agent",
+                    "host",
+                    "cookie_ttl",
+                    "challenge_ttl",
+                    "max_attempts_per_subchallenge",
+                    "workers",
+                    "offset_step",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            pad_kwargs.setdefault("challenge_url", target_url)
+            return await self.solve_phpantiddos(**pad_kwargs)
         if provider == "powcaptcha":
             pow_kwargs = {
                 k: v

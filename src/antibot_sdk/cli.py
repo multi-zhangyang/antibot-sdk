@@ -165,6 +165,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "hashptcha",
             "paulpow",
             "pcaptcha",
+            "phpantiddos",
             "powcaptcha",
             "powbot",
             "powchallenge",
@@ -971,6 +972,29 @@ async def amain(argv: list[str] | None = None) -> int:
     pc.add_argument("--proxy")
     pc.add_argument("--output-dir")
     pc.add_argument("--raw", action="store_true")
+
+    pad = solve_sub.add_parser("phpantiddos")
+    pad_source = pad.add_mutually_exclusive_group(required=True)
+    pad_source.add_argument("--challenge-json", help="inline {challenge,ts,sub_count,sub_difficulty,sig} JSON, or @/path")
+    pad_source.add_argument("--challenge-file")
+    pad_source.add_argument("--challenge-html", help="php-anti-ddos challenge HTML or @/path")
+    pad_source.add_argument("--challenge-url", help="protected URL returning the PoW challenge page")
+    pad.add_argument("--submit-url", help="POST form endpoint; defaults to parsed form action/page URL")
+    pad.add_argument("--submit", action="store_true")
+    pad.add_argument("--secret", help="optional POW_SECRET for local HMAC/cookie verification")
+    pad.add_argument("--fingerprint", help="explicit sha256(IP|UA) fingerprint for local signature checks")
+    pad.add_argument("--client-ip", help="client IP used to derive fingerprint when --secret is used")
+    pad.add_argument("--user-agent")
+    pad.add_argument("--host", help="host used for local cookie generation")
+    pad.add_argument("--cookie-ttl", type=int, default=1800)
+    pad.add_argument("--challenge-ttl", type=int)
+    pad.add_argument("--max-attempts-per-subchallenge", type=int, default=5_000_000)
+    pad.add_argument("--workers", type=int, default=1)
+    pad.add_argument("--offset-step", type=int, default=1 << 40)
+    pad.add_argument("--timeout", type=int, default=20)
+    pad.add_argument("--proxy")
+    pad.add_argument("--output-dir")
+    pad.add_argument("--raw", action="store_true")
 
     powc = solve_sub.add_parser("powcaptcha")
     powc_source = powc.add_mutually_exclusive_group(required=True)
@@ -2169,6 +2193,32 @@ async def amain(argv: list[str] | None = None) -> int:
     spc.add_argument("--output-json")
     spc.add_argument("--full", action="store_true")
 
+    spad = stress_sub.add_parser("phpantiddos")
+    spad_source = spad.add_mutually_exclusive_group(required=True)
+    spad_source.add_argument("--challenge-json")
+    spad_source.add_argument("--challenge-file")
+    spad_source.add_argument("--challenge-html")
+    spad_source.add_argument("--challenge-url")
+    spad.add_argument("--submit-url")
+    spad.add_argument("--submit", action="store_true")
+    spad.add_argument("--secret")
+    spad.add_argument("--fingerprint")
+    spad.add_argument("--client-ip")
+    spad.add_argument("--user-agent")
+    spad.add_argument("--host")
+    spad.add_argument("--cookie-ttl", type=int, default=1800)
+    spad.add_argument("--challenge-ttl", type=int)
+    spad.add_argument("--max-attempts-per-subchallenge", type=int, default=5_000_000)
+    spad.add_argument("--workers", type=int, default=1)
+    spad.add_argument("--offset-step", type=int, default=1 << 40)
+    spad.add_argument("--runs", type=int, default=10)
+    spad.add_argument("--concurrency", type=int, default=2)
+    spad.add_argument("--timeout", type=int, default=20)
+    spad.add_argument("--proxy")
+    spad.add_argument("--output-dir")
+    spad.add_argument("--output-json")
+    spad.add_argument("--full", action="store_true")
+
     spow = stress_sub.add_parser("powcaptcha")
     spow_source = spow.add_mutually_exclusive_group(required=True)
     spow_source.add_argument("--challenge-url")
@@ -2638,6 +2688,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "hashptcha",
             "paulpow",
             "pcaptcha",
+            "phpantiddos",
             "powcaptcha",
             "powbot",
             "powchallenge",
@@ -3508,6 +3559,30 @@ async def amain(argv: list[str] | None = None) -> int:
             challenge_id=args.challenge_id,
             validate_url=args.validate_url,
             validate=args.validate,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "phpantiddos":
+        ret = await client.solve_phpantiddos(
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_html=args.challenge_html,
+            challenge_url=args.challenge_url,
+            submit_url=args.submit_url,
+            submit=args.submit,
+            secret=args.secret,
+            fingerprint=args.fingerprint,
+            client_ip=args.client_ip,
+            user_agent=args.user_agent,
+            host=args.host,
+            cookie_ttl=args.cookie_ttl,
+            challenge_ttl=args.challenge_ttl,
+            max_attempts_per_subchallenge=args.max_attempts_per_subchallenge,
+            workers=args.workers,
+            offset_step=args.offset_step,
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
@@ -5009,6 +5084,38 @@ async def amain(argv: list[str] | None = None) -> int:
                 challenge_url=args.challenge_url,
                 validate_url=args.validate_url,
                 validate=args.validate,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "phpantiddos":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="phpantiddos",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_phpantiddos(
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_html=args.challenge_html,
+                challenge_url=args.challenge_url,
+                submit_url=args.submit_url,
+                submit=args.submit,
+                secret=args.secret,
+                fingerprint=args.fingerprint,
+                client_ip=args.client_ip,
+                user_agent=args.user_agent,
+                host=args.host,
+                cookie_ttl=args.cookie_ttl,
+                challenge_ttl=args.challenge_ttl,
+                max_attempts_per_subchallenge=args.max_attempts_per_subchallenge,
+                workers=args.workers,
+                offset_step=args.offset_step,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,

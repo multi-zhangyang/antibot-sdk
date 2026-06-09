@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / go-away js-pow-sha256 / SHAPOW Nginx PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / NeoIRC resource/body-bound Hashcash / Hashptcha prefix hash-cracking task / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / go-away js-pow-sha256 / SHAPOW Nginx PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / NeoIRC resource/body-bound Hashcash / Hashptcha prefix hash-cracking task / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / php-anti-ddos stateless HMAC multi-PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -49,6 +49,7 @@
 - yourcaptcha：新增行为 signals + HMAC challenge + SHA-256 exact PoW 协议 solver，合成低风险 telemetry 获取低 `maxnumber`，搜索 `SHA256(salt+number)`，可提交 verify，不启动浏览器。
 - silent-challenge：新增 motion/navigator attestation + SHA-256 balloon memory-hard PoW 协议 solver，合成高分行为/环境 payload，搜索 balloon nonce，可提交 `/challenge/:id/verify`，不启动浏览器。
 - P-Captcha：新增 QuadraticResidueProblem 协议 solver，解析 Woodall prime challenge，用模平方根直接求 answer，可提交 `{id, answer}`，不启动浏览器。
+- php-anti-ddos：新增无 session HMAC 多子挑战 PoW gate solver，解析签名 challenge，绑定 host+SHA256(IP|UA)+N/K，复现 `SHA256(challenge:i:nonce)` 前导 bit 搜索，POST 表单换 `__pow_token`，不启动浏览器。
 - pow_captcha：新增二进制 buffer reconstruction PoW solver，解析 serialized quiz、按 uncertainty ranges 做 mixed-radix 搜索，输出命中 SHA-256 的 answer，不启动浏览器。
 - PoW Bot Deterrent：新增 scrypt-WASM PoW 协议 solver，解析 base64 JSON challenge，复现 `scrypt(nonce_bytes, preimage_bytes, N/r/p/klen)` 与尾部阈值比较，可提交 `/Verify`，不启动浏览器。
 - POWChallenge / powchallenge-server：新增 Argon2id memory-hard PoW 协议 solver，解析 `GET /challenge` 的 `req_id/challenge/difficulty`，复现 `t=1,m=19456KiB,p=1` 前导零 bit 校验，可提交 `/verify`，不启动浏览器。
@@ -112,6 +113,7 @@
 | yourcaptcha | 协议 solver | `behavior_pow` | alpha | captcha payload / verified result |
 | silent-challenge | 协议 solver | `passive_pow` | alpha | challenge verify body / signed token |
 | P-Captcha | 协议 solver | `quadratic_residue_pow` | alpha | `answer` / `{id, answer}` |
+| php-anti-ddos PoW Gate | 协议 solver | `stateless_hmac_multi_pow_cookie` | alpha | `pow_nonces` form body / `__pow_token` cookie |
 | pow_captcha | 协议 solver | `buffer_reconstruction_pow` | alpha | answer buffer / verify body |
 | PoW Bot Deterrent | 协议 solver | `scrypt_pow` | alpha | nonce / validated OK |
 | POWChallenge / powchallenge-server | 协议 solver | `argon2id_memory_pow` | alpha | verify body / validated message |
@@ -2674,6 +2676,71 @@ async with AntibotClient() as client:
 
 ---
 
+### 21.1 php-anti-ddos stateless HMAC multi-PoW gate
+
+`thblfr/php-anti-ddos` 是一个单文件 PHP L7 PoW gate。它的价值点不是单个 hashcash，而是 **无服务端 session + HMAC 签名 + IP/UA fingerprint 绑定 + 多子挑战降低方差 + 成功后 HMAC cookie**：服务端把 `challenge|ts|N|K|sha256(IP|UA)` 签名进页面，浏览器 worker 分别求 N 个子挑战，POST 回同一路径后拿 `__pow_token`。
+
+源码链路：
+
+```text
+payload = challenge + '|' + ts + '|' + N + '|' + K + '|' + sha256(client_ip + '|' + user_agent)
+sig     = HMAC-SHA256(payload, POW_SECRET)
+
+for i in range(N):
+  pass_i iff SHA256(challenge + ':' + i + ':' + nonce_i).leading_zero_bits >= K
+
+POST same URL:
+  pow_challenge, pow_ts, pow_sub_count, pow_sub_difficulty, pow_sig, pow_nonces
+
+cookie payload = host + '|' + sha256(IP|UA) + '|' + expiration
+cookie sig     = HMAC-SHA256(cookie_payload, POW_SECRET) raw bytes
+```
+
+SDK 当前做法：
+
+- 可从 challenge HTML 提取隐藏表单和 `var CHALLENGE/TS/SIG/SUB_COUNT/DIFFICULTY`；
+- 支持本地 JSON fixture、`GET protected page -> POST form` 闭环；
+- 复现多子挑战 nonce offset 策略，默认 `subIndex * 2^40`，避免 nonce 重复；
+- 支持可选 `POW_SECRET` 做签名校验和本地 cookie 生成；
+- 支持 artifact：`phpantiddos_run.json`。
+
+命令示例：
+
+```bash
+antibot solve phpantiddos \
+  --challenge-url 'https://target.example/protected' \
+  --submit \
+  --workers 4
+```
+
+离线 signed fixture：
+
+```bash
+antibot solve phpantiddos \
+  --challenge-json '{"challenge":"0123456789abcdef0123456789abcdef","ts":1700000000,"sub_count":3,"sub_difficulty":8,"sig":"362870dcaf5c05430c8fa27de2226ff35adf1a30878e28d27cd8305b9af8f52c","fingerprint":"cb3e514f671db7277045db73f1e884eafc97c440b802ef005094fafcf344e547","host":"example.test"}' \
+  --secret 'secret' \
+  --max-attempts-per-subchallenge 100000 \
+  --workers 2
+```
+
+压测：
+
+```bash
+antibot stress phpantiddos \
+  --challenge-json '{"challenge":"0123456789abcdef0123456789abcdef","ts":1700000000,"sub_count":3,"sub_difficulty":8}' \
+  --runs 10 \
+  --concurrency 2 \
+  --max-attempts-per-subchallenge 100000
+```
+
+当前定位：
+
+- 这是协议层 WAF/captcha gate solver，不是浏览器模拟。
+- 真实服务绑定 `REMOTE_ADDR + User-Agent`；使用随机出口代理时，GET challenge 与 POST form 必须保持同一出口和同一 UA，否则 HMAC fingerprint 不一致。
+- 默认 N=16/K=16 时计算量约 100 万 SHA-256，VPS 压测先降 `--concurrency`，再开 `--workers`。
+
+---
+
 ### 22. pow_captcha Buffer Reconstruction PoW
 
 pow_captcha 不是普通前导零 hashcash，而是把“正确 buffer 的 SHA-256、当前被污染 buffer、每个不确定字节的取值范围”序列化到 quiz 里。前端 `takeTest`/WASM 会按 mixed-radix 方式枚举这些不确定字节，直到 `SHA256(candidate_buffer)` 命中目标 hash。SDK 当前把这条链路复现成纯 Python 协议 solver。
@@ -3850,6 +3917,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - yourcaptcha / `/api/captcha/challenge` / `/api/captcha/verify` 相关 URL -> `yourcaptcha`
 - silent-challenge / silentchallenge / libcaptcha 相关 URL -> `silentchallenge`
 - P-Captcha / QuadraticResidueProblem 相关 URL -> `pcaptcha`
+- php-anti-ddos / `__pow_token` / `pow_challenge` / `pow_sub_difficulty` 相关 URL -> `phpantiddos`
 - pow_captcha / powcaptcha / takeTest 相关 URL -> `powcaptcha`
 - PoW Bot Deterrent / `/GetChallenges?difficultyLevel=` 相关 URL -> `powbot`
 - POWChallenge / powchallenge-server 相关 URL -> `powchallenge`
@@ -4270,6 +4338,10 @@ antibot solve pcaptcha --challenge-url 'https://target.example/api/challenge'
 antibot solve pcaptcha --challenge-url 'https://target.example/api/challenge' --validate-url 'https://target.example/api/validate' --validate
 antibot stress pcaptcha --challenge-url 'https://target.example/api/challenge' --validate-url 'https://target.example/api/validate' --validate --runs 20
 
+# php-anti-ddos
+antibot solve phpantiddos --challenge-url 'https://target.example/protected' --submit --workers 4
+antibot stress phpantiddos --challenge-json '{"challenge":"0123456789abcdef0123456789abcdef","ts":1700000000,"sub_count":3,"sub_difficulty":8}' --runs 10 --concurrency 2 --max-attempts-per-subchallenge 100000
+
 # crypto-puzzle RSW time-lock
 antibot solve cryptopuzzle --puzzle 'AAAAAgyhAAAAAQUAAAABGQAAACARERER...' --timeout 60
 antibot solve cryptopuzzle --base-url 'https://target.example/crypto-puzzle' --submit --timeout 60
@@ -4337,7 +4409,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Albireo / Powxy / go-away / SHAPOW / Anubis / FriendlyCaptcha / H33 BotShield / BOTCHA / Donatello / FCaptcha / TrustCaptcha / @strav/captcha / Cap / NeoIRC / Hashptcha / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Albireo / Powxy / go-away / SHAPOW / Anubis / FriendlyCaptcha / H33 BotShield / BOTCHA / Donatello / FCaptcha / TrustCaptcha / @strav/captcha / Cap / NeoIRC / Hashptcha / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / php-anti-ddos / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -4364,6 +4436,7 @@ swetrix_run.json
 yourcaptcha_run.json
 silentchallenge_run.json
 pcaptcha_run.json
+phpantiddos_run.json
 powcaptcha_run.json
 powbot_run.json
 powchallenge_run.json
@@ -4455,6 +4528,7 @@ src/antibot_sdk/
     yourcaptcha.py          # yourcaptcha behavioral signals + SHA-256 exact PoW protocol solver
     silentchallenge.py      # silent-challenge motion/navigator attestation + balloon PoW solver
     pcaptcha.py             # P-Captcha quadratic residue protocol solver
+    phpantiddos.py          # php-anti-ddos stateless HMAC multi-subchallenge PoW cookie solver
     powcaptcha.py           # pow_captcha buffer reconstruction PoW protocol solver
     powbot.py               # PoW Bot Deterrent scrypt-WASM PoW protocol solver
     powchallenge.py         # POWChallenge Argon2id memory-hard PoW protocol solver
@@ -4517,7 +4591,7 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 202 passed, 8 warnings
+pytest: 205 passed, 12 warnings
 ruff check src tests: passed
 uv build: success
 Vulcan fixture/html/CLI/stress: chained SHA256 uint32-target PoW，solution=1136;5242;945，4/4 stress 验证通过

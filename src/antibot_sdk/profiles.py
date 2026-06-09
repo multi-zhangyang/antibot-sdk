@@ -204,6 +204,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "paulpow"
     if any(x in u or x in host for x in ("p-captcha", "pcaptcha", "quadraticresidueproblem")):
         return "pcaptcha"
+    if any(x in u or x in host for x in ("php-anti-ddos", "phpantiddos", "__pow_token", "pow_sub_difficulty", "pow_challenge")):
+        return "phpantiddos"
     if any(x in u or x in host for x in ("pow_captcha", "powcaptcha", "taketest", "/powcaptcha/")):
         return "powcaptcha"
     if any(x in u or x in host for x in ("pow-bot-deterrent", "powbot", "/getchallenges?difficultylevel=")):
@@ -569,6 +571,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "quadratic-residue-protocol-solver",
                 "successFields": ["answer", "{id, answer}"],
                 "endpoints": ["/api/challenge", "/api/validate"],
+            }
+        },
+        "phpantiddos": {
+            "stateless_hmac_multi_pow_cookie": {
+                "patterns": ["php-anti-ddos", "__pow_token", "pow_challenge", "pow_sub_difficulty"],
+                "mode": "host-ip-ua-bound-hmac-signed-multi-subchallenge-sha256-pow-cookie-solver",
+                "successFields": ["pow_nonces", "__pow_token", "303 redirect"],
+                "endpoints": ["GET protected page", "POST same URL with pow_* form fields"],
             }
         },
         "powcaptcha": {

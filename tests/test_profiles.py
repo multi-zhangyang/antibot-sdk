@@ -60,6 +60,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://captcha.example/lapti/handshake/data") == "lapti"
     assert detect_provider_for_url("https://chat.example/api/v1/server?hashcash_bits=1") == "neoirc"
     assert detect_provider_for_url("https://captcha.example/hashptcha/get-task") == "hashptcha"
+    assert detect_provider_for_url("https://gate.example/?pow_challenge=1&pow_sub_difficulty=8") == "phpantiddos"
     assert detect_provider_for_url("https://captcha.example/paulpow/challenge?type=bcrypt_pow") == "paulpow"
     assert detect_provider_for_url("https://guns.lol/example") == "gunslol"
     assert detect_provider_for_url("https://captcha.example/page?_gs_sets=1&_2xa=1") == "gunslol"
@@ -107,6 +108,7 @@ def test_generic_provider_detection():
     assert "sha3_token_pow" in list_profiles()["lapti"]
     assert "resource_body_bound_hashcash" in list_profiles()["neoirc"]
     assert "prefix_hash_cracking_task" in list_profiles()["hashptcha"]
+    assert "stateless_hmac_multi_pow_cookie" in list_profiles()["phpantiddos"]
     assert "bcrypt_pow" in list_profiles()["paulpow"]
     assert "seal_pow_blake3" in list_profiles()["gunslol"]
     assert "botshield_pow" in list_profiles()["h33botshield"]

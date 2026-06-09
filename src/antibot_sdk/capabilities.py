@@ -356,6 +356,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "answer / validated token flow",
         "scope": "P-Captcha QuadraticResidueProblem：解析 Woodall prime challenge，用模平方根直接求 answer，可提交 {id, answer}；不启动浏览器。",
     },
+    "phpantiddos": {
+        "provider": "phpantiddos",
+        "name": "php-anti-ddos PoW Gate",
+        "category": "solver",
+        "captcha_type": "stateless_hmac_multi_pow_cookie",
+        "status": "alpha",
+        "output": "pow_nonces form body / __pow_token cookie",
+        "scope": "thblfr/php-anti-ddos L7 PoW：解析无 session 的 HMAC 签名 challenge，绑定 host+SHA256(IP|UA)+N/K，复现多子挑战 SHA256(challenge:i:nonce) 前导 bit 搜索，POST 表单换 __pow_token；不启动浏览器。",
+    },
     "powcaptcha": {
         "provider": "powcaptcha",
         "name": "pow_captcha",
