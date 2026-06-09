@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -19,6 +19,7 @@
 - FCaptcha：新增 behavior/environment signals + `signalsHash` 绑定 SHA-256 PoW 协议 solver，补齐 `meta.challengeNonce`、canonical `signalsJson` 和最小提交耗时，可提交 `/api/verify` 换 token，不启动浏览器。
 - TrustCaptcha：新增 v3 fingerprint/integrity + 多任务 PoW 协议 solver，合成 `browserInformation/fingerprints/integrityHash`，复现 worker 的 `SHA256(input||"tcn"+counter)`，提交 `/v2/verifications/{id}/challenges` 换 `tc-verification-token`，不启动浏览器。
 - @strav/captcha：新增 stateless HMAC token + hashcash PoW 协议 solver，解析公开 token payload 的 `salt/difficulty/jti`，复现 `SHA256(salt+":"+nonce)` 前导 bit 搜索，输出 middleware 可验的 `_captcha/_captcha_answer` 字段，不启动浏览器。
+- JustNoCaptcha：新增 multi-puzzle FNV/fmix PoW 协议 solver，解析 `difficulty+puzzles+challengeHash`，可选 `challengeSalt` 校验完整性，逐 puzzle 输出定长十进制 `solution`，不启动浏览器。
 - PrivateCaptcha：新增 compute puzzle 协议 solver，解析 `puzzle.signature`，复现 blake2b-256 threshold 多解 PoW 与 solutions metadata，输出 `private-captcha-solution` payload，不启动浏览器。
 - Portcullis：新增 Argon2id + SHA-256 双阶段 PoW 协议 solver，解析 signed challenge，计算内存硬化 base hash 后搜索 nonce，可提交 `/api/v1/verify` 换 `captcha_token`，不启动浏览器。
 - Cap / @cap.js：升级 SHA-256 PoW + RSW time-lock 协议 solver，支持 v1 seeded challenge、format-2 `sha256-pow` 和 `rsw`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
@@ -1923,6 +1924,53 @@ antibot stress stravcaptcha \
 
 ---
 
+### 20.4 JustNoCaptcha multi-puzzle FNV PoW
+
+JustNoCaptcha 不是图片识别类验证码，而是把一个 challenge 拆成多个 32 hex puzzle，让客户端逐个搜索定长十进制 candidate。SDK 复现浏览器端 `FNV1a + fmix` 的 `hash/hashInt`，因此可以纯协议求解，不需要 headless。
+
+关键点：
+
+```text
+challenge = difficulty + puzzlesHex + hash(difficulty+puzzlesHex+challengeSalt)
+difficulty = int(challenge[0])  # 1..7
+puzzle = 每 32 hex 一段
+candidate = first decimal in [10^(difficulty+1), 10^(difficulty+2)] where hashInt(puzzle+candidate) <= 10^(10-difficulty)
+solution = concat(candidate per puzzle)
+```
+
+SDK 当前支持：
+
+- 解析 challenge 字符串、JSON、HTML hidden input 或 challenge endpoint；
+- 可选传入 `challengeSalt` 校验 challenge 末尾 hash，避免解伪造/损坏 challenge；
+- 多 puzzle 顺序或进程池并发求解；
+- 输出 `{challenge, solution}` 或自定义 hidden field；
+- 不启动浏览器。
+
+命令示例：
+
+```bash
+antibot solve justnocaptcha \
+  --challenge-url 'https://target.example/justnocaptcha/challenge' \
+  --timeout 60
+
+antibot solve justnocaptcha \
+  --challenge-json '{"challenge":"30123456789abcdef0123456789abcdeffedcba9876543210fedcba987654321000112233445566778899aabbccddeeff75d657ca1816d8d2fdffaaf0c8ef691d","challengeSalt":"randomtestsalt"}' \
+  --timeout 5
+
+antibot stress justnocaptcha \
+  --challenge-json '{"challenge":"30123456789abcdef0123456789abcdeffedcba9876543210fedcba987654321000112233445566778899aabbccddeeff75d657ca1816d8d2fdffaaf0c8ef691d","challengeSalt":"randomtestsalt"}' \
+  --runs 20 \
+  --concurrency 4
+```
+
+当前定位：
+
+- 这是多 puzzle PoW 协议 solver；
+- challengeSalt 是服务端秘密，SDK 只在本地 fixture/已知盐场景做完整性校验，不依赖它求解；
+- replay/一次性消费由目标服务端保存 challenge 状态决定。
+
+---
+
 ### 21. P-Captcha QuadraticResidueProblem
 
 P-Captcha 比普通 hashcash 更有意思：服务端给出 Woodall prime `p` 下的一组二次剩余 `n = x² mod p`，浏览器 worker 用 Tonelli-Shanks 求模平方根并把答案串提交给服务端。SDK 当前把这条链路下沉成纯 Python 协议 solver。
@@ -2838,6 +2886,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - HashGuard / `/pow/challenges` / `/pow/verifications` 相关 URL -> `hashguard`
 - TrustCaptcha / TrustComponent / `/v2/verifications` 相关 URL -> `trustcaptcha`
 - @strav/captcha / `/__captcha/pow` / `_captcha_answer` 相关 URL -> `stravcaptcha`
+- JustNoCaptcha / just-no-captcha / `justnocaptcha_solution` 相关 URL -> `justnocaptcha`
 - mCaptcha / `/api/v1/pow/config` 相关 URL -> `mcaptcha`
 - Wicketkeeper / `/v0/challenge` 相关 URL -> `wicketkeeper`
 - yourcaptcha / `/api/captcha/challenge` / `/api/captcha/verify` 相关 URL -> `yourcaptcha`
@@ -3146,6 +3195,11 @@ antibot solve stravcaptcha --challenge-url 'https://target.example/__captcha/pow
 antibot solve stravcaptcha --challenge-json '{"token":"base64url.payload.base64url_mac","props":{"challenge":"0123456789abcdef0123456789abcdef","difficulty":12}}' --timeout 5
 antibot stress stravcaptcha --challenge-url 'https://target.example/__captcha/pow' --runs 20 --concurrency 4
 
+# JustNoCaptcha
+antibot solve justnocaptcha --challenge-url 'https://target.example/justnocaptcha/challenge'
+antibot solve justnocaptcha --challenge-json '{"challenge":"30123456789abcdef0123456789abcdeffedcba9876543210fedcba987654321000112233445566778899aabbccddeeff75d657ca1816d8d2fdffaaf0c8ef691d","challengeSalt":"randomtestsalt"}' --timeout 5
+antibot stress justnocaptcha --challenge-json '{"challenge":"30123456789abcdef0123456789abcdeffedcba9876543210fedcba987654321000112233445566778899aabbccddeeff75d657ca1816d8d2fdffaaf0c8ef691d","challengeSalt":"randomtestsalt"}' --runs 20 --concurrency 4
+
 # mCaptcha
 antibot solve mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key'
 antibot stress mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key' --runs 20
@@ -3322,6 +3376,7 @@ src/antibot_sdk/
     hashguard.py            # HashGuard target-threshold SHA-256 PoW + JWT proof-token solver
     trustcaptcha.py         # TrustCaptcha fingerprint/integrity + multi-task SHA-256 PoW solver
     stravcaptcha.py         # @strav/captcha stateless HMAC token + hashcash PoW solver
+    justnocaptcha.py        # JustNoCaptcha multi-puzzle FNV/fmix PoW protocol solver
     mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
     wicketkeeper.py         # Wicketkeeper JWT PoW protocol solver
     yourcaptcha.py          # yourcaptcha behavioral signals + SHA-256 exact PoW protocol solver
@@ -3367,6 +3422,7 @@ tests/
   test_procaptcha.py
   test_tollbooth.py
   test_hashguard.py
+  test_justnocaptcha.py
   test_yourcaptcha.py
   test_silentchallenge.py
   test_yidun_slide.py

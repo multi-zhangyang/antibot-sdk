@@ -21,6 +21,7 @@ from .providers.geetest import GeeTestCaptchaSolver
 from .providers.gunslol import GunsLolSolver
 from .providers.hashguard import HashGuardSolver
 from .providers.hcaptcha import HCaptchaSolver
+from .providers.justnocaptcha import JustNoCaptchaSolver
 from .providers.impost import ImpostSolver
 from .providers.kerberus import KerberusSolver
 from .providers.mcaptcha import MCaptchaSolver
@@ -88,6 +89,7 @@ class AntibotClient:
         self.turnstile = TurnstileSolver()
         self.hcaptcha = HCaptchaSolver()
         self.hashguard = HashGuardSolver()
+        self.justnocaptcha = JustNoCaptchaSolver()
         self.impost = ImpostSolver()
         self.kerberus = KerberusSolver()
         self.recaptcha = ReCaptchaSolver()
@@ -201,6 +203,9 @@ class AntibotClient:
 
     async def solve_impost(self, **kwargs: Any) -> CaptchaResult:
         return await self.impost.solve(**kwargs)
+
+    async def solve_justnocaptcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.justnocaptcha.solve(**kwargs)
 
     async def solve_kerberus(self, **kwargs: Any) -> CaptchaResult:
         return await self.kerberus.solve(**kwargs)
@@ -522,6 +527,35 @@ class AntibotClient:
             }
             sc_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_stravcaptcha(**sc_kwargs)
+        if provider == "justnocaptcha":
+            jnc_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_html",
+                    "challenge_url",
+                    "submit_url",
+                    "submit",
+                    "challenge_salt",
+                    "start",
+                    "max_attempts_per_puzzle",
+                    "workers",
+                    "timeout_sec",
+                    "challenge_field",
+                    "response_field",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            jnc_kwargs.setdefault("challenge_url", target_url)
+            return await self.solve_justnocaptcha(**jnc_kwargs)
         if provider == "cap":
             cap_kwargs = {
                 k: v

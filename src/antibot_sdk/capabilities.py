@@ -113,6 +113,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "_captcha/_captcha_answer submit body",
         "scope": "@strav/captcha stateless PoW：解析 HMAC-SHA256 签名 token 的公开 payload，提取 salt/difficulty，复现 SHA256(salt+':'+nonce) leading-zero PoW，生成 middleware 可验提交字段；不启动浏览器。",
     },
+    "justnocaptcha": {
+        "provider": "justnocaptcha",
+        "name": "JustNoCaptcha",
+        "category": "solver",
+        "captcha_type": "multi_puzzle_fnv_pow",
+        "status": "alpha",
+        "output": "challenge/solution submit body",
+        "scope": "JustNoCaptcha 多 puzzle PoW：解析 difficulty+puzzles+challengeHash，复现 JS FNV1a/fmix hashInt，逐 puzzle 搜索定长十进制 solution，可选 challengeSalt 校验 challenge 完整性；不启动浏览器。",
+    },
     "cap": {
         "provider": "cap",
         "name": "Cap / @cap.js",

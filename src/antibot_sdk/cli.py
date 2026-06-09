@@ -138,6 +138,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "hashguard",
             "trustcaptcha",
             "stravcaptcha",
+            "justnocaptcha",
             "cap",
             "cryptopuzzle",
             "captxa",
@@ -599,6 +600,27 @@ async def amain(argv: list[str] | None = None) -> int:
     sc.add_argument("--output-dir")
     sc.add_argument("--user-agent")
     sc.add_argument("--raw", action="store_true")
+
+    jnc = solve_sub.add_parser("justnocaptcha")
+    jnc_source = jnc.add_mutually_exclusive_group(required=True)
+    jnc_source.add_argument("--challenge", help="inline JustNoCaptcha challenge string")
+    jnc_source.add_argument("--challenge-json", help="inline {challenge,challengeSalt} JSON, or @/path")
+    jnc_source.add_argument("--challenge-file")
+    jnc_source.add_argument("--challenge-html", help="HTML containing hidden challenge input")
+    jnc_source.add_argument("--challenge-url", help="GET endpoint returning challenge string/JSON/HTML")
+    jnc.add_argument("--submit-url")
+    jnc.add_argument("--submit", action="store_true")
+    jnc.add_argument("--challenge-salt", help="optional server salt to verify challenge hash for fixtures")
+    jnc.add_argument("--start", type=int)
+    jnc.add_argument("--max-attempts-per-puzzle", type=int)
+    jnc.add_argument("--workers", type=int, default=1)
+    jnc.add_argument("--timeout", type=int, default=60)
+    jnc.add_argument("--challenge-field", default="challenge")
+    jnc.add_argument("--response-field", default="solution")
+    jnc.add_argument("--proxy")
+    jnc.add_argument("--output-dir")
+    jnc.add_argument("--user-agent")
+    jnc.add_argument("--raw", action="store_true")
 
     pc = solve_sub.add_parser("pcaptcha")
     pc_source = pc.add_mutually_exclusive_group(required=True)
@@ -1388,6 +1410,30 @@ async def amain(argv: list[str] | None = None) -> int:
     sscap.add_argument("--user-agent")
     sscap.add_argument("--full", action="store_true")
 
+    sjnc = stress_sub.add_parser("justnocaptcha")
+    sjnc_source = sjnc.add_mutually_exclusive_group(required=True)
+    sjnc_source.add_argument("--challenge")
+    sjnc_source.add_argument("--challenge-json")
+    sjnc_source.add_argument("--challenge-file")
+    sjnc_source.add_argument("--challenge-html")
+    sjnc_source.add_argument("--challenge-url")
+    sjnc.add_argument("--submit-url")
+    sjnc.add_argument("--submit", action="store_true")
+    sjnc.add_argument("--challenge-salt")
+    sjnc.add_argument("--runs", type=int, default=10)
+    sjnc.add_argument("--concurrency", type=int, default=2)
+    sjnc.add_argument("--timeout", type=int, default=60)
+    sjnc.add_argument("--start", type=int)
+    sjnc.add_argument("--max-attempts-per-puzzle", type=int)
+    sjnc.add_argument("--workers", type=int, default=1)
+    sjnc.add_argument("--challenge-field", default="challenge")
+    sjnc.add_argument("--response-field", default="solution")
+    sjnc.add_argument("--proxy")
+    sjnc.add_argument("--output-dir")
+    sjnc.add_argument("--output-json")
+    sjnc.add_argument("--user-agent")
+    sjnc.add_argument("--full", action="store_true")
+
     spc = stress_sub.add_parser("pcaptcha")
     spc.add_argument("--challenge-url", required=True)
     spc.add_argument("--validate-url")
@@ -1830,6 +1876,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "hashguard",
             "trustcaptcha",
             "stravcaptcha",
+            "justnocaptcha",
             "impost",
             "kerberus",
             "mcaptcha",
@@ -2322,6 +2369,28 @@ async def amain(argv: list[str] | None = None) -> int:
             token_field=args.token_field,
             response_field=args.response_field,
             honeypot_field=args.honeypot_field,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "justnocaptcha":
+        ret = await client.solve_justnocaptcha(
+            challenge=args.challenge,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_html=args.challenge_html,
+            challenge_url=args.challenge_url,
+            submit_url=args.submit_url,
+            submit=args.submit,
+            challenge_salt=args.challenge_salt,
+            start=args.start,
+            max_attempts_per_puzzle=args.max_attempts_per_puzzle,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            challenge_field=args.challenge_field,
+            response_field=args.response_field,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
             user_agent=args.user_agent,
@@ -3298,6 +3367,36 @@ async def amain(argv: list[str] | None = None) -> int:
                 token_field=args.token_field,
                 response_field=args.response_field,
                 honeypot_field=args.honeypot_field,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "justnocaptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="justnocaptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_justnocaptcha(
+                challenge=args.challenge,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_html=args.challenge_html,
+                challenge_url=args.challenge_url,
+                submit_url=args.submit_url,
+                submit=args.submit,
+                challenge_salt=args.challenge_salt,
+                start=args.start,
+                max_attempts_per_puzzle=args.max_attempts_per_puzzle,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                challenge_field=args.challenge_field,
+                response_field=args.response_field,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
                 user_agent=args.user_agent,

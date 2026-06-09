@@ -126,6 +126,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "trustcaptcha"
     if any(x in u or x in host for x in ("@strav/captcha", "stravcaptcha", "/__captcha/pow", "_captcha_answer")):
         return "stravcaptcha"
+    if any(x in u or x in host for x in ("justnocaptcha", "just-no-captcha", "justnocaptcha_solution")):
+        return "justnocaptcha"
     if any(x in u or x in host for x in ("friendlycaptcha", "friendlycaptcha.com", "frc-captcha")):
         return "friendlycaptcha"
     if any(x in u or x in host for x in ("fcaptcha", "/api/pow/challenge")):
@@ -278,6 +280,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "stateless-hmac-token-hashcash-pow-solver",
                 "successFields": ["_captcha", "_captcha_answer"],
                 "endpoints": ["/__captcha/pow"],
+            }
+        },
+        "justnocaptcha": {
+            "multi_puzzle_fnv_pow": {
+                "patterns": ["justnocaptcha", "just-no-captcha", "justnocaptcha_solution"],
+                "mode": "multi-puzzle-fnv-fmix-pow-protocol-solver",
+                "successFields": ["challenge", "solution", "justnocaptcha_solution"],
+                "endpoints": ["backend challenge endpoint returning challenge string/JSON"],
             }
         },
         "gunslol": {
