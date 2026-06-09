@@ -13,14 +13,20 @@ from antibot_sdk.providers.akamai_bm import (
     akamai_decrypt_string,
     akamai_encrypt_sensor,
     akamai_encrypt_string,
+    akamai_mn_hash_hex,
+    akamai_mn_mod,
     build_minimal_sensor_profile,
     decode_minimal_sensor_json,
     encode_minimal_sensor_json,
     extract_bm_sz_keys,
+    parse_abck_mn_challenges,
+    solve_abck_mn_challenge,
     submit_akamai_bm_sensor,
+    verify_abck_mn_solution,
 )
 
 BM_SZ = "A0F0D145~YAAQfixture~3~4~1700000000~3499107~3759692"
+ABCK = "89E9305CB44AD0606B67BE2A31F9367C~-1~YAAQfixture~-1~||1-jaHBmBrjqk-2-10-1000-2||~-1"
 KEYS = AkamaiBmKeys(shuffle_key=3_499_107, cipher_key=3_759_692)
 GO_ABCK_TOOLS_VECTOR = "m+Dh#OJ_`@iy$8*6.HFK7Y:^JqtIpvcrCn~Pk2LdTU$D+f1vc b5}u_s>/9"
 
@@ -112,6 +118,36 @@ def test_minimal_sensor_json_encode_decode_with_v3_prefix_and_wrapped_body() -> 
     assert decode_minimal_sensor_json(unprefixed, keys=KEYS) == profile
 
 
+def test_abck_mn_challenge_parse_solve_and_verify_fixture() -> None:
+    challenges = parse_abck_mn_challenges(f"_abck={ABCK}; bm_sz={BM_SZ}")
+    assert len(challenges) == 1
+    challenge = challenges[0]
+    assert challenge.active is True
+    assert challenge.abck_id == "89E9305CB44AD0606B67BE2A31F9367C"
+    assert challenge.psn == "jaHBmBrjqk"
+    assert challenge.seed == 2
+    assert challenge.delay_ms == 10
+    assert challenge.timeout_ms == 1000
+    assert challenge.challenge_type == 2
+
+    solution = solve_abck_mn_challenge(
+        challenge,
+        start_ts_ms=1_700_000_000_000,
+        rounds=4,
+        max_attempts_per_round=1000,
+    )
+
+    assert solution.challenge == challenge
+    assert len(solution.rounds) == 4
+    assert solution.result.count(";") == 4
+    assert solution.nonce_csv == ",".join(item.nonce for item in solution.rounds)
+    assert verify_abck_mn_solution(solution)
+    for item in solution.rounds:
+        assert item.input_value.endswith(item.nonce)
+        assert item.digest_hex == akamai_mn_hash_hex(item.input_value)
+        assert akamai_mn_mod(item.digest_hex, item.divisor) == 0
+
+
 def test_mock_submit_to_bm_data_receives_decodable_sensor() -> None:
     _AkamaiBmHandler.calls = []
     profile = build_minimal_sensor_profile(
@@ -184,3 +220,29 @@ def test_akamai_bm_solver_builds_minimal_sensor_without_browser() -> None:
     assert result.ticket
     assert result.ticket.startswith("3;3759692;3499107;0;")
     assert decode_minimal_sensor_json(result.ticket) == result.raw["decoded"]
+
+
+def test_akamai_bm_solver_embeds_mn_result_into_minimal_sensor() -> None:
+    result = asyncio.run(
+        AkamaiBmSolver().solve(
+            bm_sz=BM_SZ,
+            abck=ABCK,
+            page_url="https://target.example/protected?x=1",
+            user_agent="Mozilla/5.0 fixture",
+            solve_mn=True,
+            mn_start_ts_ms=1_700_000_000_000,
+            mn_rounds=4,
+            mn_max_attempts_per_round=1000,
+        )
+    )
+
+    assert result.ok is True
+    assert result.verify_code == "solved"
+    assert result.diagnostics["mn_solved"] is True
+    assert result.diagnostics["mn_rounds"] == 4
+    assert result.raw["mnSolution"]["result"]
+    assert result.ticket
+    decoded = decode_minimal_sensor_json(result.ticket)
+    assert decoded["mn_r"] == result.raw["mnSolution"]["result"]
+    assert decoded["mn_abck"] == "89E9305CB44AD0606B67BE2A31F9367C"
+    assert decoded["mn_psn"] == "jaHBmBrjqk"

@@ -527,6 +527,10 @@ async def amain(argv: list[str] | None = None) -> int:
     akbm.add_argument("--user-agent", default="")
     akbm.add_argument("--profile-json", help="minimal sensor profile JSON, or @/path")
     akbm.add_argument("--profile-file")
+    akbm.add_argument("--solve-mn", action="store_true", help="solve _abck mn_* SHA-256 modulo challenge")
+    akbm.add_argument("--mn-start-ts-ms", type=int, help="bmak startTs for mn_*; defaults to now")
+    akbm.add_argument("--mn-rounds", type=int, default=10)
+    akbm.add_argument("--mn-max-attempts-per-round", type=int, default=250_000)
     akbm.add_argument("--submit", action="store_true", help="POST {'sensor_data':...} to --submit-url")
     akbm.add_argument("--submit-url", help="usually https://origin/_bm/_data")
     akbm.add_argument("--header", action="append", default=[], help="extra submit header KEY=VALUE")
@@ -1876,6 +1880,10 @@ async def amain(argv: list[str] | None = None) -> int:
     sakbm.add_argument("--user-agent", default="")
     sakbm.add_argument("--profile-json")
     sakbm.add_argument("--profile-file")
+    sakbm.add_argument("--solve-mn", action="store_true")
+    sakbm.add_argument("--mn-start-ts-ms", type=int)
+    sakbm.add_argument("--mn-rounds", type=int, default=10)
+    sakbm.add_argument("--mn-max-attempts-per-round", type=int, default=250_000)
     sakbm.add_argument("--submit", action="store_true")
     sakbm.add_argument("--submit-url")
     sakbm.add_argument("--header", action="append", default=[])
@@ -3480,6 +3488,10 @@ async def amain(argv: list[str] | None = None) -> int:
                 if args.profile_file
                 else _json_arg(args.profile_json)
             ),
+            solve_mn=args.solve_mn,
+            mn_start_ts_ms=args.mn_start_ts_ms,
+            mn_rounds=args.mn_rounds,
+            mn_max_attempts_per_round=args.mn_max_attempts_per_round,
             submit=args.submit,
             submit_url=args.submit_url,
             timeout_sec=args.timeout,
@@ -5060,6 +5072,10 @@ async def amain(argv: list[str] | None = None) -> int:
                     if args.profile_file
                     else _json_arg(args.profile_json)
                 ),
+                solve_mn=args.solve_mn,
+                mn_start_ts_ms=args.mn_start_ts_ms,
+                mn_rounds=args.mn_rounds,
+                mn_max_attempts_per_round=args.mn_max_attempts_per_round,
                 submit=args.submit,
                 submit_url=args.submit_url,
                 timeout_sec=args.timeout,

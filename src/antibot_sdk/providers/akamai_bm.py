@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import time
 from dataclasses import dataclass
@@ -50,6 +51,62 @@ class AkamaiBmKeys:
         return (self.cipher_key, self.shuffle_key)
 
 
+@dataclass(frozen=True, slots=True)
+class AkamaiAbckMnChallenge:
+    """Parsed `_abck` `mn_*` proof-of-work challenge.
+
+    Akamai scripts derive this from the 5th `~` segment of `_abck`, where entries
+    look like `1-<psn>-<seed>-<delay>-<timeout>-<type>`.  The worker computes
+    SHA-256 over `abck_id + startTs + psn + (seed + round) + nonce` and accepts
+    a digest whose big-endian integer is divisible by `seed + round`.
+    """
+
+    enabled: int
+    abck_id: str
+    psn: str
+    seed: int
+    delay_ms: int
+    timeout_ms: int
+    challenge_type: int = 1
+    raw: str = ""
+
+    @property
+    def active(self) -> bool:
+        return bool(self.enabled and self.abck_id and self.psn and self.seed > 0)
+
+
+@dataclass(frozen=True, slots=True)
+class AkamaiAbckMnRound:
+    round_index: int
+    divisor: int
+    nonce: str
+    digest_hex: str
+    attempts: int
+    input_value: str
+    elapsed_ms: int
+
+
+@dataclass(frozen=True, slots=True)
+class AkamaiAbckMnSolution:
+    challenge: AkamaiAbckMnChallenge
+    start_ts_ms: int
+    rounds: list[AkamaiAbckMnRound]
+    result: str
+    elapsed_ms: int
+
+    @property
+    def nonce_csv(self) -> str:
+        return ",".join(item.nonce for item in self.rounds)
+
+    @property
+    def timing_csv(self) -> str:
+        return ",".join(str(item.elapsed_ms) for item in self.rounds)
+
+    @property
+    def attempts_csv(self) -> str:
+        return ",".join(str(item.attempts) for item in self.rounds)
+
+
 def extract_bm_sz_keys(cookie_value: str) -> AkamaiBmKeys:
     """Extract `(shuffle_key, cipher_key)` from a `bm_sz` value or Cookie header."""
 
@@ -63,6 +120,151 @@ def extract_bm_sz_keys(cookie_value: str) -> AkamaiBmKeys:
     except ValueError as exc:
         raise ValueError("last two bm_sz components must be integer keys") from exc
     return AkamaiBmKeys(shuffle_key=shuffle_key, cipher_key=cipher_key)
+
+
+def parse_abck_mn_challenges(cookie_value: str) -> list[AkamaiAbckMnChallenge]:
+    """Parse Akamai `_abck` `mn_*` challenges from a cookie value or Cookie header."""
+
+    value = _extract_cookie_value(cookie_value, "_abck")
+    parts = value.split("~")
+    if len(parts) < 5:
+        return []
+    abck_id = parts[0]
+    challenge_segment = parts[4]
+    challenges: list[AkamaiAbckMnChallenge] = []
+    for raw_entry in challenge_segment.split("||"):
+        entry = raw_entry.strip().strip(";")
+        if not entry:
+            continue
+        fields = entry.split("-")
+        if len(fields) == 1 and fields[0] == "0":
+            continue
+        if len(fields) < 5:
+            continue
+        try:
+            enabled = int(fields[0])
+            seed = int(fields[2])
+            delay_ms = int(fields[3])
+            timeout_ms = int(fields[4])
+            challenge_type = int(fields[5]) if len(fields) >= 6 and fields[5] else 1
+        except ValueError:
+            continue
+        challenges.append(
+            AkamaiAbckMnChallenge(
+                enabled=enabled,
+                abck_id=abck_id,
+                psn=fields[1],
+                seed=seed,
+                delay_ms=delay_ms,
+                timeout_ms=timeout_ms,
+                challenge_type=challenge_type,
+                raw=entry,
+            )
+        )
+    challenges.sort(key=lambda item: 0 if item.challenge_type == 2 else 1)
+    return challenges
+
+
+def akamai_mn_hash_bytes(value: str) -> bytes:
+    return hashlib.sha256(value.encode("utf-8")).digest()
+
+
+def akamai_mn_hash_hex(value: str) -> str:
+    return akamai_mn_hash_bytes(value).hex()
+
+
+def akamai_mn_mod(digest: bytes | str, divisor: int) -> int:
+    """Match Akamai's byte-wise `vf(digest, divisor)` modulo reducer."""
+
+    if divisor <= 0:
+        raise ValueError("Akamai mn divisor must be positive")
+    raw = bytes.fromhex(digest) if isinstance(digest, str) else bytes(digest)
+    acc = 0
+    for byte in raw:
+        acc = ((acc << 8) | byte) & 0xFFFFFFFF
+        acc %= divisor
+    return acc
+
+
+def solve_abck_mn_challenge(
+    challenge: AkamaiAbckMnChallenge | str,
+    *,
+    start_ts_ms: int | None = None,
+    rounds: int = 10,
+    start: int = 0,
+    max_attempts_per_round: int = 250_000,
+    nonce_prefix: str = "0.",
+) -> AkamaiAbckMnSolution:
+    """Solve the `_abck` `mn_*` SHA-256 modulo challenge without a browser."""
+
+    item = _coerce_mn_challenge(challenge)
+    if not item.active:
+        raise ValueError("Akamai mn challenge is inactive or incomplete")
+    if rounds < 1:
+        raise ValueError("rounds must be positive")
+    start_ts = int(time.time() * 1000) if start_ts_ms is None else int(start_ts_ms)
+    started = time.monotonic()
+    prefix = f"{item.abck_id}{start_ts}{item.psn}"
+    solved: list[AkamaiAbckMnRound] = []
+    for round_index in range(int(rounds)):
+        divisor = item.seed + round_index
+        if divisor <= 0:
+            raise ValueError("Akamai mn round divisor must be positive")
+        round_started = time.monotonic()
+        found: AkamaiAbckMnRound | None = None
+        for offset in range(max(0, int(start)), max(0, int(start)) + int(max_attempts_per_round)):
+            nonce = f"{nonce_prefix}{offset:x}"
+            input_value = f"{prefix}{divisor}{nonce}"
+            digest = akamai_mn_hash_bytes(input_value)
+            if akamai_mn_mod(digest, divisor) == 0:
+                found = AkamaiAbckMnRound(
+                    round_index=round_index,
+                    divisor=divisor,
+                    nonce=nonce,
+                    digest_hex=digest.hex(),
+                    attempts=offset - max(0, int(start)),
+                    input_value=input_value,
+                    elapsed_ms=int((time.monotonic() - round_started) * 1000),
+                )
+                break
+        if found is None:
+            raise RuntimeError(
+                f"Akamai mn solve failed at round {round_index}; "
+                f"max_attempts_per_round={max_attempts_per_round}"
+            )
+        solved.append(found)
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    result = _build_mn_result(item, start_ts, solved, elapsed_ms)
+    return AkamaiAbckMnSolution(
+        challenge=item,
+        start_ts_ms=start_ts,
+        rounds=solved,
+        result=result,
+        elapsed_ms=elapsed_ms,
+    )
+
+
+def verify_abck_mn_solution(solution: AkamaiAbckMnSolution | dict[str, Any] | str) -> bool:
+    try:
+        if isinstance(solution, AkamaiAbckMnSolution):
+            prefix = f"{solution.challenge.abck_id}{solution.start_ts_ms}{solution.challenge.psn}"
+            return all(
+                akamai_mn_mod(item.digest_hex, item.divisor) == 0
+                and item.digest_hex == akamai_mn_hash_hex(f"{prefix}{item.divisor}{item.nonce}")
+                for item in solution.rounds
+            )
+        if isinstance(solution, dict):
+            chal = _coerce_mn_challenge(solution["challenge"])
+            sol = solve_abck_mn_challenge(
+                chal,
+                start_ts_ms=int(solution["start_ts_ms"]),
+                rounds=len(solution.get("nonces") or []),
+                max_attempts_per_round=1,
+            )
+            return sol.nonce_csv == ",".join(solution.get("nonces") or [])
+        return bool(solution and solution.count(";") >= 3)
+    except Exception:
+        return False
 
 
 def akamai_lcg_next(seed: int) -> int:
@@ -275,6 +477,10 @@ class AkamaiBmSolver:
         profile: dict[str, Any] | None = None,
         profile_json: str | None = None,
         profile_file: str | None = None,
+        solve_mn: bool = False,
+        mn_start_ts_ms: int | None = None,
+        mn_rounds: int = 10,
+        mn_max_attempts_per_round: int = 250_000,
         submit: bool = False,
         submit_url: str | None = None,
         timeout_sec: int = 10,
@@ -287,6 +493,7 @@ class AkamaiBmSolver:
             "mode": "experimental_minimal",
             "submit": submit,
             "submit_url": submit_url,
+            "solve_mn": solve_mn,
         }
         errors: list[str] = []
 
@@ -324,6 +531,60 @@ class AkamaiBmSolver:
                     }
                 )
             diagnostics["abck_present"] = bool(cookie_map.get("_abck"))
+            mn_solution: AkamaiAbckMnSolution | None = None
+            if solve_mn:
+                challenges = parse_abck_mn_challenges(cookie_map.get("_abck") or abck or "")
+                raw["mnChallenges"] = [
+                    {
+                        "enabled": item.enabled,
+                        "abckId": item.abck_id,
+                        "psn": item.psn,
+                        "seed": item.seed,
+                        "delayMs": item.delay_ms,
+                        "timeoutMs": item.timeout_ms,
+                        "challengeType": item.challenge_type,
+                        "raw": item.raw,
+                    }
+                    for item in challenges
+                ]
+                diagnostics["mn_challenges"] = len(challenges)
+                active = next((item for item in challenges if item.active), None)
+                if active is None:
+                    errors.append("Akamai BM solve_mn requested but _abck contains no active mn challenge")
+                    return finish(ok=False, verify_code="missing_mn_challenge")
+                mn_solution = solve_abck_mn_challenge(
+                    active,
+                    start_ts_ms=mn_start_ts_ms,
+                    rounds=mn_rounds,
+                    max_attempts_per_round=mn_max_attempts_per_round,
+                )
+                raw["mnSolution"] = {
+                    "startTsMs": mn_solution.start_ts_ms,
+                    "result": mn_solution.result,
+                    "nonces": mn_solution.nonce_csv,
+                    "attempts": mn_solution.attempts_csv,
+                    "elapsedMs": mn_solution.elapsed_ms,
+                    "rounds": [
+                        {
+                            "round": item.round_index,
+                            "divisor": item.divisor,
+                            "nonce": item.nonce,
+                            "digestHex": item.digest_hex,
+                            "attempts": item.attempts,
+                            "elapsedMs": item.elapsed_ms,
+                        }
+                        for item in mn_solution.rounds
+                    ],
+                }
+                diagnostics.update(
+                    {
+                        "mn_solved": True,
+                        "mn_rounds": len(mn_solution.rounds),
+                        "mn_start_ts_ms": mn_solution.start_ts_ms,
+                        "mn_elapsed_ms": mn_solution.elapsed_ms,
+                        "mn_result_prefix": mn_solution.result[:80],
+                    }
+                )
 
             sensor = _load_text_arg(sensor_data, sensor_file)
             decoded: dict[str, Any] | None = None
@@ -338,6 +599,8 @@ class AkamaiBmSolver:
                     diagnostics["decode_error"] = str(exc)
             else:
                 if keys is None:
+                    if solve_mn and mn_solution is not None and not submit:
+                        return finish(ok=True, ticket=mn_solution.result, verify_code="mn_solved")
                     errors.append("Akamai BM synthetic sensor requires bm_sz or cookie_header with bm_sz")
                     return finish(ok=False, verify_code="missing_bm_sz")
                 profile_obj = _load_profile(profile=profile, profile_json=profile_json, profile_file=profile_file)
@@ -348,6 +611,12 @@ class AkamaiBmSolver:
                         bm_sz=cookie_map.get("bm_sz"),
                         abck=cookie_map.get("_abck"),
                     )
+                if mn_solution is not None:
+                    profile_obj = dict(profile_obj)
+                    profile_obj.setdefault("mn_r", mn_solution.result)
+                    profile_obj.setdefault("mn_abck", mn_solution.challenge.abck_id)
+                    profile_obj.setdefault("mn_psn", mn_solution.challenge.psn)
+                    profile_obj.setdefault("mn_challenge_type", mn_solution.challenge.challenge_type)
                 sensor = encode_minimal_sensor_json(profile_obj, keys)
                 decoded = decode_minimal_sensor_json(sensor)
                 raw["decoded"] = decoded
@@ -404,6 +673,61 @@ def _akamai_shift_string(text: str, *, key: int, direction: int) -> str:
             continue
         chars.append(ALPHABET[(index + (direction * (shifted % alphabet_len))) % alphabet_len])
     return "".join(chars)
+
+
+def _coerce_mn_challenge(challenge: AkamaiAbckMnChallenge | str | dict[str, Any]) -> AkamaiAbckMnChallenge:
+    if isinstance(challenge, AkamaiAbckMnChallenge):
+        return challenge
+    if isinstance(challenge, dict):
+        return AkamaiAbckMnChallenge(
+            enabled=int(challenge.get("enabled", 1)),
+            abck_id=str(challenge.get("abck_id") or challenge.get("abckId") or ""),
+            psn=str(challenge.get("psn") or ""),
+            seed=int(challenge.get("seed", 0)),
+            delay_ms=int(challenge.get("delay_ms") or challenge.get("delayMs") or 0),
+            timeout_ms=int(challenge.get("timeout_ms") or challenge.get("timeoutMs") or 0),
+            challenge_type=int(challenge.get("challenge_type") or challenge.get("challengeType") or 1),
+            raw=str(challenge.get("raw") or ""),
+        )
+    parsed = parse_abck_mn_challenges(str(challenge))
+    if not parsed:
+        raise ValueError("Akamai _abck contains no parseable mn challenge")
+    return parsed[0]
+
+
+def _build_mn_result(
+    challenge: AkamaiAbckMnChallenge,
+    start_ts_ms: int,
+    rounds: list[AkamaiAbckMnRound],
+    total_elapsed_ms: int,
+) -> str:
+    first = rounds[0]
+    prefix = f"{challenge.abck_id}{start_ts_ms}{challenge.psn}"
+    digest_bytes = ",".join(str(byte) for byte in bytes.fromhex(first.digest_hex))
+    metadata = [
+        challenge.abck_id,
+        str(start_ts_ms),
+        challenge.psn,
+        prefix,
+        str(challenge.seed),
+        str(first.divisor),
+        first.nonce,
+        first.input_value,
+        digest_bytes,
+        "0",  # df: worker-start offset from bmak.startTs in the browser implementation.
+        str(total_elapsed_ms),
+        str(start_ts_ms + total_elapsed_ms),
+    ]
+    return (
+        ",".join(item.nonce for item in rounds)
+        + ";"
+        + ",".join(str(item.elapsed_ms) for item in rounds)
+        + ";"
+        + ",".join(str(item.attempts) for item in rounds)
+        + ";"
+        + ",".join(metadata)
+        + ";"
+    )
 
 
 def _load_text_arg(value: str | None, file_path: str | None = None) -> str | None:
@@ -524,8 +848,14 @@ __all__ = [
     "CAPABILITY",
     "CAPTCHA_TYPE",
     "PROVIDER",
+    "AkamaiAbckMnChallenge",
+    "AkamaiAbckMnRound",
+    "AkamaiAbckMnSolution",
     "AkamaiBmKeys",
     "AkamaiBmSolver",
+    "akamai_mn_hash_bytes",
+    "akamai_mn_hash_hex",
+    "akamai_mn_mod",
     "akamai_decrypt_sensor",
     "akamai_decrypt_string",
     "akamai_encrypt_sensor",
@@ -537,5 +867,8 @@ __all__ = [
     "decode_minimal_sensor_json",
     "encode_minimal_sensor_json",
     "extract_bm_sz_keys",
+    "parse_abck_mn_challenges",
+    "solve_abck_mn_challenge",
     "submit_akamai_bm_sensor",
+    "verify_abck_mn_solution",
 ]

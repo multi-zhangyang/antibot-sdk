@@ -173,8 +173,8 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "category": "solver",
         "captcha_type": "akamai_bm_sensor_experimental",
         "status": "experimental",
-        "output": "sensor_data / _abck Set-Cookie",
-        "scope": "Akamai BM experimental：从 bm_sz 提取 transform keys，复现 LCG string shift 与字段 shuffle，支持 minimal v3-style sensor JSON encode/decode 和 /_bm/_data mock submit；不启动浏览器，不宣称完整 _abck/reese 风控绕过。",
+        "output": "sensor_data / mn_r / _abck Set-Cookie",
+        "scope": "Akamai BM experimental：从 bm_sz 提取 transform keys，复现 LCG string shift 与字段 shuffle，支持 minimal v3-style sensor JSON encode/decode 和 /_bm/_data mock submit；可解析 _abck 的 mn_* challenge 并复现 SHA-256 byte-wise modulo PoW 生成 mn_r；不启动浏览器，不宣称完整 _abck/reese 风控绕过。",
     },
     "vercel_botid": {
         "provider": "vercel_botid",

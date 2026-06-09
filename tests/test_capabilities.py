@@ -185,6 +185,9 @@ def test_new_protocol_solvers_are_top_level_sdk_exports() -> None:
     assert antibot_sdk.extract_bm_sz_keys
     assert antibot_sdk.akamai_encrypt_sensor
     assert antibot_sdk.encode_akamai_bm_minimal_sensor_json
+    assert antibot_sdk.parse_abck_mn_challenges
+    assert antibot_sdk.solve_abck_mn_challenge
+    assert antibot_sdk.akamai_mn_mod
     assert antibot_sdk.generate_x_is_human
     assert antibot_sdk.generate_x_is_human_raw_vm
     assert antibot_sdk.parse_botid_script
