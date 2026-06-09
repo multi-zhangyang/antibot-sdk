@@ -251,27 +251,44 @@ async def amain(argv: list[str] | None = None) -> int:
             return 0 if ret.ok else 2
 
         if args.cmd == "stress" and args.provider == "tencent":
-            payload = await run_stress(
-                name="tencent",
-                runs=args.runs,
-                concurrency=args.concurrency,
-                per_run_timeout=args.timeout,
-                output_json=args.output_json,
-                run_once=lambda _i: client.solve_tencent(
+            headless = _headless_bool(args.headless)
+            pool = None
+            try:
+                pool, prof = client.tencent.create_pool(
                     target_url=args.target_url,
                     profile=args.profile,
-                    appid=args.appid,
-                    headless=_headless_bool(args.headless),
+                    headless=headless,
                     proxy_server=args.proxy,
                     pool_size=args.pool_size,
                     browser_max_uses=args.browser_max_uses,
                     locale=args.locale,
                     timezone_id=args.timezone_id,
                     user_agent=args.user_agent,
-                    timeout_sec=args.timeout,
-                    verbose=args.verbose,
-                ),
-            )
+                )
+                await pool.start()
+                payload = await run_stress(
+                    name="tencent",
+                    runs=args.runs,
+                    concurrency=args.concurrency,
+                    per_run_timeout=args.timeout,
+                    output_json=args.output_json,
+                    run_once=lambda _i: client.tencent.solve_with_pool(
+                        pool,
+                        target_url=args.target_url,
+                        profile=args.profile,
+                        appid=args.appid,
+                        prof=prof,
+                        headless=headless,
+                        pool_size=args.pool_size,
+                        browser_max_uses=args.browser_max_uses,
+                        proxy_server=args.proxy,
+                        timeout_sec=args.timeout,
+                        verbose=args.verbose,
+                    ),
+                )
+            finally:
+                if pool is not None:
+                    await pool.stop()
             emit(payload if args.full else {"summary": payload["summary"]}, include_raw=True)
             return 0 if payload["summary"]["fail"] == 0 else 2
 

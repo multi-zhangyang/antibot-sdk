@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 from urllib.parse import urlparse
 
@@ -109,6 +109,6 @@ def list_profiles() -> dict[str, dict[str, Any]]:
     from .vendor.tencent.site_profiles import PROFILES as TENCENT_PROFILES
 
     return {
-        "aliyun": {name: profile for name, profile in ALIYUN_SITE_PROFILES.items()},
+        "aliyun": {name: asdict(profile) for name, profile in ALIYUN_SITE_PROFILES.items()},
         "tencent": {name: profile.to_dict() for name, profile in TENCENT_PROFILES.items()},
     }

@@ -1,21 +1,16 @@
 {
   "name": "aliyun-captcha-repro",
   "version": "1.0.0",
-  "private": false,
+  "private": true,
   "type": "commonjs",
-  "description": "Generic Aliyun CAPTCHA V3 slider reverse-engineering and reproducible listener-driven runner.",
+  "description": "Bundled Aliyun CAPTCHA V3 slider runner for antibot-sdk.",
   "author": "multi-zhangyang",
   "license": "MIT",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "preflight": "bash bin/check_env.sh",
-    "captcha": "bash bin/run_captcha.sh",
-    "check:syntax": "node -c src/runner.js && node -c src/aggregate.js && node -c src/stability.js && node -c src/stability_stats.js && node -c src/index.js && node -c replay/auto_converge.js && node -c examples/basic.js",
-    "example": "node examples/basic.js",
-    "pack:dry": "npm pack --dry-run",
-    "stability": "bash bin/stability_check.sh",
+    "check:syntax": "node -c bridge.js && node -c src/runner.js && node -c src/aggregate.js && node -c src/stability.js && node -c src/stability_stats.js && node -c src/index.js && node -c src/deep_hooks.js && node -c src/site_profiles.js",
     "stats": "node src/stability_stats.js"
   },
   "dependencies": {
@@ -31,20 +26,11 @@
     "./runner": "./src/runner.js",
     "./package.json": "./package.json"
   },
-  "bin": {
-    "aliyun-captcha-repro": "./bin/run_captcha.sh",
-    "aliyun-captcha-stability": "./bin/stability_check.sh"
-  },
   "files": [
-    "bin/",
+    "bridge.js",
     "src/",
-    "replay/auto_converge.js",
-    "docs/",
-    "examples/",
-    "vendor/",
-    ".env.example",
-    "README.md",
-    "LICENSE"
+    "package.json",
+    "package-lock.json"
   ],
   "keywords": [
     "aliyun",
