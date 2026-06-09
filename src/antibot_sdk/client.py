@@ -18,6 +18,7 @@ from .providers.basedflare import BasedFlareSolver
 from .providers.acwscv2 import AcwScV2Solver
 from .providers.akamai_bm import AkamaiBmSolver
 from .providers.arkose import ArkoseSolver
+from .providers.datadome import DataDomeSolver
 from .providers.kasada_kpsdk import KasadaKpsdkSolver
 from .providers.pingoo import PingooSolver
 from .providers.vercel_botid import VercelBotIdSolver
@@ -104,6 +105,7 @@ class AntibotClient:
         self.acwscv2 = AcwScV2Solver()
         self.akamai_bm = AkamaiBmSolver()
         self.arkose = ArkoseSolver()
+        self.datadome = DataDomeSolver()
         self.kasada_kpsdk = KasadaKpsdkSolver()
         self.pingoo = PingooSolver()
         self.vercel_botid = VercelBotIdSolver()
@@ -229,6 +231,9 @@ class AntibotClient:
 
     async def solve_arkose(self, **kwargs: Any) -> CaptchaResult:
         return await self.arkose.solve(**kwargs)
+
+    async def solve_datadome(self, **kwargs: Any) -> CaptchaResult:
+        return await self.datadome.solve(**kwargs)
 
     async def solve_kasada_kpsdk(self, **kwargs: Any) -> CaptchaResult:
         return await self.kasada_kpsdk.solve(**kwargs)
@@ -980,6 +985,41 @@ class AntibotClient:
                 arkose_kwargs["surl"] = f"{parsed.scheme}://{parsed.netloc}"
             arkose_kwargs.setdefault("site", target_url)
             return await self.solve_arkose(**arkose_kwargs)
+        if provider == "datadome":
+            datadome_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "script_js",
+                    "script_file",
+                    "script_url",
+                    "allow_network",
+                    "page_url",
+                    "endpoint_url",
+                    "cookie",
+                    "config",
+                    "config_json",
+                    "config_file",
+                    "profile",
+                    "profile_json",
+                    "profile_file",
+                    "submit",
+                    "submit_url",
+                    "success_contains",
+                    "node",
+                    "timeout_sec",
+                    "settle_ms",
+                    "proxy_server",
+                    "headers",
+                    "output_dir",
+                }
+                and v is not None
+            }
+            datadome_kwargs.setdefault("script_url", target_url)
+            datadome_kwargs.setdefault("allow_network", True)
+            datadome_kwargs.setdefault("page_url", target_url)
+            return await self.solve_datadome(**datadome_kwargs)
         if provider == "kasada_kpsdk":
             kasada_kwargs = {
                 k: v

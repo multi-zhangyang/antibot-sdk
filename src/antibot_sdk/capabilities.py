@@ -194,6 +194,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "x-kpsdk-* headers / KPSDK:DONE primitive",
         "scope": "Kasada/KPSDK experimental：用 Node VM 补最小浏览器环境执行本地/显式获取的 p.js，触发受保护请求并捕获 x-kpsdk-* headers 与 KPSDK:DONE 消息；不启动浏览器，不宣称完整 Kasada 绕过。",
     },
+    "datadome": {
+        "provider": "datadome",
+        "name": "DataDome JavaScript Tag",
+        "category": "solver",
+        "captcha_type": "datadome_js_tag_signals_experimental",
+        "status": "experimental",
+        "output": "JS signal request / datadome cookie primitive",
+        "scope": "DataDome experimental：用 Node VM 补最小浏览器环境执行 tags.js，捕获 /js/ 信号请求、datadome cookie 写入，可选 replay 到受控 endpoint 验证 Set-Cookie/x-set-cookie；不启动浏览器，不宣称完整 DataDome 绕过。",
+    },
     "vercel_botid": {
         "provider": "vercel_botid",
         "name": "Vercel BotID / X-Is-Human",

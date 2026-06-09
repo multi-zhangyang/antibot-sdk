@@ -32,6 +32,7 @@ def test_capability_matrix_product_boundary() -> None:
         "pingoo",
         "akamai_bm",
         "arkose",
+        "datadome",
         "kasada_kpsdk",
         "vercel_botid",
         "fcaptcha",
@@ -98,6 +99,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["pingoo"]["captcha_type"] == "jwt_cookie_sha256_pow"
     assert solvers["akamai_bm"]["captcha_type"] == "akamai_bm_sensor_experimental"
     assert solvers["arkose"]["captcha_type"] == "arkose_funcaptcha_bda_token"
+    assert solvers["datadome"]["captcha_type"] == "datadome_js_tag_signals_experimental"
     assert solvers["kasada_kpsdk"]["captcha_type"] == "kasada_kpsdk_headers_experimental"
     assert solvers["vercel_botid"]["captcha_type"] == "x_is_human_aes_gcm_fingerprint"
     assert solvers["fcaptcha"]["captcha_type"] == "signals_bound_pow"
@@ -199,6 +201,12 @@ def test_new_protocol_solvers_are_top_level_sdk_exports() -> None:
     assert antibot_sdk.arkose_decode_bda
     assert antibot_sdk.arkose_x64hash128
     assert antibot_sdk.parse_arkose_token
+    assert antibot_sdk.DataDomeSolver
+    assert antibot_sdk.run_datadome_tag_vm
+    assert antibot_sdk.extract_datadome_requests
+    assert antibot_sdk.extract_datadome_sdk_urls
+    assert antibot_sdk.parse_datadome_cookie
+    assert antibot_sdk.parse_datadome_response
     assert antibot_sdk.KasadaKpsdkSolver
     assert antibot_sdk.run_kasada_kpsdk_vm
     assert antibot_sdk.extract_kasada_sdk_urls

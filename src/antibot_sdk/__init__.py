@@ -319,6 +319,15 @@ from .providers.arkose import (
     parse_arkose_token,
     parse_arkose_token_response,
 )
+from .providers.datadome import (
+    DataDomeCookie,
+    DataDomeSolver,
+    extract_datadome_requests,
+    extract_datadome_sdk_urls,
+    parse_datadome_cookie,
+    parse_datadome_response,
+    run_datadome_tag_vm,
+)
 from .providers.kasada_kpsdk import (
     KasadaKpsdkSolver,
     extract_kasada_sdk_urls,
@@ -901,6 +910,8 @@ __all__ = [
     "ArkoseSolver",
     "ArkoseTokenInfo",
     "ArkoseTokenResponse",
+    "DataDomeCookie",
+    "DataDomeSolver",
     "KasadaKpsdkSolver",
     "VercelBotIdScriptContext",
     "VercelBotIdSolution",
@@ -1113,6 +1124,11 @@ __all__ = [
     "arkose_build_bda",
     "arkose_build_enhanced_fp",
     "arkose_build_public_key_request",
+    "extract_datadome_requests",
+    "extract_datadome_sdk_urls",
+    "parse_datadome_cookie",
+    "parse_datadome_response",
+    "run_datadome_tag_vm",
     "extract_kasada_sdk_urls",
     "extract_kpsdk_headers",
     "parse_kpsdk_done_messages",

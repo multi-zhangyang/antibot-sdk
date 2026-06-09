@@ -160,6 +160,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "pingoo",
             "akamai_bm",
             "arkose",
+            "datadome",
             "kasada_kpsdk",
             "vercel_botid",
             "aliyun",
@@ -561,6 +562,30 @@ async def amain(argv: list[str] | None = None) -> int:
     ark.add_argument("--proxy")
     ark.add_argument("--output-dir")
     ark.add_argument("--raw", action="store_true")
+
+    dd = solve_sub.add_parser("datadome")
+    dd_source = dd.add_mutually_exclusive_group(required=True)
+    dd_source.add_argument("--script-js", help="inline DataDome tags.js, or @/path")
+    dd_source.add_argument("--script-file")
+    dd_source.add_argument("--script-url")
+    dd.add_argument("--allow-network", action="store_true", help="allow fetching --script-url")
+    dd.add_argument("--page-url", default="https://example.test/")
+    dd.add_argument("--endpoint-url", help="DataDome JS endpoint hint/override used inside the VM")
+    dd.add_argument("--cookie", help="initial Cookie header or datadome cookie value")
+    dd.add_argument("--config-json", help="ddoptions/config JSON object, or @/path")
+    dd.add_argument("--config-file")
+    dd.add_argument("--profile-json", help="VM browser profile JSON object, or @/path")
+    dd.add_argument("--profile-file")
+    dd.add_argument("--submit", action="store_true", help="replay captured JS signal request to --submit-url or captured URL")
+    dd.add_argument("--submit-url")
+    dd.add_argument("--success-contains")
+    dd.add_argument("--header", action="append", default=[], help="script fetch / submit header KEY=VALUE")
+    dd.add_argument("--node", help="node executable")
+    dd.add_argument("--settle-ms", type=int, default=100)
+    dd.add_argument("--timeout", type=int, default=10)
+    dd.add_argument("--proxy")
+    dd.add_argument("--output-dir")
+    dd.add_argument("--raw", action="store_true")
 
     kas = solve_sub.add_parser("kasada_kpsdk")
     kas_source = kas.add_mutually_exclusive_group(required=True)
@@ -1962,6 +1987,33 @@ async def amain(argv: list[str] | None = None) -> int:
     sark.add_argument("--output-json")
     sark.add_argument("--full", action="store_true")
 
+    sdd = stress_sub.add_parser("datadome")
+    sdd_source = sdd.add_mutually_exclusive_group(required=True)
+    sdd_source.add_argument("--script-js")
+    sdd_source.add_argument("--script-file")
+    sdd_source.add_argument("--script-url")
+    sdd.add_argument("--allow-network", action="store_true")
+    sdd.add_argument("--page-url", default="https://example.test/")
+    sdd.add_argument("--endpoint-url")
+    sdd.add_argument("--cookie")
+    sdd.add_argument("--config-json")
+    sdd.add_argument("--config-file")
+    sdd.add_argument("--profile-json")
+    sdd.add_argument("--profile-file")
+    sdd.add_argument("--submit", action="store_true")
+    sdd.add_argument("--submit-url")
+    sdd.add_argument("--success-contains")
+    sdd.add_argument("--header", action="append", default=[])
+    sdd.add_argument("--node")
+    sdd.add_argument("--settle-ms", type=int, default=100)
+    sdd.add_argument("--runs", type=int, default=10)
+    sdd.add_argument("--concurrency", type=int, default=2)
+    sdd.add_argument("--timeout", type=int, default=10)
+    sdd.add_argument("--proxy")
+    sdd.add_argument("--output-dir")
+    sdd.add_argument("--output-json")
+    sdd.add_argument("--full", action="store_true")
+
     skas = stress_sub.add_parser("kasada_kpsdk")
     skas_source = skas.add_mutually_exclusive_group(required=True)
     skas_source.add_argument("--script-js")
@@ -3200,6 +3252,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "basedflare",
             "acwscv2",
             "pingoo",
+            "datadome",
             "kasada_kpsdk",
             "vercel_botid",
         ):
@@ -3612,6 +3665,35 @@ async def amain(argv: list[str] | None = None) -> int:
             timeout_sec=args.timeout,
             headers=arkose_headers,
             proxy=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "datadome":
+        datadome_headers = _kv(args.header)
+        ret = await client.solve_datadome(
+            script_js=args.script_js,
+            script_file=args.script_file,
+            script_url=args.script_url,
+            allow_network=args.allow_network,
+            page_url=args.page_url,
+            endpoint_url=args.endpoint_url,
+            cookie=args.cookie,
+            config_json=args.config_json,
+            config_file=args.config_file,
+            profile=(
+                _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
+                if args.profile_file
+                else _json_arg(args.profile_json)
+            ),
+            submit=args.submit,
+            submit_url=args.submit_url,
+            success_contains=args.success_contains,
+            node=args.node,
+            timeout_sec=args.timeout,
+            settle_ms=args.settle_ms,
+            proxy_server=args.proxy,
+            headers=datadome_headers,
             output_dir=args.output_dir,
         )
         emit(ret, include_raw=args.raw)
@@ -5254,6 +5336,44 @@ async def amain(argv: list[str] | None = None) -> int:
                 timeout_sec=args.timeout,
                 headers=arkose_headers,
                 proxy=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+
+    if args.cmd == "stress" and args.provider == "datadome":
+        datadome_headers = _kv(args.header)
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="datadome",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_datadome(
+                script_js=args.script_js,
+                script_file=args.script_file,
+                script_url=args.script_url,
+                allow_network=args.allow_network,
+                page_url=args.page_url,
+                endpoint_url=args.endpoint_url,
+                cookie=args.cookie,
+                config_json=args.config_json,
+                config_file=args.config_file,
+                profile=(
+                    _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
+                    if args.profile_file
+                    else _json_arg(args.profile_json)
+                ),
+                submit=args.submit,
+                submit_url=args.submit_url,
+                success_contains=args.success_contains,
+                node=args.node,
+                timeout_sec=args.timeout,
+                settle_ms=args.settle_ms,
+                proxy_server=args.proxy,
+                headers=datadome_headers,
                 output_dir=str(root / f"run_{i}") if root else None,
             ),
         )

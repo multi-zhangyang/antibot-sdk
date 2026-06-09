@@ -165,6 +165,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "arkose"
     if kasada_pjs_path or any(x in u or x in host for x in ("kasada", "kpsdk", "x-kpsdk", "/ips.js")):
         return "kasada_kpsdk"
+    if any(x in u or x in host for x in ("datadome", "api-js.datadome.co", "dd_cookie", "ddjskey")):
+        return "datadome"
     if any(x in u or x in host for x in ("vercel-botid", "botid", "x-is-human", "/_vercel/botid", "/botid/")):
         return "vercel_botid"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
@@ -445,6 +447,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "browserless-node-vm-kpsdk-header-capture",
                 "successFields": ["x-kpsdk-* headers", "KPSDK:DONE message"],
                 "endpoints": ["GET p.js when explicitly allowed", "caller-provided protected request URL"],
+            }
+        },
+        "datadome": {
+            "datadome_js_tag_signals_experimental": {
+                "patterns": ["DataDome", "tags.js", "api-js.datadome.co/js/", "datadome cookie", "ddjskey"],
+                "mode": "browserless-node-vm-js-tag-signal-capture",
+                "successFields": ["JS signal body", "datadome cookie", "x-set-cookie"],
+                "endpoints": ["GET tags.js when explicitly allowed", "POST /js/"],
             }
         },
         "acwscv2": {
