@@ -47,6 +47,7 @@ from .providers.privatecaptcha import PrivateCaptchaSolver
 from .providers.portcullis import PortcullisSolver
 from .providers.powreaction import PowReactionSolver
 from .providers.recaptcha import ReCaptchaSolver
+from .providers.shapow import ShapowSolver
 from .providers.silentchallenge import SilentChallengeSolver
 from .providers.spow import SpowSolver
 from .providers.stravcaptcha import StravCaptchaSolver
@@ -87,6 +88,7 @@ class AntibotClient:
         self.friendlycaptcha = FriendlyCaptchaSolver()
         self.getpowcaptcha = GetPowCaptchaSolver()
         self.goaway = GoAwaySolver()
+        self.shapow = ShapowSolver()
         self.gunslol = GunsLolSolver()
         self.h33botshield = H33BotShieldSolver()
         self.mcaptcha = MCaptchaSolver()
@@ -192,6 +194,9 @@ class AntibotClient:
 
     async def solve_goaway(self, **kwargs: Any) -> CaptchaResult:
         return await self.goaway.solve(**kwargs)
+
+    async def solve_shapow(self, **kwargs: Any) -> CaptchaResult:
+        return await self.shapow.solve(**kwargs)
 
     async def solve_fcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.fcaptcha.solve(**kwargs)
@@ -578,6 +583,34 @@ class AntibotClient:
             goaway_kwargs.setdefault("base_url", target_url)
             goaway_kwargs.setdefault("submit", True)
             return await self.solve_goaway(**goaway_kwargs)
+        if provider == "shapow":
+            shapow_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "page_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "settings_url",
+                    "settings_path",
+                    "submit_url",
+                    "submit",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "chunk_size",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            shapow_kwargs.setdefault("base_url", target_url)
+            shapow_kwargs.setdefault("submit", True)
+            return await self.solve_shapow(**shapow_kwargs)
         if provider == "anubis":
             anubis_kwargs = {
                 k: v

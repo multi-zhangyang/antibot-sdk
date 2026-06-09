@@ -135,6 +135,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "albireo",
             "powxy",
             "goaway",
+            "shapow",
             "anubis",
             "auro",
             "aliyun",
@@ -367,6 +368,24 @@ async def amain(argv: list[str] | None = None) -> int:
     gwa.add_argument("--proxy")
     gwa.add_argument("--output-dir")
     gwa.add_argument("--raw", action="store_true")
+
+    shpw = solve_sub.add_parser("shapow")
+    shpw.add_argument("--base-url", default="https://example.com")
+    shpw.add_argument("--page-url")
+    shpw.add_argument("--challenge-json", help="inline challenge JSON/settings JS/HTML/serverData hex, or @/path")
+    shpw.add_argument("--challenge-file")
+    shpw.add_argument("--settings-url")
+    shpw.add_argument("--settings-path")
+    shpw.add_argument("--submit-url")
+    shpw.add_argument("--submit", action="store_true")
+    shpw.add_argument("--start", type=int, default=0)
+    shpw.add_argument("--max-attempts", type=int, default=20_000_000)
+    shpw.add_argument("--workers", type=int, default=1)
+    shpw.add_argument("--chunk-size", type=int, default=100_000)
+    shpw.add_argument("--timeout", type=int, default=10)
+    shpw.add_argument("--proxy")
+    shpw.add_argument("--output-dir")
+    shpw.add_argument("--raw", action="store_true")
 
     anu = solve_sub.add_parser("anubis")
     anu_source = anu.add_mutually_exclusive_group(required=True)
@@ -1442,6 +1461,27 @@ async def amain(argv: list[str] | None = None) -> int:
     sgwa.add_argument("--output-json")
     sgwa.add_argument("--full", action="store_true")
 
+    sshpw = stress_sub.add_parser("shapow")
+    sshpw.add_argument("--base-url", default="https://example.com")
+    sshpw.add_argument("--page-url")
+    sshpw.add_argument("--challenge-json")
+    sshpw.add_argument("--challenge-file")
+    sshpw.add_argument("--settings-url")
+    sshpw.add_argument("--settings-path")
+    sshpw.add_argument("--submit-url")
+    sshpw.add_argument("--submit", action="store_true")
+    sshpw.add_argument("--start", type=int, default=0)
+    sshpw.add_argument("--max-attempts", type=int, default=20_000_000)
+    sshpw.add_argument("--workers", type=int, default=1)
+    sshpw.add_argument("--chunk-size", type=int, default=100_000)
+    sshpw.add_argument("--runs", type=int, default=10)
+    sshpw.add_argument("--concurrency", type=int, default=2)
+    sshpw.add_argument("--timeout", type=int, default=10)
+    sshpw.add_argument("--proxy")
+    sshpw.add_argument("--output-dir")
+    sshpw.add_argument("--output-json")
+    sshpw.add_argument("--full", action="store_true")
+
     sanu = stress_sub.add_parser("anubis")
     sanu_source = sanu.add_mutually_exclusive_group(required=True)
     sanu_source.add_argument("--challenge-url")
@@ -2514,6 +2554,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "albireo",
             "powxy",
             "goaway",
+            "shapow",
             "anubis",
         ):
             common.update({
@@ -2728,6 +2769,26 @@ async def amain(argv: list[str] | None = None) -> int:
             challenge_name=args.challenge_name,
             request_id=args.request_id,
             redirect=args.redirect,
+            submit=args.submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            chunk_size=args.chunk_size,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "shapow":
+        ret = await client.solve_shapow(
+            base_url=args.base_url,
+            page_url=args.page_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            settings_url=args.settings_url,
+            settings_path=args.settings_path,
+            submit_url=args.submit_url,
             submit=args.submit,
             start=args.start,
             max_attempts=args.max_attempts,
@@ -3949,6 +4010,34 @@ async def amain(argv: list[str] | None = None) -> int:
                 challenge_name=args.challenge_name,
                 request_id=args.request_id,
                 redirect=args.redirect,
+                submit=args.submit,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                chunk_size=args.chunk_size,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "shapow":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="shapow",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_shapow(
+                base_url=args.base_url,
+                page_url=args.page_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                settings_url=args.settings_url,
+                settings_path=args.settings_path,
+                submit_url=args.submit_url,
                 submit=args.submit,
                 start=args.start,
                 max_attempts=args.max_attempts,

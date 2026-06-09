@@ -86,6 +86,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "__goaway_token / go-away state cookie",
         "scope": "go-away WASM/JS PoW：解析 challenge 页面 script.mjs 与 Request Id，保持 IP/UA/Accept/CH headers 稳定，POST make-challenge 取得 challenge/target，复现 Worker 的 SHA256(challenge||uint64_le(nonce)) < target，GET verify-challenge 换 *-state cookie；不启动浏览器。",
     },
+    "shapow": {
+        "provider": "shapow",
+        "name": "SHAPOW Nginx PoW",
+        "category": "solver",
+        "captcha_type": "nginx_ip_time_bound_pow",
+        "status": "alpha",
+        "output": "shapow-response query / IP whitelist",
+        "scope": "SHAPOW Nginx 模块 PoW：解析 challenge-settings.js 中 IP+server_time+random_challenge 绑定的 serverData，复现 Worker 的 SHA256(serverData||nonce16_le_counter) leading-zero-bit 搜索，通过 shapow-response 查询参数回传并进入 IP whitelist；不启动浏览器。",
+    },
     "auro": {
         "provider": "auro",
         "name": "Auro.Network",

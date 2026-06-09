@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / go-away js-pow-sha256 / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / go-away js-pow-sha256 / SHAPOW Nginx PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -17,6 +17,7 @@
 - Albireo：新增 serverless signed PoW 协议 solver，解析 `albireo_challenge` HMAC cookie、Cloudflare v2 `difficulty/fp_nonce` 绑定和 Netlify/Vercel v1 cookie，补浏览器请求头后复现 `SHA256(challenge+nonce)` leading-zero PoW，POST 换 `albireo_solved`，不启动浏览器。
 - Powxy：新增反向代理 PoW WAF 协议 solver，解析页面 `data-identifier/data-difficulty`，保持 `User-Agent/Accept-Encoding/Accept-Language` 与 IP 出口一致，复现 `SHA256(identifier||uint64_le(nonce))` 前导 bit 搜索，POST base64 nonce 换 `powxy` HMAC cookie，不启动浏览器。
 - go-away：新增 `js-pow-sha256` 协议 solver，解析 challenge 页面 `script.mjs` 与 Request Id，保持 IP/UA/Accept/CH headers 稳定，POST `make-challenge` 后复现 Worker 的 `SHA256(challenge||uint64_le(nonce)) < target`，GET `verify-challenge` 换 `*-state` cookie，不启动浏览器。
+- SHAPOW：新增 Nginx 模块 PoW 协议 solver，解析 `challenge-settings.js` 中 IP、服务端时间和 `random_challenge` 绑定的 `serverData`，复现 Worker 的 `SHA256(serverData||nonce16_le_counter)` 前导 bit 搜索，通过 `shapow-response` 查询参数进入 IP whitelist，不启动浏览器。
 - Anubis：新增 `fast/slow` PoW 协议 solver，解析 challenge 页面或 make-challenge JSON，计算 `SHA256(randomData+nonce)` 前导零，可生成 `pass-challenge` 参数或直接换取 auth cookie，不启动浏览器。
 - Auro.Network：新增 AES-GCM 行为数据 + PoW 协议 solver，获取 `/enckey`，生成鼠标 telemetry 并 AES-GCM 加密，提交 `/api/pow/setup` 后搜索 `SHA256(prefix+nonce)`，可 `/api/pow/validate`，不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
@@ -79,6 +80,7 @@
 | Albireo | 协议 solver | `serverless_signed_pow` | alpha | nonce/response / `albireo_solved` cookie |
 | Powxy | 协议 solver | `reverse_proxy_pow` | alpha | `powxy` form field / HMAC cookie |
 | go-away js-pow-sha256 | 协议 solver | `goaway_js_pow_sha256` | alpha | `__goaway_token` / `*-state` cookie |
+| SHAPOW Nginx PoW | 协议 solver | `nginx_ip_time_bound_pow` | alpha | `shapow-response` / IP whitelist |
 | Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
 | Auro.Network | 协议 solver | `encrypted_behavior_pow` | alpha | validate body / Auro token |
 | FriendlyCaptcha | 协议 solver | `proof_of_work` | alpha | `frc-captcha-solution` payload |
@@ -962,6 +964,64 @@ antibot stress goaway \
 - 这是 key/header/IP 绑定的 JS/WASM PoW 协议 solver。
 - 公网 live 是否成功取决于 GET / make-challenge / verify 三次请求是否保持同出口、同 headers、同 cookie jar。随机出口代理如果每个请求换 IP，会导致 challenge key 不一致。
 - 官方 fixture difficulty=20 的命中 nonce 为 `1166696`；本地 mock 已验证 make/verify 闭环。
+
+---
+
+
+### SHAPOW Nginx PoW
+
+SHAPOW 是 Nginx 模块级 PoW。它不发 cookie challenge，而是动态生成 `challenge-settings.js`，把客户端 IP、服务端时间和共享内存里的 `random_challenge` 拼成 32 字节 `serverData`，Worker 再追加 16 字节 nonce 搜索 SHA-256 前导零。
+
+源码链路（`git.zajc.tel/shapow`）：
+
+```text
+serverData = ip_16_bytes || int64_be(server_time) || uint64_be(random_challenge)
+response   = hex(serverData || nonce16_le_counter)
+pass iff SHA256(response_bytes) has >= difficulty leading zero bits
+submit     = GET original_url?shapow-response=<response>
+```
+
+SDK 当前做法：
+
+- GET protected page，解析 `shapow_internal/challenge-settings.js`；也支持直接传 settings JS 或 `serverData` JSON。
+- GET settings 时复用同一个 `requests.Session` 与同一代理出口，避免 IP-bound `serverData` 与提交 IP 不一致。
+- 复现 Worker 的 16 字节 little-endian nonce counter；默认 deterministic 从 0 搜索，比随机初值更利于回归和压测。
+- `--submit` 时把完整 48 字节 response hex 放入 `shapow-response` 查询参数，识别非 challenge 页面、redirect 或 `X-Shapow-Passed` mock header。
+- 支持 artifact：`shapow_run.json`。
+
+命令示例：
+
+```bash
+antibot solve shapow \
+  --base-url 'https://target.example/protected' \
+  --submit \
+  --timeout 30 \
+  --max-attempts 20000000
+```
+
+直接传 fixture：
+
+```bash
+antibot solve shapow \
+  --challenge-json '{"serverData":"7f000001000000000000000000000000000000006553f1001122334455667788","difficulty":16,"nonceLength":16}' \
+  --max-attempts 200000
+```
+
+压测：
+
+```bash
+antibot stress shapow \
+  --challenge-json '{"serverData":"7f000001000000000000000000000000000000006553f1001122334455667788","difficulty":12,"nonceLength":16}' \
+  --runs 10 \
+  --concurrency 2 \
+  --max-attempts 50000
+```
+
+当前定位：
+
+- 这是 IP/time/random 绑定的 Nginx PoW 协议 solver。
+- 实战中 `challenge-settings.js` 获取和 `shapow-response` 提交必须走同一出口 IP；随机出口代理如果每次请求换 IP，会失败。
+- difficulty 是 bit 级；每 +1 平均搜索空间约乘 2。高难度 demo（如 25 bit）在 VPS 上要增加 `--max-attempts` 或 worker 数。
 
 ---
 
@@ -3635,6 +3695,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - Albireo / `albireo_challenge` / `albireo_solved` / `albireo-trap-` 相关 URL -> `albireo`
 - Powxy / `/.powxy/` / `data-identifier` / `Proof-of-work challenge` 相关 URL -> `powxy`
 - go-away / `__goaway` / `/challenge/js-pow-sha256` / `script.mjs` 相关 URL -> `goaway`
+- SHAPOW / `shapow_internal` / `challenge-settings.js` / `shapow-response` 相关 URL -> `shapow`
 - Anubis / `.within.website/x/cmd/anubis` 相关 URL -> `anubis`
 - Auro.Network / `/api/pow/setup` / `/api/pow/validate` 相关 URL -> `auro`
 - FriendlyCaptcha / `frc-captcha` 相关 URL -> `friendlycaptcha`
@@ -3939,6 +4000,11 @@ antibot solve goaway --base-url 'https://target.example/protected' --submit --ti
 antibot solve goaway --challenge-json '{"Key":"Pl02g55pPapXdVc3SVfMZQGymmyE0dTCpq0qm8ax9ss=","Parameters":{"difficulty":"20"}}' --max-attempts 1500000
 antibot stress goaway --challenge-json '{"Key":"Pl02g55pPapXdVc3SVfMZQGymmyE0dTCpq0qm8ax9ss=","Parameters":{"difficulty":"20"}}' --runs 5 --concurrency 2 --max-attempts 1500000
 
+# SHAPOW Nginx PoW
+antibot solve shapow --base-url 'https://target.example/protected' --submit --timeout 30 --max-attempts 20000000
+antibot solve shapow --challenge-json '{"serverData":"7f000001000000000000000000000000000000006553f1001122334455667788","difficulty":16,"nonceLength":16}' --max-attempts 200000
+antibot stress shapow --challenge-json '{"serverData":"7f000001000000000000000000000000000000006553f1001122334455667788","difficulty":12,"nonceLength":16}' --runs 10 --concurrency 2 --max-attempts 50000
+
 # Anubis
 antibot solve anubis --page-url 'https://target.example/path-with-anubis' --submit
 antibot solve anubis --challenge 'randomDataHex' --difficulty 4
@@ -4139,7 +4205,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Albireo / Powxy / go-away / Anubis / FriendlyCaptcha / H33 BotShield / BOTCHA / Donatello / FCaptcha / TrustCaptcha / @strav/captcha / Cap / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Albireo / Powxy / go-away / SHAPOW / Anubis / FriendlyCaptcha / H33 BotShield / BOTCHA / Donatello / FCaptcha / TrustCaptcha / @strav/captcha / Cap / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -4150,6 +4216,7 @@ altcha_run.json
 albireo_run.json
 powxy_run.json
 goaway_run.json
+shapow_run.json
 anubis_run.json
 friendlycaptcha_run.json
 botcha_run.json
@@ -4222,6 +4289,7 @@ src/antibot_sdk/
     albireo.py              # Albireo HMAC-cookie-bound serverless SHA-256 PoW solver
     powxy.py                # Powxy IP/UA/Accept-bound reverse-proxy SHA-256 bit PoW solver
     goaway.py               # go-away js-pow-sha256 key/header-bound PoW solver
+    shapow.py               # SHAPOW Nginx IP/time/random-bound SHA-256 PoW solver
     anubis.py               # Anubis SHA-256 PoW protocol solver
     auro.py                 # Auro AES-GCM mouse telemetry + SHA-256 PoW protocol solver
     friendlycaptcha.py      # FriendlyCaptcha classic PoW protocol solver
@@ -4336,6 +4404,7 @@ Donatello source/local/CLI/stress：Litebrowsers/donatello cmd/resources/interna
 Albireo source/mock/CLI/stress：51511/Albireo functions/_middleware.ts + Netlify/Vercel middleware 交叉确认 HMAC cookie + SHA256(challenge+nonce) hex-prefix PoW；fixture nonce=508,response=0002c969...；CF v2 fp_nonce 和 v1 cookie 本地 mock submit 均 ok=true；默认请求头补齐避免 suspicion score 403；raw HTML / full Set-Cookie / Cookie header 输入回归通过。
 Powxy source/mock/CLI/stress：go.lindenii.runxiyu.org/powxy@v0.1.86 handler/identifier/validate/static solver 交叉确认 IP+UA+Accept-Encoding+Accept-Language+privkeyHash identifier、uint64_le nonce、bit-prefix 校验和 powxy HMAC cookie；fixture difficulty=20 nonce=96585,powxy=SXkBAAAAAAA=；本地 mock submit ok=true；CLI fixture/stress 通过。
 go-away source/mock/CLI/stress：git.gammaspectra.live/git/go-away js-pow-sha256 runtime/load.mjs/VerifyHandler 交叉确认 SHA256(uint64_le(difficulty)||key)、target bitmask、result=hex(challenge||uint64_le(nonce)) 和 verify-challenge 参数；官方 fixture difficulty=20 nonce=1166696；本地 mock make/verify ok=true；CLI fixture/stress 通过。
+SHAPOW source/mock/CLI/stress：git.zajc.tel/shapow Nginx module + challenge-worker.js 交叉确认 serverData=IP(16B)+time_be64+random_be64、nonce16 little-endian counter、SHA256(response) 前导 bit 校验和 shapow-response 查询回传；fixture difficulty=16 nonce=131079；本地 mock settings/submit ok=true；CLI fixture/stress 通过。
 
 H33 BotShield：
 
@@ -4473,6 +4542,19 @@ fixture：Key=Pl02g55pPapXdVc3SVfMZQGymmyE0dTCpq0qm8ax9ss=, difficulty=20 -> non
 本地 mock submit：ok=true，make-challenge / verify-challenge 请求头保持一致并返回 *-state cookie。
 CLI fixture solve：ok=true；CLI stress difficulty=20：5/5 ok。
 实战注意：go-away key 绑定 IP prefix、headers、expiry、私钥指纹；随机出口代理若中途切 IP，会导致 token 校验失败。
+```
+
+
+SHAPOW：
+
+```text
+git.zajc.tel/shapow：src/ngx_http_shapow.c + resources/challenge.js/challenge-worker.js 交叉确认。
+serverData = IP 16 bytes（IPv4 后补 12 个 0）|| int64_be(server_time) || uint64_be(random_challenge)。
+Worker 搜索 16-byte little-endian nonce，提交 response=hex(serverData||nonce)。
+fixture：serverData=7f000001000000000000000000000000000000006553f1001122334455667788,difficulty=16 -> nonce=131079,digest=00002c1d...。
+本地 mock submit：ok=true，settings 获取和 shapow-response 提交复用同一 session/headers。
+CLI fixture solve：ok=true；CLI stress difficulty=12：5/5 ok。
+实战注意：serverData 绑定请求 IP 和 10 分钟时间窗；随机出口代理若 GET settings 与提交切 IP，会验证失败。
 ```
 
 Anubis：

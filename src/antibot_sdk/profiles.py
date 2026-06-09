@@ -124,6 +124,11 @@ def detect_provider_for_url(url: str | None) -> str:
         for x in ("go-away", "__goaway", "/challenge/js-pow-sha256", "js-pow-sha256")
     ):
         return "goaway"
+    if any(
+        x in u or x in host
+        for x in ("shapow", "shapow_internal", "challenge-settings.js", "shapow-response")
+    ):
+        return "shapow"
     if any(x in u or x in host for x in ("auro.network", "auro-captcha", "/api/pow/setup", "/api/pow/validate")):
         return "auro"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
@@ -312,6 +317,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "key-bound-js-wasm-sha256-target-pow-solver",
                 "successFields": ["__goaway_token", "*-state cookie"],
                 "endpoints": ["GET protected page", "POST make-challenge", "GET verify-challenge"],
+            }
+        },
+        "shapow": {
+            "nginx_ip_time_bound_pow": {
+                "patterns": ["shapow", "shapow_internal", "challenge-settings.js", "shapow-response"],
+                "mode": "ip-time-random-bound-sha256-bit-pow-solver",
+                "successFields": ["shapow-response", "IP whitelist"],
+                "endpoints": ["GET protected page", "GET challenge-settings.js", "GET same URL with shapow-response"],
             }
         },
         "auro": {
