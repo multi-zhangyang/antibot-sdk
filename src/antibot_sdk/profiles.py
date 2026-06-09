@@ -117,6 +117,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "anubis"
     if any(x in u or x in host for x in ("albireo", "albireo_challenge", "albireo_solved", "albireo-trap-")):
         return "albireo"
+    if any(x in u or x in host for x in ("powxy", "/.powxy/", "data-identifier", "proof-of-work challenge")):
+        return "powxy"
     if any(x in u or x in host for x in ("auro.network", "auro-captcha", "/api/pow/setup", "/api/pow/validate")):
         return "auro"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
@@ -289,6 +291,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "hmac-cookie-bound-sha256-leading-zero-pow-solver",
                 "successFields": ["nonce", "response", "albireo_solved"],
                 "endpoints": ["GET protected page", "POST same URL with nonce/response/verify/fp_nonce"],
+            }
+        },
+        "powxy": {
+            "reverse_proxy_pow": {
+                "patterns": ["powxy", "/.powxy/", "data-identifier", "Proof-of-work challenge"],
+                "mode": "ip-ua-accept-bound-identifier-sha256-bit-pow-solver",
+                "successFields": ["powxy form field", "powxy cookie"],
+                "endpoints": ["GET protected page", "POST same URL with powxy=<base64 uint64_le nonce>"],
             }
         },
         "auro": {

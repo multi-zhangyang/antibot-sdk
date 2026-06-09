@@ -68,6 +68,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "nonce/response form body / albireo_solved cookie",
         "scope": "Albireo serverless PoW：解析 HTML 与 albireo_challenge HMAC cookie，兼容 CF v2 的 difficulty/fp_nonce 绑定和 Netlify/Vercel v1，补真实浏览器请求头后复现 SHA256(challenge+nonce) leading-zero PoW 并 POST 表单换 albireo_solved；不启动浏览器。",
     },
+    "powxy": {
+        "provider": "powxy",
+        "name": "Powxy",
+        "category": "solver",
+        "captcha_type": "reverse_proxy_pow",
+        "status": "alpha",
+        "output": "powxy form field / powxy HMAC cookie",
+        "scope": "Powxy 反向代理 PoW：解析 challenge 页面 data-identifier/data-difficulty，保持 User-Agent/Accept-Encoding/Accept-Language 一致，复现 SHA256(identifier||uint64_le(nonce)) leading-zero-bit 搜索，POST base64 nonce 换 powxy cookie；不启动浏览器。",
+    },
     "auro": {
         "provider": "auro",
         "name": "Auro.Network",

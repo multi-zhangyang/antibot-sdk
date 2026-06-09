@@ -40,6 +40,7 @@ from .providers.powcaptcha import PowCaptchaSolver
 from .providers.powbot import PowBotSolver
 from .providers.powchallenge import PowChallengeSolver
 from .providers.powforge import PowForgeSolver
+from .providers.powxy import PowxySolver
 from .providers.procaptcha import ProcaptchaSolver
 from .providers.privatecaptcha import PrivateCaptchaSolver
 from .providers.portcullis import PortcullisSolver
@@ -93,6 +94,7 @@ class AntibotClient:
         self.powbot = PowBotSolver()
         self.powchallenge = PowChallengeSolver()
         self.powforge = PowForgeSolver()
+        self.powxy = PowxySolver()
         self.powreaction = PowReactionSolver()
         self.procaptcha = ProcaptchaSolver()
         self.privatecaptcha = PrivateCaptchaSolver()
@@ -212,6 +214,9 @@ class AntibotClient:
 
     async def solve_powforge(self, **kwargs: Any) -> CaptchaResult:
         return await self.powforge.solve(**kwargs)
+
+    async def solve_powxy(self, **kwargs: Any) -> CaptchaResult:
+        return await self.powxy.solve(**kwargs)
 
     async def solve_powreaction(self, **kwargs: Any) -> CaptchaResult:
         return await self.powreaction.solve(**kwargs)
@@ -511,6 +516,32 @@ class AntibotClient:
             albireo_kwargs.setdefault("base_url", target_url)
             albireo_kwargs.setdefault("submit", True)
             return await self.solve_albireo(**albireo_kwargs)
+        if provider == "powxy":
+            powxy_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "page_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "submit_url",
+                    "submit",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "chunk_size",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            powxy_kwargs.setdefault("base_url", target_url)
+            powxy_kwargs.setdefault("submit", True)
+            return await self.solve_powxy(**powxy_kwargs)
         if provider == "anubis":
             anubis_kwargs = {
                 k: v

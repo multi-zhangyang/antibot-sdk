@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -15,6 +15,7 @@
 - ActiveHashcash：新增 Rails 中间件级 Hashcash solver，解析 `input[data-hashcash]` 的 `resource/bits/date`，复现 Web Worker 的 `SHA256(stamp)` 前导零 bit counter 搜索，输出 `hashcash` 隐藏字段，不启动浏览器。
 - ALTCHA：升级 v1/v2 PoW 协议 solver，v1 反查 `hash(salt+number)`，v2 复现 `PBKDF2/SHA-* / SCRYPT / ARGON2ID` KDF challenge、HMAC 签名与 verify-compatible fast path，输出表单 base64 payload 或 M2M Authorization header，不启动浏览器。
 - Albireo：新增 serverless signed PoW 协议 solver，解析 `albireo_challenge` HMAC cookie、Cloudflare v2 `difficulty/fp_nonce` 绑定和 Netlify/Vercel v1 cookie，补浏览器请求头后复现 `SHA256(challenge+nonce)` leading-zero PoW，POST 换 `albireo_solved`，不启动浏览器。
+- Powxy：新增反向代理 PoW WAF 协议 solver，解析页面 `data-identifier/data-difficulty`，保持 `User-Agent/Accept-Encoding/Accept-Language` 与 IP 出口一致，复现 `SHA256(identifier||uint64_le(nonce))` 前导 bit 搜索，POST base64 nonce 换 `powxy` HMAC cookie，不启动浏览器。
 - Anubis：新增 `fast/slow` PoW 协议 solver，解析 challenge 页面或 make-challenge JSON，计算 `SHA256(randomData+nonce)` 前导零，可生成 `pass-challenge` 参数或直接换取 auth cookie，不启动浏览器。
 - Auro.Network：新增 AES-GCM 行为数据 + PoW 协议 solver，获取 `/enckey`，生成鼠标 telemetry 并 AES-GCM 加密，提交 `/api/pow/setup` 后搜索 `SHA256(prefix+nonce)`，可 `/api/pow/validate`，不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
@@ -75,6 +76,7 @@
 | ActiveHashcash | 协议 solver | `rails_hashcash_sha256` | alpha | `hashcash` hidden field / validated response |
 | ALTCHA | 协议 solver | `proof_of_work` | alpha | base64 payload / Authorization header |
 | Albireo | 协议 solver | `serverless_signed_pow` | alpha | nonce/response / `albireo_solved` cookie |
+| Powxy | 协议 solver | `reverse_proxy_pow` | alpha | `powxy` form field / HMAC cookie |
 | Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
 | Auro.Network | 协议 solver | `encrypted_behavior_pow` | alpha | validate body / Auro token |
 | FriendlyCaptcha | 协议 solver | `proof_of_work` | alpha | `frc-captcha-solution` payload |
@@ -832,6 +834,73 @@ antibot stress albireo \
 - 这是协议层 PoW solver，不是浏览器 headless 绕过。
 - 已基于 Albireo 源码和本地 mock 验证 CF v2/v1 两条提交路径；没有把它写成公网 live 通过。
 - 难度每加 1 平均搜索空间约乘 16；VPS 上建议优先控 `--concurrency`，再决定是否开 `--workers`。
+
+---
+
+### Powxy reverse-proxy PoW WAF
+
+Powxy 是反向代理型 PoW 防护，适合 Git forge/API/文档站这类被爬虫高频打的场景。它比普通 `challenge+nonce` PoW 多了一个环境绑定层：服务端先按当前请求生成 32 字节 identifier，再让浏览器/WASM 搜索 nonce。
+
+源码链路（`go.lindenii.runxiyu.org/powxy@v0.1.86`）：
+
+```text
+identifier = SHA256(
+  go_varint10(unix_week)
+  || remote_ip
+  || User-Agent
+  || Accept-Encoding
+  || Accept-Language
+  || SHA256(privkey)
+)
+
+pow = SHA256(identifier || uint64_le(nonce))
+pass iff first N bits are zero
+form field: powxy = base64(uint64_le(nonce))
+solved cookie: powxy = base64(HMAC-SHA256(privkey, identifier))
+```
+
+SDK 当前做法：
+
+- GET protected page，解析 `body[data-identifier][data-difficulty]` 或 `<pre id="identifier">`。
+- 全程固定同一组 `User-Agent / Accept-Encoding / Accept-Language`，避免 GET 和 POST 的 identifier 不一致。
+- 复现官方 WASM/C/Go/Python solver 的 `uint64_le` nonce 规则，而不是错误地拼十进制字符串。
+- POST 同 URL 或显式 `--submit-url`，成功时识别 303 redirect / `powxy` cookie。
+- 支持直接传 HTML、base64 identifier、JSON fixture；不启动浏览器。
+- 支持 artifact：`powxy_run.json`。
+
+命令示例：
+
+```bash
+antibot solve powxy \
+  --base-url 'https://target.example/protected' \
+  --submit \
+  --timeout 30 \
+  --max-attempts 5000000
+```
+
+直接传 fixture：
+
+```bash
+antibot solve powxy \
+  --challenge-json '{"identifier":"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=","difficulty":20}' \
+  --max-attempts 200000
+```
+
+压测：
+
+```bash
+antibot stress powxy \
+  --challenge-json '{"identifier":"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=","difficulty":16}' \
+  --runs 20 \
+  --concurrency 4 \
+  --max-attempts 20000
+```
+
+当前定位：
+
+- 这是协议层 WAF solver，不走 headless，不跑页面 JS/WASM。
+- 因 identifier 绑定 IP/UA/Accept-*，真实 submit 必须保证 GET/POST 走同一个出口、同一组请求头；随机出口代理如果每次请求换 IP，会导致服务端重算 identifier 后验证失败。
+- difficulty 是 bit 级，不是 hex 字符级；每 +1 平均搜索空间约乘 2。默认 20 bit 平均约百万次 SHA-256。
 
 ---
 
@@ -3503,6 +3572,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - ActiveHashcash / `active_hashcash` / `input[data-hashcash]` 相关 URL -> `activehashcash`
 - ALTCHA 相关 URL -> `altcha`
 - Albireo / `albireo_challenge` / `albireo_solved` / `albireo-trap-` 相关 URL -> `albireo`
+- Powxy / `/.powxy/` / `data-identifier` / `Proof-of-work challenge` 相关 URL -> `powxy`
 - Anubis / `.within.website/x/cmd/anubis` 相关 URL -> `anubis`
 - Auro.Network / `/api/pow/setup` / `/api/pow/validate` 相关 URL -> `auro`
 - FriendlyCaptcha / `frc-captcha` 相关 URL -> `friendlycaptcha`
@@ -3797,6 +3867,11 @@ antibot solve albireo --base-url 'https://target.example/protected' --submit --t
 antibot solve albireo --challenge-json '{"challenge":"albireo-fixture","difficulty":3,"fp_nonce":"fpnoncefixture","original_path":"/docs"}' --max-attempts 10000
 antibot stress albireo --challenge-json '{"challenge":"albireo-fixture","difficulty":3,"fp_nonce":"fpnoncefixture","original_path":"/docs"}' --runs 20 --concurrency 4 --max-attempts 10000
 
+# Powxy
+antibot solve powxy --base-url 'https://target.example/protected' --submit --timeout 30 --max-attempts 5000000
+antibot solve powxy --challenge-json '{"identifier":"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=","difficulty":20}' --max-attempts 200000
+antibot stress powxy --challenge-json '{"identifier":"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=","difficulty":16}' --runs 20 --concurrency 4 --max-attempts 20000
+
 # Anubis
 antibot solve anubis --page-url 'https://target.example/path-with-anubis' --submit
 antibot solve anubis --challenge 'randomDataHex' --difficulty 4
@@ -3997,7 +4072,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Albireo / Anubis / FriendlyCaptcha / H33 BotShield / BOTCHA / Donatello / FCaptcha / TrustCaptcha / @strav/captcha / Cap / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Albireo / Powxy / Anubis / FriendlyCaptcha / H33 BotShield / BOTCHA / Donatello / FCaptcha / TrustCaptcha / @strav/captcha / Cap / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -4006,6 +4081,7 @@ turnstile_page.html / hcaptcha_page.html / recaptcha_page.html / geetest_page.ht
 ajcaptcha_run.json / ajcaptcha_original.png / ajcaptcha_jigsaw.png
 altcha_run.json
 albireo_run.json
+powxy_run.json
 anubis_run.json
 friendlycaptcha_run.json
 botcha_run.json
@@ -4076,6 +4152,7 @@ src/antibot_sdk/
     activehashcash.py       # ActiveHashcash Rails Hashcash SHA-256 hidden-field solver
     altcha.py               # ALTCHA PoW protocol solver
     albireo.py              # Albireo HMAC-cookie-bound serverless SHA-256 PoW solver
+    powxy.py                # Powxy IP/UA/Accept-bound reverse-proxy SHA-256 bit PoW solver
     anubis.py               # Anubis SHA-256 PoW protocol solver
     auro.py                 # Auro AES-GCM mouse telemetry + SHA-256 PoW protocol solver
     friendlycaptcha.py      # FriendlyCaptcha classic PoW protocol solver
@@ -4129,6 +4206,7 @@ tests/
   test_ajcaptcha.py
   test_altcha.py
   test_albireo.py
+  test_powxy.py
   test_anubis.py
   test_friendlycaptcha.py
   test_fcaptcha.py
@@ -4166,7 +4244,7 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 185 passed
+pytest: 189 passed
 ruff check src tests: passed
 uv build: success
 Vulcan fixture/html/CLI/stress: chained SHA256 uint32-target PoW，solution=1136;5242;945，4/4 stress 验证通过
@@ -4187,6 +4265,7 @@ H33 BotShield live/script/mock/CLI：确认 script.js challenge/solve 链路、x
 BOTCHA source/live/CLI/stress：dupe-com/botcha packages/go/challenge.go + src/challenges/speed.ts 交叉确认 sha256_first8；/api/speed-challenge live submit ok=true；/api/challenge live prime+salt submit ok=true；fixture answers [8d969eef,29be3ceb,73475cb4] 验证通过。
 Donatello source/local/CLI/stress：Litebrowsers/donatello cmd/resources/internal tasks 交叉确认 challenge_id -> /challenge -> POST 链路；fixture totalHash1=3c92c1f19799b1a31651a4b9315c62a61b7a998598559fedfa776d78990ae8fc；本地 Go server submit ok=true；错误 hash + copyMismatch=false 仍 status=ok，确认 validation gap。
 Albireo source/mock/CLI/stress：51511/Albireo functions/_middleware.ts + Netlify/Vercel middleware 交叉确认 HMAC cookie + SHA256(challenge+nonce) hex-prefix PoW；fixture nonce=508,response=0002c969...；CF v2 fp_nonce 和 v1 cookie 本地 mock submit 均 ok=true；默认请求头补齐避免 suspicion score 403；raw HTML / full Set-Cookie / Cookie header 输入回归通过。
+Powxy source/mock/CLI/stress：go.lindenii.runxiyu.org/powxy@v0.1.86 handler/identifier/validate/static solver 交叉确认 IP+UA+Accept-Encoding+Accept-Language+privkeyHash identifier、uint64_le nonce、bit-prefix 校验和 powxy HMAC cookie；fixture difficulty=20 nonce=96585,powxy=SXkBAAAAAAA=；本地 mock submit ok=true；CLI fixture/stress 通过。
 
 H33 BotShield：
 
@@ -4300,6 +4379,18 @@ PoW fixture：challenge=albireo-fixture,difficulty=3 -> nonce=508,response=0002c
 本地 mock v1 submit：ok=true，无 fp_nonce 字段也能换 solved cookie。
 CLI fixture stress：10/10 ok；raw HTML / full Set-Cookie / Cookie header 输入回归通过。
 公网 live evidence gap：当前未把 Albireo 写成真实公网 live 通过，只记录源码 + 本地协议闭环。
+```
+
+Powxy：
+
+```text
+go.lindenii.runxiyu.org/powxy@v0.1.86：handler.go / identifier.go / validate.go / static/solver.py / wasm/solver.c 交叉确认。
+identifier = SHA256(go_varint10(week)||remote_ip||User-Agent||Accept-Encoding||Accept-Language||SHA256(privkey))。
+PoW = SHA256(identifier||uint64_le(nonce)) 前 N bit 为 0；提交 powxy=base64(uint64_le(nonce))。
+fixture：identifier=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=, difficulty=20 -> nonce=96585, powxy=SXkBAAAAAAA=, digest=000001bd...。
+本地 mock submit：ok=true，GET/POST 请求头保持一致并返回 powxy cookie。
+CLI fixture solve：ok=true；CLI stress difficulty=16：10/10 ok。
+实战注意：随机出口代理若 GET/POST 切换 IP，会导致 identifier 重算不一致。
 ```
 
 Anubis：
@@ -4471,6 +4562,7 @@ stress recaptcha mock 2 轮：2/2。
 - AJ-Captcha 的主要误差来自白色描边过弱、服务端自定义模板/尺寸、以及干扰图与真实模板相似；优先调 `--min-score`、保存 `ajcaptcha_original.png / ajcaptcha_jigsaw.png` 复盘。
 - ALTCHA 是 PoW，不是识图；耗时主要由 `maxnumber`、命中位置和 `workers` 决定。VPS 上默认单 worker，避免把 CPU 打满。
 - Albireo 是 HMAC cookie 绑定的 SHA-256 前导零 PoW；CF v2 还绑定 `fp_nonce`。默认不启动浏览器，只补基础请求头；difficulty 每加 1，平均搜索空间约乘 16。
+- Powxy 绑定 IP/UA/Accept-Encoding/Accept-Language；必须保持 GET/POST 同出口和同请求头。difficulty 是 bit 数，每 +1 平均搜索空间约乘 2。
 - Anubis 是 SHA-256 前导零 PoW；difficulty 每加 1，平均搜索空间约乘 16。页面解析和提交 cookie 是协议闭环，但高 difficulty 仍会吃 CPU。
 - Auro.Network 多一层 AES-GCM 行为 telemetry；如果只给 `prefix/difficulty` 就是纯 PoW，如果走完整 `/enckey -> setup -> validate`，要保证 `x-client` 全程一致。
 - FriendlyCaptcha classic 也是 PoW；耗时主要由 difficulty、solution count、命中位置和 worker 数决定。默认 `10,000,000` 次/段 solution 上限，真实站点不够时调 `--max-attempts-per-solution`。
