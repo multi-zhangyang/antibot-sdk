@@ -135,6 +135,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "albireo",
             "powxy",
             "goaway",
+            "guardianwaf",
             "shapow",
             "anubis",
             "auro",
@@ -371,6 +372,29 @@ async def amain(argv: list[str] | None = None) -> int:
     gwa.add_argument("--proxy")
     gwa.add_argument("--output-dir")
     gwa.add_argument("--raw", action="store_true")
+
+    gwaf = solve_sub.add_parser("guardianwaf")
+    gwaf.add_argument("--base-url", default="https://example.com")
+    gwaf.add_argument("--page-url")
+    gwaf.add_argument("--challenge-json", help="inline challenge JSON/HTML/challenge string, or @/path")
+    gwaf.add_argument("--challenge-file")
+    gwaf.add_argument("--challenge-html")
+    gwaf.add_argument("--verify-url")
+    gwaf.add_argument("--submit", action="store_true")
+    gwaf.add_argument("--direct", action="store_true", help="skip GET page and POST a client-selected stateless challenge")
+    gwaf.add_argument("--difficulty", type=int)
+    gwaf.add_argument("--redirect")
+    gwaf.add_argument("--secret", help="optional local HMAC cookie signing secret for self-hosted fixtures")
+    gwaf.add_argument("--client-ip", default="127.0.0.1")
+    gwaf.add_argument("--cookie-ttl", type=int, default=3600)
+    gwaf.add_argument("--start", type=int, default=0)
+    gwaf.add_argument("--max-attempts", type=int, default=5_000_000)
+    gwaf.add_argument("--workers", type=int, default=1)
+    gwaf.add_argument("--chunk-size", type=int, default=100_000)
+    gwaf.add_argument("--timeout", type=int, default=10)
+    gwaf.add_argument("--proxy")
+    gwaf.add_argument("--output-dir")
+    gwaf.add_argument("--raw", action="store_true")
 
     shpw = solve_sub.add_parser("shapow")
     shpw.add_argument("--base-url", default="https://example.com")
@@ -1531,6 +1555,32 @@ async def amain(argv: list[str] | None = None) -> int:
     sgwa.add_argument("--output-dir")
     sgwa.add_argument("--output-json")
     sgwa.add_argument("--full", action="store_true")
+
+    sgwaf = stress_sub.add_parser("guardianwaf")
+    sgwaf.add_argument("--base-url", default="https://example.com")
+    sgwaf.add_argument("--page-url")
+    sgwaf.add_argument("--challenge-json")
+    sgwaf.add_argument("--challenge-file")
+    sgwaf.add_argument("--challenge-html")
+    sgwaf.add_argument("--verify-url")
+    sgwaf.add_argument("--submit", action="store_true")
+    sgwaf.add_argument("--direct", action="store_true")
+    sgwaf.add_argument("--difficulty", type=int)
+    sgwaf.add_argument("--redirect")
+    sgwaf.add_argument("--secret")
+    sgwaf.add_argument("--client-ip", default="127.0.0.1")
+    sgwaf.add_argument("--cookie-ttl", type=int, default=3600)
+    sgwaf.add_argument("--start", type=int, default=0)
+    sgwaf.add_argument("--max-attempts", type=int, default=5_000_000)
+    sgwaf.add_argument("--workers", type=int, default=1)
+    sgwaf.add_argument("--chunk-size", type=int, default=100_000)
+    sgwaf.add_argument("--runs", type=int, default=10)
+    sgwaf.add_argument("--concurrency", type=int, default=2)
+    sgwaf.add_argument("--timeout", type=int, default=10)
+    sgwaf.add_argument("--proxy")
+    sgwaf.add_argument("--output-dir")
+    sgwaf.add_argument("--output-json")
+    sgwaf.add_argument("--full", action="store_true")
 
     sshpw = stress_sub.add_parser("shapow")
     sshpw.add_argument("--base-url", default="https://example.com")
@@ -2705,6 +2755,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "albireo",
             "powxy",
             "goaway",
+            "guardianwaf",
             "shapow",
             "anubis",
         ):
@@ -2921,6 +2972,31 @@ async def amain(argv: list[str] | None = None) -> int:
             request_id=args.request_id,
             redirect=args.redirect,
             submit=args.submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            chunk_size=args.chunk_size,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "guardianwaf":
+        ret = await client.solve_guardianwaf(
+            base_url=args.base_url,
+            page_url=args.page_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_html=args.challenge_html,
+            verify_url=args.verify_url,
+            submit=args.submit,
+            direct=args.direct,
+            difficulty=args.difficulty,
+            redirect=args.redirect,
+            secret=args.secret,
+            client_ip=args.client_ip,
+            cookie_ttl=args.cookie_ttl,
             start=args.start,
             max_attempts=args.max_attempts,
             workers=args.workers,
@@ -4234,6 +4310,39 @@ async def amain(argv: list[str] | None = None) -> int:
                 request_id=args.request_id,
                 redirect=args.redirect,
                 submit=args.submit,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                chunk_size=args.chunk_size,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "guardianwaf":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="guardianwaf",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_guardianwaf(
+                base_url=args.base_url,
+                page_url=args.page_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_html=args.challenge_html,
+                verify_url=args.verify_url,
+                submit=args.submit,
+                direct=args.direct,
+                difficulty=args.difficulty,
+                redirect=args.redirect,
+                secret=args.secret,
+                client_ip=args.client_ip,
+                cookie_ttl=args.cookie_ttl,
                 start=args.start,
                 max_attempts=args.max_attempts,
                 workers=args.workers,

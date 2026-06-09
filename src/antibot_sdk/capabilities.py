@@ -86,6 +86,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "__goaway_token / go-away state cookie",
         "scope": "go-away WASM/JS PoW：解析 challenge 页面 script.mjs 与 Request Id，保持 IP/UA/Accept/CH headers 稳定，POST make-challenge 取得 challenge/target，复现 Worker 的 SHA256(challenge||uint64_le(nonce)) < target，GET verify-challenge 换 *-state cookie；不启动浏览器。",
     },
+    "guardianwaf": {
+        "provider": "guardianwaf",
+        "name": "GuardianWAF JS Challenge",
+        "category": "solver",
+        "captcha_type": "unsigned_js_pow_hmac_cookie",
+        "status": "alpha",
+        "output": "__gwaf_challenge HMAC cookie / verify form body",
+        "scope": "GuardianWAF JS PoW：解析 inline C/D/R challenge，复现 WebCrypto 的 SHA256(challenge+hex_nonce) 前导 bit 搜索，POST /__guardianwaf/challenge/verify 换 IP-bound HMAC cookie；支持未签名 challenge 的 direct mint 路径，不启动浏览器。",
+    },
     "shapow": {
         "provider": "shapow",
         "name": "SHAPOW Nginx PoW",

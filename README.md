@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / go-away js-pow-sha256 / SHAPOW Nginx PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / NeoIRC resource/body-bound Hashcash / Hashptcha prefix hash-cracking task / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / php-anti-ddos stateless HMAC multi-PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / go-away js-pow-sha256 / GuardianWAF unsigned JS PoW / SHAPOW Nginx PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / NeoIRC resource/body-bound Hashcash / Hashptcha prefix hash-cracking task / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / php-anti-ddos stateless HMAC multi-PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -17,6 +17,7 @@
 - Albireo：新增 serverless signed PoW 协议 solver，解析 `albireo_challenge` HMAC cookie、Cloudflare v2 `difficulty/fp_nonce` 绑定和 Netlify/Vercel v1 cookie，补浏览器请求头后复现 `SHA256(challenge+nonce)` leading-zero PoW，POST 换 `albireo_solved`，不启动浏览器。
 - Powxy：新增反向代理 PoW WAF 协议 solver，解析页面 `data-identifier/data-difficulty`，保持 `User-Agent/Accept-Encoding/Accept-Language` 与 IP 出口一致，复现 `SHA256(identifier||uint64_le(nonce))` 前导 bit 搜索，POST base64 nonce 换 `powxy` HMAC cookie，不启动浏览器。
 - go-away：新增 `js-pow-sha256` 协议 solver，解析 challenge 页面 `script.mjs` 与 Request Id，保持 IP/UA/Accept/CH headers 稳定，POST `make-challenge` 后复现 Worker 的 `SHA256(challenge||uint64_le(nonce)) < target`，GET `verify-challenge` 换 `*-state` cookie，不启动浏览器。
+- GuardianWAF：新增 JS challenge PoW 协议 solver，解析 inline `C/D/R`，复现 WebCrypto 的 `SHA256(challenge+hex_nonce)` 前导 bit 搜索，POST `/__guardianwaf/challenge/verify` 换 `__gwaf_challenge` IP-bound HMAC cookie；同时支持未签名 challenge 的 direct mint 路径，不启动浏览器。
 - SHAPOW：新增 Nginx 模块 PoW 协议 solver，解析 `challenge-settings.js` 中 IP、服务端时间和 `random_challenge` 绑定的 `serverData`，复现 Worker 的 `SHA256(serverData||nonce16_le_counter)` 前导 bit 搜索，通过 `shapow-response` 查询参数进入 IP whitelist，不启动浏览器。
 - Anubis：新增 `fast/slow` PoW 协议 solver，解析 challenge 页面或 make-challenge JSON，计算 `SHA256(randomData+nonce)` 前导零，可生成 `pass-challenge` 参数或直接换取 auth cookie，不启动浏览器。
 - Auro.Network：新增 AES-GCM 行为数据 + PoW 协议 solver，获取 `/enckey`，生成鼠标 telemetry 并 AES-GCM 加密，提交 `/api/pow/setup` 后搜索 `SHA256(prefix+nonce)`，可 `/api/pow/validate`，不启动浏览器。
@@ -83,6 +84,7 @@
 | Albireo | 协议 solver | `serverless_signed_pow` | alpha | nonce/response / `albireo_solved` cookie |
 | Powxy | 协议 solver | `reverse_proxy_pow` | alpha | `powxy` form field / HMAC cookie |
 | go-away js-pow-sha256 | 协议 solver | `goaway_js_pow_sha256` | alpha | `__goaway_token` / `*-state` cookie |
+| GuardianWAF JS Challenge | 协议 solver | `unsigned_js_pow_hmac_cookie` | alpha | `__gwaf_challenge` HMAC cookie / verify body |
 | SHAPOW Nginx PoW | 协议 solver | `nginx_ip_time_bound_pow` | alpha | `shapow-response` / IP whitelist |
 | Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
 | Auro.Network | 协议 solver | `encrypted_behavior_pow` | alpha | validate body / Auro token |
@@ -973,6 +975,76 @@ antibot stress goaway \
 
 ---
 
+
+### GuardianWAF JS Challenge
+
+GuardianWAF 的 challenge 页面是 inline JS PoW：页面给出 `C`、`D`、`R`，浏览器用 WebCrypto 搜索十六进制 nonce，再提交到固定 verify endpoint 换取 IP 绑定的 HMAC cookie。
+
+源码链路（`github.com/GuardianWAF/GuardianWAF`，HEAD `9de1b944ea671d857426e36b7a206f74b43ac503`）：
+
+```text
+page vars: C=<challenge>, D=<difficulty bits>, R=<redirect>
+pow       = SHA256(C || hex(nonce))
+pass iff pow has >= D leading zero bits
+POST      = /__guardianwaf/challenge/verify
+body      = challenge=<C>&nonce=<hex_nonce>&redirect=<R>
+cookie    = __gwaf_challenge = hex(expiry|client_ip).HMAC-SHA256(secret,payload)
+```
+
+SDK 当前做法：
+
+- GET protected page，解析 inline `var C=...,D=...,R=...` 与 form action。
+- 复现 JS 的 `n.toString(16)` nonce，而不是十进制字符串或小端字节。
+- `--submit` 时 POST `/__guardianwaf/challenge/verify`，识别 303 redirect 和 `__gwaf_challenge` cookie。
+- `--direct --difficulty N` 可以跳过 GET 页面，直接构造 client-selected challenge 并提交；这是基于源码确认的“challenge 未签名/未服务端追踪”协议缺口。
+- 支持 artifact：`guardianwaf_run.json`。
+
+命令示例：
+
+```bash
+antibot solve guardianwaf \
+  --base-url 'https://target.example/protected' \
+  --submit \
+  --timeout 30 \
+  --max-attempts 5000000
+```
+
+直接传 fixture：
+
+```bash
+antibot solve guardianwaf \
+  --challenge-json '{"challenge":"0123456789abcdef0123456789abcdef","difficulty":16,"redirect":"/"}' \
+  --max-attempts 100000
+```
+
+Direct mint 路径：
+
+```bash
+antibot solve guardianwaf \
+  --base-url 'https://target.example/protected' \
+  --direct \
+  --difficulty 20 \
+  --submit \
+  --max-attempts 5000000
+```
+
+压测：
+
+```bash
+antibot stress guardianwaf \
+  --challenge-json '{"challenge":"0123456789abcdef0123456789abcdef","difficulty":16,"redirect":"/"}' \
+  --runs 10 \
+  --concurrency 2 \
+  --max-attempts 100000
+```
+
+当前定位：
+
+- 这是纯协议 PoW solver，不启动 headless。
+- cookie 绑定服务端看到的 client IP；如果走真实页面提交，GET/POST 仍建议保持同一个出口和同一组 headers。
+- direct mode 依赖目标使用当前 GuardianWAF verify 逻辑；若后续版本加入 challenge 签名或服务端 nonce registry，需要退回页面解析路径。
+
+---
 
 ### SHAPOW Nginx PoW
 
@@ -3883,6 +3955,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - Albireo / `albireo_challenge` / `albireo_solved` / `albireo-trap-` 相关 URL -> `albireo`
 - Powxy / `/.powxy/` / `data-identifier` / `Proof-of-work challenge` 相关 URL -> `powxy`
 - go-away / `__goaway` / `/challenge/js-pow-sha256` / `script.mjs` 相关 URL -> `goaway`
+- GuardianWAF / `X-GuardianWAF-Challenge` / `__gwaf_challenge` / `/__guardianwaf/challenge/verify` 相关 URL -> `guardianwaf`
 - SHAPOW / `shapow_internal` / `challenge-settings.js` / `shapow-response` 相关 URL -> `shapow`
 - Anubis / `.within.website/x/cmd/anubis` 相关 URL -> `anubis`
 - Auro.Network / `/api/pow/setup` / `/api/pow/validate` 相关 URL -> `auro`
@@ -4191,6 +4264,11 @@ antibot solve goaway --base-url 'https://target.example/protected' --submit --ti
 antibot solve goaway --challenge-json '{"Key":"Pl02g55pPapXdVc3SVfMZQGymmyE0dTCpq0qm8ax9ss=","Parameters":{"difficulty":"20"}}' --max-attempts 1500000
 antibot stress goaway --challenge-json '{"Key":"Pl02g55pPapXdVc3SVfMZQGymmyE0dTCpq0qm8ax9ss=","Parameters":{"difficulty":"20"}}' --runs 5 --concurrency 2 --max-attempts 1500000
 
+# GuardianWAF JS Challenge
+antibot solve guardianwaf --base-url 'https://target.example/protected' --submit --timeout 30 --max-attempts 5000000
+antibot solve guardianwaf --challenge-json '{"challenge":"0123456789abcdef0123456789abcdef","difficulty":16,"redirect":"/"}' --max-attempts 100000
+antibot stress guardianwaf --challenge-json '{"challenge":"0123456789abcdef0123456789abcdef","difficulty":16,"redirect":"/"}' --runs 10 --concurrency 2 --max-attempts 100000
+
 # SHAPOW Nginx PoW
 antibot solve shapow --base-url 'https://target.example/protected' --submit --timeout 30 --max-attempts 20000000
 antibot solve shapow --challenge-json '{"serverData":"7f000001000000000000000000000000000000006553f1001122334455667788","difficulty":16,"nonceLength":16}' --max-attempts 200000
@@ -4420,6 +4498,7 @@ altcha_run.json
 albireo_run.json
 powxy_run.json
 goaway_run.json
+guardianwaf_run.json
 shapow_run.json
 anubis_run.json
 friendlycaptcha_run.json
@@ -4496,6 +4575,7 @@ src/antibot_sdk/
     albireo.py              # Albireo HMAC-cookie-bound serverless SHA-256 PoW solver
     powxy.py                # Powxy IP/UA/Accept-bound reverse-proxy SHA-256 bit PoW solver
     goaway.py               # go-away js-pow-sha256 key/header-bound PoW solver
+    guardianwaf.py          # GuardianWAF unsigned inline JS PoW + HMAC cookie solver
     shapow.py               # SHAPOW Nginx IP/time/random-bound SHA-256 PoW solver
     anubis.py               # Anubis SHA-256 PoW protocol solver
     auro.py                 # Auro AES-GCM mouse telemetry + SHA-256 PoW protocol solver
@@ -4614,6 +4694,7 @@ Donatello source/local/CLI/stress：Litebrowsers/donatello cmd/resources/interna
 Albireo source/mock/CLI/stress：51511/Albireo functions/_middleware.ts + Netlify/Vercel middleware 交叉确认 HMAC cookie + SHA256(challenge+nonce) hex-prefix PoW；fixture nonce=508,response=0002c969...；CF v2 fp_nonce 和 v1 cookie 本地 mock submit 均 ok=true；默认请求头补齐避免 suspicion score 403；raw HTML / full Set-Cookie / Cookie header 输入回归通过。
 Powxy source/mock/CLI/stress：go.lindenii.runxiyu.org/powxy@v0.1.86 handler/identifier/validate/static solver 交叉确认 IP+UA+Accept-Encoding+Accept-Language+privkeyHash identifier、uint64_le nonce、bit-prefix 校验和 powxy HMAC cookie；fixture difficulty=20 nonce=96585,powxy=SXkBAAAAAAA=；本地 mock submit ok=true；CLI fixture/stress 通过。
 go-away source/mock/CLI/stress：git.gammaspectra.live/git/go-away js-pow-sha256 runtime/load.mjs/VerifyHandler 交叉确认 SHA256(uint64_le(difficulty)||key)、target bitmask、result=hex(challenge||uint64_le(nonce)) 和 verify-challenge 参数；官方 fixture difficulty=20 nonce=1166696；本地 mock make/verify ok=true；CLI fixture/stress 通过。
+GuardianWAF source/mock/CLI/stress：github.com/GuardianWAF/GuardianWAF challenge.go/page.go 交叉确认 inline C/D/R、SHA256(challenge+hex_nonce) 前导 bit、/__guardianwaf/challenge/verify 表单和 __gwaf_challenge=hex(expiry|ip).HMAC-SHA256 cookie；fixture difficulty=16 nonce=63947；本地 mock page/submit 与 direct mint 均 ok=true；CLI fixture/stress 通过。
 SHAPOW source/mock/CLI/stress：git.zajc.tel/shapow Nginx module + challenge-worker.js 交叉确认 serverData=IP(16B)+time_be64+random_be64、nonce16 little-endian counter、SHA256(response) 前导 bit 校验和 shapow-response 查询回传；fixture difficulty=16 nonce=131079；本地 mock settings/submit ok=true；CLI fixture/stress 通过。
 
 H33 BotShield：
@@ -4754,6 +4835,18 @@ CLI fixture solve：ok=true；CLI stress difficulty=20：5/5 ok。
 实战注意：go-away key 绑定 IP prefix、headers、expiry、私钥指纹；随机出口代理若中途切 IP，会导致 token 校验失败。
 ```
 
+
+GuardianWAF：
+
+```text
+github.com/GuardianWAF/GuardianWAF@9de1b944ea671d857426e36b7a206f74b43ac503：internal/layers/challenge/challenge.go / page.go 交叉确认。
+PoW = SHA256(challenge + hex(nonce)) 前 D bit 为 0；提交 challenge/nonce/redirect。
+Cookie = hex(expiry|client_ip).HMAC-SHA256(secret,payload)，绑定 verify 请求看到的 client IP。
+fixture：challenge=0123456789abcdef0123456789abcdef,difficulty=16 -> nonce=63947, nonce_hex=f9cb,digest=0000aa98...。
+本地 mock submit：ok=true，返回 __gwaf_challenge cookie；direct 模式未 GET 页面也可提交成功。
+CLI fixture solve：ok=true；CLI stress difficulty=16：5/5 ok。
+实战注意：当前源码未签名 challenge，也不检查 challenge 是否由服务端签发；若目标升级为 signed/session challenge，direct 模式会失效。
+```
 
 SHAPOW：
 

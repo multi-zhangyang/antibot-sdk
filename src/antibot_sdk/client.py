@@ -26,6 +26,7 @@ from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.getpowcaptcha import GetPowCaptchaSolver
 from .providers.goaway import GoAwaySolver
+from .providers.guardianwaf import GuardianWafSolver
 from .providers.gunslol import GunsLolSolver
 from .providers.h33botshield import H33BotShieldSolver
 from .providers.hashguard import HashGuardSolver
@@ -91,6 +92,7 @@ class AntibotClient:
         self.friendlycaptcha = FriendlyCaptchaSolver()
         self.getpowcaptcha = GetPowCaptchaSolver()
         self.goaway = GoAwaySolver()
+        self.guardianwaf = GuardianWafSolver()
         self.shapow = ShapowSolver()
         self.gunslol = GunsLolSolver()
         self.h33botshield = H33BotShieldSolver()
@@ -200,6 +202,9 @@ class AntibotClient:
 
     async def solve_goaway(self, **kwargs: Any) -> CaptchaResult:
         return await self.goaway.solve(**kwargs)
+
+    async def solve_guardianwaf(self, **kwargs: Any) -> CaptchaResult:
+        return await self.guardianwaf.solve(**kwargs)
 
     async def solve_shapow(self, **kwargs: Any) -> CaptchaResult:
         return await self.shapow.solve(**kwargs)
@@ -598,6 +603,39 @@ class AntibotClient:
             goaway_kwargs.setdefault("base_url", target_url)
             goaway_kwargs.setdefault("submit", True)
             return await self.solve_goaway(**goaway_kwargs)
+        if provider == "guardianwaf":
+            gwaf_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "page_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_html",
+                    "verify_url",
+                    "submit",
+                    "direct",
+                    "difficulty",
+                    "redirect",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "chunk_size",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "secret",
+                    "client_ip",
+                    "cookie_ttl",
+                }
+                and v is not None
+            }
+            gwaf_kwargs.setdefault("base_url", target_url)
+            gwaf_kwargs.setdefault("submit", True)
+            return await self.solve_guardianwaf(**gwaf_kwargs)
         if provider == "shapow":
             shapow_kwargs = {
                 k: v

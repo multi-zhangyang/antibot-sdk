@@ -30,6 +30,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://example.com/albireo?albireo_challenge=x") == "albireo"
     assert detect_provider_for_url("https://gate.example/.powxy/static/main.js") == "powxy"
     assert detect_provider_for_url("https://gate.example/go-away/challenge/js-pow-sha256/script.mjs") == "goaway"
+    assert detect_provider_for_url("https://gate.example/__guardianwaf/challenge/verify") == "guardianwaf"
     assert detect_provider_for_url("https://gate.example/shapow_internal/challenge-settings.js") == "shapow"
     assert detect_provider_for_url("https://captcha.example/crypto-puzzle/challenge") == "cryptopuzzle"
     assert detect_provider_for_url("https://captcha.example/challenge/simp") == "captxa"
@@ -100,6 +101,7 @@ def test_generic_provider_detection():
     assert "serverless_signed_pow" in list_profiles()["albireo"]
     assert "reverse_proxy_pow" in list_profiles()["powxy"]
     assert "goaway_js_pow_sha256" in list_profiles()["goaway"]
+    assert "unsigned_js_pow_hmac_cookie" in list_profiles()["guardianwaf"]
     assert "nginx_ip_time_bound_pow" in list_profiles()["shapow"]
     assert "encrypted_behavior_pow" in list_profiles()["auro"]
     assert "target_match_pow" in list_profiles()["chpiopow"]

@@ -126,6 +126,11 @@ def detect_provider_for_url(url: str | None) -> str:
         return "goaway"
     if any(
         x in u or x in host
+        for x in ("guardianwaf", "__gwaf_challenge", "__guardianwaf/challenge/verify", "x-guardianwaf-challenge")
+    ):
+        return "guardianwaf"
+    if any(
+        x in u or x in host
         for x in ("shapow", "shapow_internal", "challenge-settings.js", "shapow-response")
     ):
         return "shapow"
@@ -323,6 +328,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "key-bound-js-wasm-sha256-target-pow-solver",
                 "successFields": ["__goaway_token", "*-state cookie"],
                 "endpoints": ["GET protected page", "POST make-challenge", "GET verify-challenge"],
+            }
+        },
+        "guardianwaf": {
+            "unsigned_js_pow_hmac_cookie": {
+                "patterns": ["GuardianWAF", "X-GuardianWAF-Challenge", "__gwaf_challenge", "/__guardianwaf/challenge/verify"],
+                "mode": "unsigned-inline-js-sha256-bit-pow-to-ip-bound-hmac-cookie-solver",
+                "successFields": ["nonce", "__gwaf_challenge", "303 redirect"],
+                "endpoints": ["GET protected page", "POST /__guardianwaf/challenge/verify"],
             }
         },
         "shapow": {
