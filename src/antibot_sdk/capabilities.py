@@ -77,6 +77,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "frc-captcha-solution payload",
         "scope": "FriendlyCaptcha classic PoW：获取 puzzle，按 friendly-pow/blake2b 求解多段 nonce，输出隐藏表单字段 payload；不启动浏览器。",
     },
+    "getpowcaptcha": {
+        "provider": "getpowcaptcha",
+        "name": "powCAPTCHA",
+        "category": "solver",
+        "captcha_type": "signals_bound_pow",
+        "status": "prototype",
+        "output": "powcaptcha-response solution token / verified response",
+        "scope": "powCAPTCHA widget 协议：合成 fingerprint/signals 请求 /challenges/create，复现 SHA256(signature+problem+nonce) 多 problem 前导零 PoW，输出 btoa(JSON.stringify(solution)) 的 powcaptcha-response；不启动浏览器。",
+    },
     "fcaptcha": {
         "provider": "fcaptcha",
         "name": "FCaptcha",

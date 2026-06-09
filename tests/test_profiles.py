@@ -31,6 +31,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://captcha.example/challenge/simp") == "captxa"
     assert detect_provider_for_url("https://get.crovly.com/widget.js") == "crovly"
     assert detect_provider_for_url("https://captcha.example/powcaptcha/challenge") == "powcaptcha"
+    assert detect_provider_for_url("https://js.powcaptcha.com/widget.js") == "getpowcaptcha"
     assert detect_provider_for_url("https://captcha.example/GetChallenges?difficultyLevel=5") == "powbot"
     assert detect_provider_for_url("https://captcha.example/powchallenge-server/challenge") == "powchallenge"
     assert detect_provider_for_url("https://captcha.powforge.dev/api/challenge") == "powforge"
@@ -66,6 +67,7 @@ def test_generic_provider_detection():
     assert "generic_widget" in list_profiles()["turnstile"]
     assert "rails_hashcash_sha256" in list_profiles()["activehashcash"]
     assert "buffer_reconstruction_pow" in list_profiles()["powcaptcha"]
+    assert "signals_bound_pow" in list_profiles()["getpowcaptcha"]
     assert "scrypt_pow" in list_profiles()["powbot"]
     assert "argon2id_memory_pow" in list_profiles()["powchallenge"]
     assert "signed_sha256_pow_token" in list_profiles()["powforge"]

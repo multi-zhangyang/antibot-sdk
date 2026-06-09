@@ -135,6 +135,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "aliyun",
             "tencent",
             "friendlycaptcha",
+            "getpowcaptcha",
             "fcaptcha",
             "gunslol",
             "hashguard",
@@ -367,6 +368,32 @@ async def amain(argv: list[str] | None = None) -> int:
     frc.add_argument("--output-dir")
     frc.add_argument("--frc-client", default="js-0.9.19")
     frc.add_argument("--raw", action="store_true")
+
+    gpc = solve_sub.add_parser("getpowcaptcha")
+    gpc_source = gpc.add_mutually_exclusive_group(required=True)
+    gpc_source.add_argument("--app-id", help="powCAPTCHA APP ID; POSTs /challenges/create")
+    gpc_source.add_argument("--challenge-json", help="inline challenge JSON, or @/path")
+    gpc_source.add_argument("--challenge-file")
+    gpc_source.add_argument("--challenge-url", help="GET endpoint returning powCAPTCHA challenge JSON")
+    gpc.add_argument("--backend-url", default="https://api.powcaptcha.com")
+    gpc.add_argument("--create-url")
+    gpc.add_argument("--verify-url")
+    gpc.add_argument("--secret", help="private key for optional /challenges/verify")
+    gpc.add_argument("--verify", action="store_true", help="POST solution+secret to /challenges/verify")
+    gpc.add_argument("--context-json", help="inline context JSON, or @/path")
+    gpc.add_argument("--context-file")
+    gpc.add_argument("--signals-json", help="inline signals JSON, or @/path; default synthesizes low-risk signals")
+    gpc.add_argument("--signals-file")
+    gpc.add_argument("--fingerprint-json", help="inline fingerprint JSON/base64, or @/path")
+    gpc.add_argument("--fingerprint-file")
+    gpc.add_argument("--no-gzip-create", action="store_true")
+    gpc.add_argument("--start", type=int, default=0)
+    gpc.add_argument("--max-attempts-per-problem", type=int, default=10_000_000)
+    gpc.add_argument("--workers", type=int, default=1)
+    gpc.add_argument("--timeout", type=int, default=60)
+    gpc.add_argument("--proxy")
+    gpc.add_argument("--output-dir")
+    gpc.add_argument("--raw", action="store_true")
 
     fc = solve_sub.add_parser("fcaptcha")
     fc_source = fc.add_mutually_exclusive_group(required=True)
@@ -1300,6 +1327,34 @@ async def amain(argv: list[str] | None = None) -> int:
     sfrc.add_argument("--output-dir")
     sfrc.add_argument("--output-json")
     sfrc.add_argument("--full", action="store_true")
+
+    sgpc = stress_sub.add_parser("getpowcaptcha")
+    sgpc_source = sgpc.add_mutually_exclusive_group(required=True)
+    sgpc_source.add_argument("--app-id")
+    sgpc_source.add_argument("--challenge-json")
+    sgpc_source.add_argument("--challenge-file")
+    sgpc_source.add_argument("--challenge-url")
+    sgpc.add_argument("--backend-url", default="https://api.powcaptcha.com")
+    sgpc.add_argument("--create-url")
+    sgpc.add_argument("--verify-url")
+    sgpc.add_argument("--secret")
+    sgpc.add_argument("--verify", action="store_true")
+    sgpc.add_argument("--context-json")
+    sgpc.add_argument("--context-file")
+    sgpc.add_argument("--signals-json")
+    sgpc.add_argument("--signals-file")
+    sgpc.add_argument("--fingerprint-json")
+    sgpc.add_argument("--fingerprint-file")
+    sgpc.add_argument("--no-gzip-create", action="store_true")
+    sgpc.add_argument("--runs", type=int, default=10)
+    sgpc.add_argument("--concurrency", type=int, default=2)
+    sgpc.add_argument("--timeout", type=int, default=60)
+    sgpc.add_argument("--max-attempts-per-problem", type=int, default=10_000_000)
+    sgpc.add_argument("--workers", type=int, default=1)
+    sgpc.add_argument("--proxy")
+    sgpc.add_argument("--output-dir")
+    sgpc.add_argument("--output-json")
+    sgpc.add_argument("--full", action="store_true")
 
     sfc = stress_sub.add_parser("fcaptcha")
     sfc_source = sfc.add_mutually_exclusive_group(required=True)
@@ -2506,6 +2561,33 @@ async def amain(argv: list[str] | None = None) -> int:
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "getpowcaptcha":
+        ret = await client.solve_getpowcaptcha(
+            app_id=args.app_id,
+            backend_url=args.backend_url,
+            create_url=args.create_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            secret=args.secret,
+            verify=args.verify,
+            context_json=args.context_json,
+            context_file=args.context_file,
+            signals_json=args.signals_json,
+            signals_file=args.signals_file,
+            fingerprint_json=args.fingerprint_json,
+            fingerprint_file=args.fingerprint_file,
+            gzip_create=not args.no_gzip_create,
+            start=args.start,
+            max_attempts_per_problem=args.max_attempts_per_problem,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
     if args.cmd == "solve" and args.provider == "fcaptcha":
         ret = await client.solve_fcaptcha(
             base_url=args.base_url,
@@ -3590,6 +3672,40 @@ async def amain(argv: list[str] | None = None) -> int:
                 puzzle_url=args.puzzle_url,
                 sitekey=args.sitekey,
                 max_attempts_per_solution=args.max_attempts_per_solution,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "getpowcaptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="getpowcaptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_getpowcaptcha(
+                app_id=args.app_id,
+                backend_url=args.backend_url,
+                create_url=args.create_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                secret=args.secret,
+                verify=args.verify,
+                context_json=args.context_json,
+                context_file=args.context_file,
+                signals_json=args.signals_json,
+                signals_file=args.signals_file,
+                fingerprint_json=args.fingerprint_json,
+                fingerprint_file=args.fingerprint_file,
+                gzip_create=not args.no_gzip_create,
+                max_attempts_per_problem=args.max_attempts_per_problem,
                 workers=args.workers,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,

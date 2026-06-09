@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -17,6 +17,7 @@
 - Anubis：新增 `fast/slow` PoW 协议 solver，解析 challenge 页面或 make-challenge JSON，计算 `SHA256(randomData+nonce)` 前导零，可生成 `pass-challenge` 参数或直接换取 auth cookie，不启动浏览器。
 - Auro.Network：新增 AES-GCM 行为数据 + PoW 协议 solver，获取 `/enckey`，生成鼠标 telemetry 并 AES-GCM 加密，提交 `/api/pow/setup` 后搜索 `SHA256(prefix+nonce)`，可 `/api/pow/validate`，不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
+- powCAPTCHA：新增 widget 协议 solver，合成 fingerprint/signals 调 `/challenges/create`，复现 `SHA256(signature+problem+nonce)` 多 problem 前导零 PoW，输出 `powcaptcha-response` token，不启动浏览器。
 - FCaptcha：新增 behavior/environment signals + `signalsHash` 绑定 SHA-256 PoW 协议 solver，补齐 `meta.challengeNonce`、canonical `signalsJson` 和最小提交耗时，可提交 `/api/verify` 换 token，不启动浏览器。
 - TrustCaptcha：新增 v3 fingerprint/integrity + 多任务 PoW 协议 solver，合成 `browserInformation/fingerprints/integrityHash`，复现 worker 的 `SHA256(input||"tcn"+counter)`，提交 `/v2/verifications/{id}/challenges` 换 `tc-verification-token`，不启动浏览器。
 - @strav/captcha：新增 stateless HMAC token + hashcash PoW 协议 solver，解析公开 token payload 的 `salt/difficulty/jti`，复现 `SHA256(salt+":"+nonce)` 前导 bit 搜索，输出 middleware 可验的 `_captcha/_captcha_answer` 字段，不启动浏览器。
@@ -72,6 +73,7 @@
 | Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
 | Auro.Network | 协议 solver | `encrypted_behavior_pow` | alpha | validate body / Auro token |
 | FriendlyCaptcha | 协议 solver | `proof_of_work` | alpha | `frc-captcha-solution` payload |
+| powCAPTCHA | 协议 solver | `signals_bound_pow` | prototype | `powcaptcha-response` token |
 | FCaptcha | 协议 solver | `signals_bound_pow` | alpha | verify body / FCaptcha token |
 | PrivateCaptcha | 协议 solver | `compute_pow` | alpha | `private-captcha-solution` payload |
 | Portcullis | 协议 solver | `argon2_pow` | alpha | verify body / `captcha_token` |
@@ -956,6 +958,43 @@ async with AntibotClient() as client:
 
 ---
 
+
+### 12.0.1 powCAPTCHA signals-bound SHA-256 PoW
+
+powCAPTCHA 的 widget 链路不是图片识别，而是“fingerprint/signals + 多 problem PoW”。前端会把 fingerprint 做 base64 JSON，连同 context/signals 提交到 `/challenges/create`，拿到 `id/signature/challenges` 后枚举 nonce。SDK 当前把这条链路做成纯协议 solver，适合 VPS/headless 受限环境。
+
+关键点：
+
+```text
+POST /challenges/create
+body = {app_id, fingerprint: btoa(JSON.stringify(fp)), context, signals}
+hash = SHA256(signature + problem + nonce)
+valid iff hash hex startsWith("0" * difficulty)
+powcaptcha-response = btoa(JSON.stringify({challenge_id, solutions, time}))
+```
+
+命令示例：
+
+```bash
+antibot solve getpowcaptcha --app-id 'app_xxx'
+
+antibot solve getpowcaptcha \
+  --challenge-json '{"id":"gpc-fixture-1","signature":"sig-fixture","challenges":[{"problem":"p0","difficulty":2},{"problem":"p1","difficulty":3}]}' \
+  --timeout 5
+
+antibot stress getpowcaptcha \
+  --challenge-json '{"id":"gpc-fixture-1","signature":"sig-fixture","challenges":[{"problem":"p0","difficulty":2},{"problem":"p1","difficulty":3}]}' \
+  --runs 20 \
+  --concurrency 4
+```
+
+当前定位：
+
+- 这是 powCAPTCHA widget 协议 solver，不启动浏览器。
+- 默认 gzip JSON 创建 challenge；若部署不支持 gzip，会自动降级普通 JSON。
+- 支持 `--secret --verify` 走 `/challenges/verify` 服务端校验闭环。
+
+---
 ### 12.1 FCaptcha signals-bound PoW
 
 FCaptcha 的核心不是图片识别，而是“行为/环境 signals + PoW 绑定”。浏览器 widget 会先生成 behavioral/environmental payload，再对紧凑 JSON 做哈希，把这个 `signalsHash` 拼进 PoW 输入：
@@ -3261,6 +3300,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - Anubis / `.within.website/x/cmd/anubis` 相关 URL -> `anubis`
 - Auro.Network / `/api/pow/setup` / `/api/pow/validate` 相关 URL -> `auro`
 - FriendlyCaptcha / `frc-captcha` 相关 URL -> `friendlycaptcha`
+- powCAPTCHA / `js.powcaptcha.com` / `api.powcaptcha.com` / `powcaptcha-response` -> `getpowcaptcha`
 - FCaptcha / `/api/pow/challenge` / `/api/verify` 相关 URL -> `fcaptcha`
 - PrivateCaptcha / private-captcha / api.privatecaptcha.com 相关 URL -> `privatecaptcha`
 - Portcullis / pow-captcha / `/api/v1/challenge` 相关 URL -> `portcullis`
@@ -3546,6 +3586,11 @@ antibot stress auro --challenge-json '{"prefix":"prefix-","difficulty":3}' --no-
 antibot solve friendlycaptcha --puzzle-url 'https://api.friendlycaptcha.com/api/v1/puzzle' --sitekey 'FCxxxxx'
 antibot stress friendlycaptcha --puzzle-url 'https://api.friendlycaptcha.com/api/v1/puzzle' --sitekey 'FCxxxxx' --runs 20
 
+# powCAPTCHA
+antibot solve getpowcaptcha --app-id 'app_xxx'
+antibot solve getpowcaptcha --challenge-json '{"id":"gpc-fixture-1","signature":"sig-fixture","challenges":[{"problem":"p0","difficulty":2},{"problem":"p1","difficulty":3}]}' --timeout 5
+antibot stress getpowcaptcha --challenge-json '{"id":"gpc-fixture-1","signature":"sig-fixture","challenges":[{"problem":"p0","difficulty":2},{"problem":"p1","difficulty":3}]}' --runs 20 --concurrency 4
+
 # PrivateCaptcha
 antibot solve privatecaptcha --puzzle-url 'https://captcha.example/puzzle' --sitekey 'site-key'
 antibot solve privatecaptcha --puzzle 'puzzle_b64.signature_b64'
@@ -3800,6 +3845,7 @@ src/antibot_sdk/
     anubis.py               # Anubis SHA-256 PoW protocol solver
     auro.py                 # Auro AES-GCM mouse telemetry + SHA-256 PoW protocol solver
     friendlycaptcha.py      # FriendlyCaptcha classic PoW protocol solver
+    getpowcaptcha.py       # powCAPTCHA fingerprint/signals-bound SHA-256 PoW solver
     fcaptcha.py             # FCaptcha behavior/environment signalsHash-bound PoW solver
     privatecaptcha.py       # PrivateCaptcha blake2b compute PoW protocol solver
     portcullis.py           # Portcullis Argon2id + SHA-256 PoW protocol solver
@@ -3880,7 +3926,7 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 156 passed
+pytest: 169 passed
 ruff check src tests: passed
 uv build: success
 Vulcan fixture/html/CLI/stress: chained SHA256 uint32-target PoW，solution=1136;5242;945，4/4 stress 验证通过
@@ -3897,6 +3943,7 @@ Capybara-Captcha fixture/mock/stress: payload_token 绑定 + SHA256(nonce+soluti
 Lapti fixture/mock/stress: SHA3(data+SECRET) token + SHA3(token+nonce) byte-zero PoW + /action submit 验证通过
 Captxa fixture/mock/stress: browser metrics + JA4-bound opaque token + SHA-256 PoW simple mode 验证通过
 FCaptcha fixture/mock/stress: signalsHash-bound PoW、本地 /api/pow/challenge + /api/verify 验证通过
+powCAPTCHA widget.js 逆向确认 /challenges/create + gzip JSON + fingerprint/signals；PoW = SHA256(signature+problem+nonce) hex-prefix；本地 mock create + verify：ok=true，成功输出 powcaptcha-response token；fixture nonce [2,209] 验证通过。
 PoW Bot Deterrent fixture/mock/stress: scrypt-WASM PoW、本地 /GetChallenges + /Verify 验证通过
 pow-reaction fixture/mock/live/stress: HS256 JWT + 多轮 SHA256(round.nonce) PoW + reactions submit 验证通过
 node -c bridge.js/site_profiles.js/runner.js: passed
@@ -3994,6 +4041,16 @@ FriendlyCaptcha：
 friendly-pow 官方 easy fixture：成功命中 nonce bytes 00 00 00 00 9a 00 00 00。
 本地 puzzle endpoint：ok=true，成功输出 frc-captcha-solution payload。
 诊断字段按官方 DataView 默认 big-endian 生成。
+```
+
+
+powCAPTCHA：
+
+```text
+widget.js 逆向确认 /challenges/create + gzip JSON + fingerprint/signals。
+PoW = SHA256(signature+problem+nonce) hex-prefix。
+本地 mock create + verify：ok=true，成功输出 powcaptcha-response token。
+fixture nonce [2,209] 验证通过。
 ```
 
 PrivateCaptcha：

@@ -132,6 +132,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "justnocaptcha"
     if any(x in u or x in host for x in ("friendlycaptcha", "friendlycaptcha.com", "frc-captcha")):
         return "friendlycaptcha"
+    if any(x in u or x in host for x in ("powcaptcha.com", "api.powcaptcha.com", "js.powcaptcha.com", "powcaptcha-response")):
+        return "getpowcaptcha"
     if any(x in u or x in host for x in ("fcaptcha", "/api/pow/challenge")):
         return "fcaptcha"
     if any(x in u or x in host for x in ("powforge", "captcha.powforge.dev", "pf_token")):
@@ -284,6 +286,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "friendly-pow-protocol-solver",
                 "successFields": ["frc-captcha-solution"],
                 "endpoints": ["/api/v1/puzzle"],
+            }
+        },
+        "getpowcaptcha": {
+            "signals_bound_pow": {
+                "patterns": ["powcaptcha.com", "js.powcaptcha.com", "api.powcaptcha.com", "powcaptcha-response"],
+                "mode": "fingerprint-signals-bound-sha256-pow-protocol-solver",
+                "successFields": ["powcaptcha-response", "solution token"],
+                "endpoints": ["/challenges/create", "/challenges/verify"],
             }
         },
         "fcaptcha": {

@@ -21,6 +21,7 @@ from .providers.fcaptcha import FCaptchaSolver
 from .providers.cryptopuzzle import CryptoPuzzleSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
+from .providers.getpowcaptcha import GetPowCaptchaSolver
 from .providers.gunslol import GunsLolSolver
 from .providers.hashguard import HashGuardSolver
 from .providers.hcaptcha import HCaptchaSolver
@@ -75,6 +76,7 @@ class AntibotClient:
         self.fcaptcha = FCaptchaSolver()
         self.cryptopuzzle = CryptoPuzzleSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
+        self.getpowcaptcha = GetPowCaptchaSolver()
         self.gunslol = GunsLolSolver()
         self.mcaptcha = MCaptchaSolver()
         self.paulpow = PaulPowSolver()
@@ -163,6 +165,9 @@ class AntibotClient:
 
     async def solve_friendlycaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.friendlycaptcha.solve(**kwargs)
+
+    async def solve_getpowcaptcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.getpowcaptcha.solve(**kwargs)
 
     async def solve_fcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.fcaptcha.solve(**kwargs)
@@ -467,6 +472,49 @@ class AntibotClient:
             }
             frc_kwargs.setdefault("puzzle_url", target_url)
             return await self.solve_friendlycaptcha(**frc_kwargs)
+        if provider == "getpowcaptcha":
+            gpc_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "app_id",
+                    "backend_url",
+                    "create_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "secret",
+                    "verify",
+                    "context_json",
+                    "context_file",
+                    "signals_json",
+                    "signals_file",
+                    "fingerprint_json",
+                    "fingerprint_file",
+                    "gzip_create",
+                    "start",
+                    "max_attempts_per_problem",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not gpc_kwargs.get("backend_url") and not gpc_kwargs.get("challenge_url"):
+                if target_lower.rstrip("/").endswith("/challenges/create"):
+                    gpc_kwargs["create_url"] = target_url
+                    gpc_kwargs["backend_url"] = target_url[: target_lower.rindex("/challenges/create")]
+                elif target_lower.rstrip("/").endswith("/challenges/verify"):
+                    gpc_kwargs["verify_url"] = target_url
+                    gpc_kwargs["backend_url"] = target_url[: target_lower.rindex("/challenges/verify")]
+                else:
+                    gpc_kwargs["backend_url"] = target_url
+            return await self.solve_getpowcaptcha(**gpc_kwargs)
         if provider == "gunslol":
             gl_kwargs = {
                 k: v
