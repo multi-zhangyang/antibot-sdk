@@ -140,6 +140,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "captcha-response submit body",
         "scope": "EduVulcan 链式 SHA-256 uint32-target PoW：提取 data-challenge/data-difficulty/data-rounds，逐轮搜索 first decimal nonce，使 SHA256(base+nonce) 前 4 字节大端整数小于 difficulty，并把上一轮 nonce 追加进下一轮 base；不启动浏览器。",
     },
+    "spow": {
+        "provider": "spow",
+        "name": "spow / leptos-captcha",
+        "category": "solver",
+        "captcha_type": "signed_hashcash_pow",
+        "status": "alpha",
+        "output": "pow submit body / validated response",
+        "scope": "spow/leptos-captcha WASM PoW：解析 version:difficulty:expires:salt:signature challenge，复现 SHA256(challenge||counter) leading-zero bit 搜索，可选用服务端 secret 校验 challenge 签名并提交 hidden pow 字段；不启动浏览器。",
+    },
     "cap": {
         "provider": "cap",
         "name": "Cap / @cap.js",

@@ -2121,6 +2121,58 @@ antibot stress vulcan \
 
 ---
 
+### 20.7 spow / leptos-captcha signed Hashcash PoW
+
+`spow` 是 Rust/Leptos 生态里的自托管 PoW CAPTCHA，`leptos-captcha` 组件会向后端 server function 取一个 challenge，然后在浏览器 WASM 里搜索 counter，最后把 solved PoW 写入隐藏字段 `pow`。它的关键点不是 UI，而是 **服务端签名 challenge + 客户端 leading-zero PoW**。
+
+关键点：
+
+```text
+challenge = version + ":" + difficulty + ":" + expires + ":" + salt + ":" + signature + ":"
+signature = base64_no_pad(sha256(version + difficulty + expires + salt + SECRET))
+
+counter = first decimal where sha256(challenge + counter) has >= difficulty leading zero bits
+solution = challenge + counter
+submit body = {"pow": solution}
+```
+
+SDK 当前支持：
+
+- 解析 spow challenge 字符串、JSON、HTML 或 challenge URL；
+- 复现浏览器 WASM `pow_work()` counter 搜索；
+- 可选传入 `--secret` 本地校验 challenge 签名；
+- 支持 JSON/form 两种提交格式；
+- 不启动浏览器。
+
+命令示例：
+
+```bash
+antibot solve spow \
+  --challenge-url 'https://target.example/get_pow' \
+  --verify-url 'https://target.example/post_form' \
+  --submit \
+  --submit-format form
+
+antibot solve spow \
+  --challenge '1:16:4102444800:Rhs5wflYb9mpiDQX:98s0pbxra8SGKIv4R4ijlASdcp5JDhUeJtBQyKv0Yc4:' \
+  --secret 'MySecureTestSecret1337' \
+  --timeout 5
+
+antibot stress spow \
+  --challenge '1:16:4102444800:Rhs5wflYb9mpiDQX:98s0pbxra8SGKIv4R4ijlASdcp5JDhUeJtBQyKv0Yc4:' \
+  --secret 'MySecureTestSecret1337' \
+  --runs 20 \
+  --concurrency 4
+```
+
+当前定位：
+
+- 这是 signed Hashcash / WASM PoW 协议 solver；
+- SDK 不伪造未知 SECRET 的 challenge，只复用服务端已签发 challenge 并完成客户端 work；
+- 过期时间、一次性消费和表单业务逻辑由目标后端决定。
+
+---
+
 ### 21. P-Captcha QuadraticResidueProblem
 
 P-Captcha 比普通 hashcash 更有意思：服务端给出 Woodall prime `p` 下的一组二次剩余 `n = x² mod p`，浏览器 worker 用 Tonelli-Shanks 求模平方根并把答案串提交给服务端。SDK 当前把这条链路下沉成纯 Python 协议 solver。
@@ -3040,6 +3092,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - JustNoCaptcha / just-no-captcha / `justnocaptcha_solution` 相关 URL -> `justnocaptcha`
 - Capybara-Captcha / capybaracaptcha / `/api/challenge` / `/api/verify` 相关 URL -> `capybara`
 - EduVulcan / WASM-for-Vulcan / `captcha-wrapper` 相关 URL -> `vulcan`
+- spow / leptos-captcha / `/get_pow` 相关 URL -> `spow`
 - mCaptcha / `/api/v1/pow/config` 相关 URL -> `mcaptcha`
 - Wicketkeeper / `/v0/challenge` 相关 URL -> `wicketkeeper`
 - yourcaptcha / `/api/captcha/challenge` / `/api/captcha/verify` 相关 URL -> `yourcaptcha`
@@ -3368,6 +3421,11 @@ antibot solve vulcan --challenge-url 'https://target.example/captcha-page'
 antibot solve vulcan --challenge-json '{"challenge":"vulcan-fixture","difficulty":1048576,"rounds":3}' --timeout 5
 antibot stress vulcan --challenge-json '{"challenge":"vulcan-fixture","difficulty":1048576,"rounds":3}' --runs 20 --concurrency 4
 
+# spow / leptos-captcha
+antibot solve spow --challenge-url 'https://target.example/get_pow' --verify-url 'https://target.example/post_form' --submit --submit-format form
+antibot solve spow --challenge '1:16:4102444800:Rhs5wflYb9mpiDQX:98s0pbxra8SGKIv4R4ijlASdcp5JDhUeJtBQyKv0Yc4:' --secret 'MySecureTestSecret1337' --timeout 5
+antibot stress spow --challenge '1:16:4102444800:Rhs5wflYb9mpiDQX:98s0pbxra8SGKIv4R4ijlASdcp5JDhUeJtBQyKv0Yc4:' --secret 'MySecureTestSecret1337' --runs 20 --concurrency 4
+
 # mCaptcha
 antibot solve mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key'
 antibot stress mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key' --runs 20
@@ -3548,6 +3606,7 @@ src/antibot_sdk/
     justnocaptcha.py        # JustNoCaptcha multi-puzzle FNV/fmix PoW protocol solver
     capybara.py             # Capybara-Captcha payload-token-bound SHA-256 PoW solver
     vulcan.py               # EduVulcan chained SHA-256 uint32-target PoW solver
+    spow.py                 # spow/leptos-captcha signed Hashcash PoW solver
     lapti.py               # Lapti SHA3 secret-token-bound PoW solver
     mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
     wicketkeeper.py         # Wicketkeeper JWT PoW protocol solver
@@ -3597,6 +3656,7 @@ tests/
   test_justnocaptcha.py
   test_capybara.py
   test_vulcan.py
+  test_spow.py
   test_lapti.py
   test_yourcaptcha.py
   test_silentchallenge.py
@@ -3610,10 +3670,11 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 145 passed
+pytest: 149 passed
 ruff check src tests: passed
 uv build: success
 Vulcan fixture/html/CLI/stress: chained SHA256 uint32-target PoW，solution=1136;5242;945，4/4 stress 验证通过
+spow/leptos-captcha fixture/mock/CLI/stress: signed challenge + SHA256(challenge||counter) leading-zero PoW，counter=96113 验证通过
 Swetrix fixture/mock/live/stress: /generate + SHA256(challenge:nonce) PoW + /verify + /validate 验证通过
 Crovly fixture/mock/stress: /challenge + fingerprint/environment/behavior + SHA256(nonce+counter) bit-PoW + /verify 验证通过
 HashGuard fixture/mock/stress: /pow/challenges + SHA256(challengeId:seed:nonce)<=target + /pow/verifications + /pow/assertions/introspect 验证通过

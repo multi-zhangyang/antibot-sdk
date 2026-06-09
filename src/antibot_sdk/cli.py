@@ -141,6 +141,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "justnocaptcha",
             "capybara",
             "vulcan",
+            "spow",
             "cap",
             "cryptopuzzle",
             "captxa",
@@ -682,6 +683,27 @@ async def amain(argv: list[str] | None = None) -> int:
     vul.add_argument("--output-dir")
     vul.add_argument("--user-agent")
     vul.add_argument("--raw", action="store_true")
+
+    spw = solve_sub.add_parser("spow")
+    spw_source = spw.add_mutually_exclusive_group(required=True)
+    spw_source.add_argument("--challenge", help="inline spow challenge string")
+    spw_source.add_argument("--challenge-json", help="inline {pow/challenge} JSON, or @/path")
+    spw_source.add_argument("--challenge-file")
+    spw_source.add_argument("--challenge-html", help="HTML containing a spow challenge string")
+    spw_source.add_argument("--challenge-url", help="GET endpoint returning spow challenge text/JSON/HTML")
+    spw.add_argument("--verify-url", help="endpoint accepting the solved pow field")
+    spw.add_argument("--submit", action="store_true")
+    spw.add_argument("--submit-format", choices=["json", "form"], default="json")
+    spw.add_argument("--secret", help="optional server secret for local challenge signature verification")
+    spw.add_argument("--start", type=int, default=0)
+    spw.add_argument("--max-attempts", type=int, default=100_000_000)
+    spw.add_argument("--workers", type=int, default=1)
+    spw.add_argument("--timeout", type=int, default=60)
+    spw.add_argument("--response-field", default="pow")
+    spw.add_argument("--proxy")
+    spw.add_argument("--output-dir")
+    spw.add_argument("--user-agent")
+    spw.add_argument("--raw", action="store_true")
 
     pc = solve_sub.add_parser("pcaptcha")
     pc_source = pc.add_mutually_exclusive_group(required=True)
@@ -1562,6 +1584,30 @@ async def amain(argv: list[str] | None = None) -> int:
     svul.add_argument("--user-agent")
     svul.add_argument("--full", action="store_true")
 
+    sspw = stress_sub.add_parser("spow")
+    sspw_source = sspw.add_mutually_exclusive_group(required=True)
+    sspw_source.add_argument("--challenge")
+    sspw_source.add_argument("--challenge-json")
+    sspw_source.add_argument("--challenge-file")
+    sspw_source.add_argument("--challenge-html")
+    sspw_source.add_argument("--challenge-url")
+    sspw.add_argument("--verify-url")
+    sspw.add_argument("--submit", action="store_true")
+    sspw.add_argument("--submit-format", choices=["json", "form"], default="json")
+    sspw.add_argument("--secret")
+    sspw.add_argument("--runs", type=int, default=10)
+    sspw.add_argument("--concurrency", type=int, default=2)
+    sspw.add_argument("--timeout", type=int, default=60)
+    sspw.add_argument("--start", type=int, default=0)
+    sspw.add_argument("--max-attempts", type=int, default=100_000_000)
+    sspw.add_argument("--workers", type=int, default=1)
+    sspw.add_argument("--response-field", default="pow")
+    sspw.add_argument("--proxy")
+    sspw.add_argument("--output-dir")
+    sspw.add_argument("--output-json")
+    sspw.add_argument("--user-agent")
+    sspw.add_argument("--full", action="store_true")
+
     spc = stress_sub.add_parser("pcaptcha")
     spc.add_argument("--challenge-url", required=True)
     spc.add_argument("--validate-url")
@@ -2007,6 +2053,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "justnocaptcha",
             "capybara",
             "vulcan",
+            "spow",
             "impost",
             "kerberus",
             "lapti",
@@ -2580,6 +2627,28 @@ async def amain(argv: list[str] | None = None) -> int:
             challenge_url=args.challenge_url,
             start=args.start,
             max_attempts_per_round=args.max_attempts_per_round,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            response_field=args.response_field,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "spow":
+        ret = await client.solve_spow(
+            challenge=args.challenge,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_html=args.challenge_html,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            submit=args.submit,
+            submit_format=args.submit_format,
+            secret=args.secret,
+            start=args.start,
+            max_attempts=args.max_attempts,
             workers=args.workers,
             timeout_sec=args.timeout,
             response_field=args.response_field,
@@ -3671,6 +3740,36 @@ async def amain(argv: list[str] | None = None) -> int:
                 challenge_url=args.challenge_url,
                 start=args.start,
                 max_attempts_per_round=args.max_attempts_per_round,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                response_field=args.response_field,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "spow":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="spow",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_spow(
+                challenge=args.challenge,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_html=args.challenge_html,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                submit=args.submit,
+                submit_format=args.submit_format,
+                secret=args.secret,
+                start=args.start,
+                max_attempts=args.max_attempts,
                 workers=args.workers,
                 timeout_sec=args.timeout,
                 response_field=args.response_field,

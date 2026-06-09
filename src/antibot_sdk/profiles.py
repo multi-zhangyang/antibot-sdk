@@ -139,6 +139,8 @@ def detect_provider_for_url(url: str | None) -> str:
         for x in ("eduvulcan", "wasm-for-vulcan", "vulcan-captcha", "captcha-wrapper", "captcha-response")
     ):
         return "vulcan"
+    if any(x in u or x in host for x in ("leptos-captcha", "spow", "/get_pow", "/post_form")):
+        return "spow"
     if any(x in u or x in host for x in ("trycap.dev", "cap.js", "cap-widget", "capjs")):
         return "cap"
     if any(x in u or x in host for x in ("crypto-puzzle", "cryptopuzzle", "time-lock-puzzle", "rsw96")):
@@ -329,6 +331,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "chained-sha256-uint32-target-pow-solver",
                 "successFields": ["captcha-response"],
                 "endpoints": ["HTML page containing div.captcha-wrapper"],
+            }
+        },
+        "spow": {
+            "signed_hashcash_pow": {
+                "patterns": ["spow", "leptos-captcha", "hidden input name=pow"],
+                "mode": "signed-hashcash-wasm-pow-protocol-solver",
+                "successFields": ["pow"],
+                "endpoints": ["server function returning challenge string", "form/API accepting pow"],
             }
         },
         "cap": {

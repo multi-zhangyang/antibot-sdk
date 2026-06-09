@@ -38,6 +38,7 @@ from .providers.portcullis import PortcullisSolver
 from .providers.powreaction import PowReactionSolver
 from .providers.recaptcha import ReCaptchaSolver
 from .providers.silentchallenge import SilentChallengeSolver
+from .providers.spow import SpowSolver
 from .providers.stravcaptcha import StravCaptchaSolver
 from .providers.swetrix import SwetrixSolver
 from .providers.tencent import TencentCaptchaSolver
@@ -84,6 +85,7 @@ class AntibotClient:
         self.wicketkeeper = WicketkeeperSolver()
         self.yourcaptcha = YourCaptchaSolver()
         self.silentchallenge = SilentChallengeSolver()
+        self.spow = SpowSolver()
         self.stravcaptcha = StravCaptchaSolver()
         self.tencent = TencentCaptchaSolver()
         self.tollbooth = TollboothSolver()
@@ -239,6 +241,9 @@ class AntibotClient:
 
     async def solve_stravcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.stravcaptcha.solve(**kwargs)
+
+    async def solve_spow(self, **kwargs: Any) -> CaptchaResult:
+        return await self.spow.solve(**kwargs)
 
     async def solve_auto(self, target_url: str, **kwargs: Any) -> BrowserResult | CaptchaResult:
         provider = kwargs.pop("provider", None) or detect_provider_for_url(target_url)
@@ -542,6 +547,35 @@ class AntibotClient:
             }
             sc_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_stravcaptcha(**sc_kwargs)
+        if provider == "spow":
+            spow_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_html",
+                    "challenge_url",
+                    "verify_url",
+                    "submit",
+                    "submit_format",
+                    "secret",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "response_field",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            spow_kwargs.setdefault("challenge_url", target_url)
+            return await self.solve_spow(**spow_kwargs)
         if provider == "justnocaptcha":
             jnc_kwargs = {
                 k: v
