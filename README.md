@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / go-away js-pow-sha256 / SHAPOW Nginx PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / NeoIRC resource/body-bound Hashcash / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / go-away js-pow-sha256 / SHAPOW Nginx PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / NeoIRC resource/body-bound Hashcash / Hashptcha prefix hash-cracking task / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -44,6 +44,7 @@
 - HashGuard：新增 target-threshold PoW + JWT proof token 协议 solver，复现 `SHA256(challengeId:seed:nonce) <= target`，提交 `/pow/verifications` 换 proofToken，并可选 `/pow/assertions/introspect`，不启动浏览器。
 - mCaptcha：新增 SHA-256 PoW 协议 solver，复现 Rust/JS 的 `bincode(String)+u128 score` 规则，获取 `/api/v1/pow/config` 后本地找 nonce，可提交 `/api/v1/pow/verify` 换 token，不启动浏览器。
 - NeoIRC：新增 6 字段 SHA-256 Hashcash 协议 solver，支持登录 session 的 resource 绑定 `pow_token`，以及频道消息的 `channel+bodyHash` 绑定 `meta.hashcash`，不启动浏览器。
+- Hashptcha：新增 distributed hash-cracking CAPTCHA 协议 solver，复现 iframe 的 byte-aligned binary `start_point` 递增与 `MD5/SHA256(raw bytes)` 二进制 digest 前缀 `target` 匹配，可提交 `/verify`，不启动浏览器。
 - Wicketkeeper：新增 EdDSA-JWT PoW 协议 solver，获取 `/v0/challenge` 后计算 `SHA256(challenge+nonce)` 前导零，可提交 `/v0/siteverify` 换 success JWT，不启动浏览器。
 - yourcaptcha：新增行为 signals + HMAC challenge + SHA-256 exact PoW 协议 solver，合成低风险 telemetry 获取低 `maxnumber`，搜索 `SHA256(salt+number)`，可提交 verify，不启动浏览器。
 - silent-challenge：新增 motion/navigator attestation + SHA-256 balloon memory-hard PoW 协议 solver，合成高分行为/环境 payload，搜索 balloon nonce，可提交 `/challenge/:id/verify`，不启动浏览器。
@@ -106,6 +107,7 @@
 | @strav/captcha | 协议 solver | `stateless_hmac_pow` | alpha | `_captcha/_captcha_answer` submit body |
 | mCaptcha | 协议 solver | `proof_of_work` | alpha | verify body / mCaptcha token |
 | NeoIRC Hashcash | 协议 solver | `resource_body_bound_hashcash` | alpha | `pow_token` / `meta.hashcash` / session token |
+| Hashptcha | 协议 solver | `prefix_hash_cracking_task` | alpha | `token/value/secret_key` verify body |
 | Wicketkeeper | 协议 solver | `proof_of_work` | alpha | hidden-input solution / success JWT |
 | yourcaptcha | 协议 solver | `behavior_pow` | alpha | captcha payload / verified result |
 | silent-challenge | 协议 solver | `passive_pow` | alpha | challenge verify body / signed token |
@@ -3375,6 +3377,69 @@ antibot stress neoirc \
 
 ---
 
+### 23.2 Hashptcha prefix hash-cracking task
+
+Hashptcha 的难点不是普通“前导零 PoW”，而是把用户浏览器变成分布式 hash-cracking worker：管理端下发 `hash_type/target/start_point/token`，iframe 从二进制 `start_point` 开始枚举，计算原始字节的 MD5/SHA256，命中 digest 二进制前缀后把 `token/value/secret_key` 回传 `/verify`。
+
+源码链路（`szche/Hashptcha`）：
+
+```text
+GET /get-task?k={public_key}
+-> {hash_type, target, token, start_point}
+
+point = byte_align(start_point)
+while true:
+  value_bytes = int(point, 2).to_bytes(len(point)//8, "big")
+  hash_binary = bin(MD5/SHA256(value_bytes)).zfill(128/256)
+  pass iff hash_binary.startswith(target)
+  point = point + 1, preserving byte-aligned width
+
+POST /verify {token, value, secret_key}
+```
+
+SDK 当前做法：
+
+- 支持 `MD5` 和 `SHA256`，兼容 `SHA-256` 写法。
+- 对 `start_point` 做 byte-align，并保留上游 JS 的宽度语义，避免 `0000000010101111` 被错误缩短成 `10101111`。
+- 支持本地 challenge JSON、`GET /get-task` 拉取、可选 `POST /verify`。
+- 支持 artifact：`hashptcha_run.json`。
+
+命令示例：
+
+```bash
+antibot solve hashptcha \
+  --challenge-json '{"token":"tok","hash_type":"MD5","target":"00000000","start_point":"00000000","secret_key":"secret"}' \
+  --max-attempts 1000
+```
+
+真实服务流：
+
+```bash
+antibot solve hashptcha \
+  --base-url 'https://hashptcha.example' \
+  --public-key 'website-public-key' \
+  --secret-key 'website-secret-key' \
+  --submit
+```
+
+压测：
+
+```bash
+antibot stress hashptcha \
+  --challenge-json '{"token":"tok","hash_type":"SHA256","target":"00000000","start_point":"00000000"}' \
+  --runs 10 \
+  --concurrency 2 \
+  --max-attempts 2000
+```
+
+当前定位：
+
+- 这是“hash cracking task”协议 solver，不依赖图片/OCR/浏览器。
+- token 有 replay 语义；真实 submit 每个 task 只能使用一次。
+- `target` 是任意二进制前缀，不局限于全零；难度由前缀长度和命中分布决定。
+
+---
+
 ### 24. Wicketkeeper JWT PoW
 
 Wicketkeeper 是 self-hosted PoW CAPTCHA：服务端签发 EdDSA JWT challenge，前端 worker 搜索 nonce，后端 `/v0/siteverify` 校验 JWT、PoW 和 replay 状态后返回 success JWT。SDK 当前把这条链路做成纯协议 solver。
@@ -3780,6 +3845,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - spow / leptos-captcha / `/get_pow` 相关 URL -> `spow`
 - mCaptcha / `/api/v1/pow/config` 相关 URL -> `mcaptcha`
 - NeoIRC / `/api/v1/server` / `hashcash_bits` / `pow_token` 相关 URL -> `neoirc`
+- Hashptcha / `/get-task` / `hash_type` / `start_point` 相关 URL -> `hashptcha`
 - Wicketkeeper / `/v0/challenge` 相关 URL -> `wicketkeeper`
 - yourcaptcha / `/api/captcha/challenge` / `/api/captcha/verify` 相关 URL -> `yourcaptcha`
 - silent-challenge / silentchallenge / libcaptcha 相关 URL -> `silentchallenge`
@@ -4183,6 +4249,10 @@ antibot solve neoirc --base-url 'https://chat.example' --submit --nick sdkbot --
 antibot solve neoirc --challenge-json '{"mode":"channel","bits":16,"resource":"#pow","date":"260609","body_hash":"148f78d2d833b5a2b0162813b73187afb835e200d8499756c66d03107c5692c2"}' --max-attempts 50000
 antibot stress neoirc --challenge-json '{"bits":12,"resource":"NeoIRC","date":"260609"}' --runs 10 --concurrency 2 --max-attempts 20000
 
+# Hashptcha
+antibot solve hashptcha --challenge-json '{"token":"tok","hash_type":"MD5","target":"00000000","start_point":"00000000"}' --max-attempts 1000
+antibot stress hashptcha --challenge-json '{"token":"tok","hash_type":"SHA256","target":"00000000","start_point":"00000000"}' --runs 10 --concurrency 2 --max-attempts 2000
+
 # Wicketkeeper
 antibot solve wicketkeeper --base-url 'https://captcha.example'
 antibot stress wicketkeeper --base-url 'https://captcha.example' --runs 20
@@ -4267,7 +4337,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Albireo / Powxy / go-away / SHAPOW / Anubis / FriendlyCaptcha / H33 BotShield / BOTCHA / Donatello / FCaptcha / TrustCaptcha / @strav/captcha / Cap / NeoIRC / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Albireo / Powxy / go-away / SHAPOW / Anubis / FriendlyCaptcha / H33 BotShield / BOTCHA / Donatello / FCaptcha / TrustCaptcha / @strav/captcha / Cap / NeoIRC / Hashptcha / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -4287,6 +4357,7 @@ fcaptcha_run.json
 cap_run.json
 lapti_run.json
 neoirc_run.json
+hashptcha_run.json
 cryptopuzzle_run.json
 captxa_run.json
 swetrix_run.json
@@ -4379,6 +4450,7 @@ src/antibot_sdk/
     lapti.py               # Lapti SHA3 secret-token-bound PoW solver
     mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
     neoirc.py               # NeoIRC resource/body-bound SHA-256 Hashcash solver
+    hashptcha.py            # Hashptcha byte-aligned binary hash-prefix cracking solver
     wicketkeeper.py         # Wicketkeeper JWT PoW protocol solver
     yourcaptcha.py          # yourcaptcha behavioral signals + SHA-256 exact PoW protocol solver
     silentchallenge.py      # silent-challenge motion/navigator attestation + balloon PoW solver
@@ -4445,7 +4517,7 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 192 passed
+pytest: 202 passed, 8 warnings
 ruff check src tests: passed
 uv build: success
 Vulcan fixture/html/CLI/stress: chained SHA256 uint32-target PoW，solution=1136;5242;945，4/4 stress 验证通过
@@ -4717,6 +4789,17 @@ fixture：1:16:260609:NeoIRC::9510 -> digest=000029c1...；channel bodyHash=148f
 本地 mock submit：ok=true，GET /api/v1/server 后 POST /api/v1/session 返回 token。
 CLI fixture solve：ok=true；CLI stress difficulty=12：5/5 ok。
 实战注意：session/channel stamp 都有 replay 语义，真实 submit 每个 stamp 只能用一次；channel bodyHash 必须与服务端 raw JSON body 字节一致。
+```
+
+Hashptcha：
+
+```text
+szche/Hashptcha：management_server/work_dispatcher.py + static/js/iframe.js 交叉确认。
+关键语义：value 是 byte-aligned binary string 对应的原始 bytes；MD5/SHA256(value_bytes) 的二进制 digest 必须 startswith(target)。
+fixture：MD5 target=00000000,start=00000000 -> value=10101111,digest=00d9712e...；SHA256 target=00000000 -> value=0000010111000110,digest=0017e45f...。
+本地 mock get-task + verify：ok=true，POST /verify {token,value,secret_key} 返回 Ok。
+CLI fixture solve：ok=true；CLI stress difficulty=8：通过。
+实战注意：token 有 replay 语义；start_point 宽度会影响 raw bytes，不能随意去掉前导零。
 ```
 
 mCaptcha：

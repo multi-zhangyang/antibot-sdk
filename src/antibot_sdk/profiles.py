@@ -198,6 +198,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "mcaptcha"
     if any(x in u or x in host for x in ("neoirc", "/api/v1/server", "pow_token", "hashcash_bits")):
         return "neoirc"
+    if any(x in u or x in host for x in ("hashptcha", "/get-task", "hash_type", "start_point")):
+        return "hashptcha"
     if any(x in u or x in host for x in ("pauldotsh", "bcrypt_pow", "bcrypt-captcha", "/paulpow/")):
         return "paulpow"
     if any(x in u or x in host for x in ("p-captcha", "pcaptcha", "quadraticresidueproblem")):
@@ -543,6 +545,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "six-field-sha256-hashcash-resource-and-body-bound-solver",
                 "successFields": ["pow_token", "meta.hashcash", "session token"],
                 "endpoints": ["GET /api/v1/server", "POST /api/v1/session", "channel meta hashcash"],
+            }
+        },
+        "hashptcha": {
+            "prefix_hash_cracking_task": {
+                "patterns": ["hashptcha", "/get-task", "/verify", "hash_type", "start_point"],
+                "mode": "byte-aligned-binary-preimage-hash-prefix-cracking-solver",
+                "successFields": ["token", "value", "secret_key", "hashptcha-response"],
+                "endpoints": ["GET /get-task?k={public_key}", "POST /verify"],
             }
         },
         "paulpow": {

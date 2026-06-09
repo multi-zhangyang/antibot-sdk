@@ -29,6 +29,7 @@ from .providers.goaway import GoAwaySolver
 from .providers.gunslol import GunsLolSolver
 from .providers.h33botshield import H33BotShieldSolver
 from .providers.hashguard import HashGuardSolver
+from .providers.hashptcha import HashptchaSolver
 from .providers.hcaptcha import HCaptchaSolver
 from .providers.justnocaptcha import JustNoCaptchaSolver
 from .providers.impost import ImpostSolver
@@ -120,6 +121,7 @@ class AntibotClient:
         self.turnstile = TurnstileSolver()
         self.hcaptcha = HCaptchaSolver()
         self.hashguard = HashGuardSolver()
+        self.hashptcha = HashptchaSolver()
         self.justnocaptcha = JustNoCaptchaSolver()
         self.impost = ImpostSolver()
         self.kerberus = KerberusSolver()
@@ -274,6 +276,9 @@ class AntibotClient:
 
     async def solve_hashguard(self, **kwargs: Any) -> CaptchaResult:
         return await self.hashguard.solve(**kwargs)
+
+    async def solve_hashptcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.hashptcha.solve(**kwargs)
 
     async def solve_impost(self, **kwargs: Any) -> CaptchaResult:
         return await self.impost.solve(**kwargs)
@@ -861,6 +866,40 @@ class AntibotClient:
                 else:
                     hg_kwargs["base_url"] = target_url
             return await self.solve_hashguard(**hg_kwargs)
+        if provider == "hashptcha":
+            hp_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "get_task_url",
+                    "verify_url",
+                    "public_key",
+                    "secret_key",
+                    "challenge_json",
+                    "challenge_file",
+                    "submit",
+                    "max_attempts",
+                    "workers",
+                    "chunk_size",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not hp_kwargs.get("base_url") and not hp_kwargs.get("get_task_url"):
+                if target_lower.rstrip("/").endswith("/get-task"):
+                    hp_kwargs["get_task_url"] = target_url
+                elif target_lower.rstrip("/").endswith("/verify"):
+                    hp_kwargs["verify_url"] = target_url
+                    hp_kwargs["base_url"] = target_url[: target_lower.rindex("/verify")]
+                else:
+                    hp_kwargs["base_url"] = target_url
+            return await self.solve_hashptcha(**hp_kwargs)
         if provider == "trustcaptcha":
             tc_kwargs = {
                 k: v

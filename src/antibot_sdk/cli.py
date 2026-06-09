@@ -162,6 +162,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "lapti",
             "mcaptcha",
             "neoirc",
+            "hashptcha",
             "paulpow",
             "pcaptcha",
             "powcaptcha",
@@ -753,6 +754,24 @@ async def amain(argv: list[str] | None = None) -> int:
     ni.add_argument("--proxy")
     ni.add_argument("--output-dir")
     ni.add_argument("--raw", action="store_true")
+
+    hp = solve_sub.add_parser("hashptcha")
+    hp_source = hp.add_mutually_exclusive_group(required=True)
+    hp_source.add_argument("--challenge-json", help="inline {token,hash_type,target,start_point} JSON, or @/path")
+    hp_source.add_argument("--challenge-file")
+    hp_source.add_argument("--get-task-url", help="Hashptcha /get-task?k=... endpoint")
+    hp_source.add_argument("--base-url", help="Hashptcha service root; infers /get-task and /verify")
+    hp.add_argument("--public-key", help="website public key used as get-task k= parameter")
+    hp.add_argument("--secret-key", help="website secret key added to /verify body")
+    hp.add_argument("--verify-url", help="Hashptcha /verify endpoint")
+    hp.add_argument("--submit", action="store_true", help="POST token/value/secret_key to /verify")
+    hp.add_argument("--max-attempts", type=int, default=100_000_000)
+    hp.add_argument("--workers", type=int, default=1)
+    hp.add_argument("--chunk-size", type=int, default=100_000)
+    hp.add_argument("--timeout", type=int, default=20)
+    hp.add_argument("--proxy")
+    hp.add_argument("--output-dir")
+    hp.add_argument("--raw", action="store_true")
 
     pp = solve_sub.add_parser("paulpow")
     pp_source = pp.add_mutually_exclusive_group(required=True)
@@ -1906,6 +1925,27 @@ async def amain(argv: list[str] | None = None) -> int:
     sni.add_argument("--output-json")
     sni.add_argument("--full", action="store_true")
 
+    shp = stress_sub.add_parser("hashptcha")
+    shp_source = shp.add_mutually_exclusive_group(required=True)
+    shp_source.add_argument("--challenge-json")
+    shp_source.add_argument("--challenge-file")
+    shp_source.add_argument("--get-task-url")
+    shp_source.add_argument("--base-url")
+    shp.add_argument("--public-key")
+    shp.add_argument("--secret-key")
+    shp.add_argument("--verify-url")
+    shp.add_argument("--submit", action="store_true")
+    shp.add_argument("--max-attempts", type=int, default=100_000_000)
+    shp.add_argument("--workers", type=int, default=1)
+    shp.add_argument("--chunk-size", type=int, default=100_000)
+    shp.add_argument("--runs", type=int, default=10)
+    shp.add_argument("--concurrency", type=int, default=2)
+    shp.add_argument("--timeout", type=int, default=20)
+    shp.add_argument("--proxy")
+    shp.add_argument("--output-dir")
+    shp.add_argument("--output-json")
+    shp.add_argument("--full", action="store_true")
+
     spp = stress_sub.add_parser("paulpow")
     spp_source = spp.add_mutually_exclusive_group(required=True)
     spp_source.add_argument("--challenge-json")
@@ -2595,6 +2635,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "lapti",
             "mcaptcha",
             "neoirc",
+            "hashptcha",
             "paulpow",
             "pcaptcha",
             "powcaptcha",
@@ -3237,6 +3278,25 @@ async def amain(argv: list[str] | None = None) -> int:
             body_hash=args.body_hash,
             submit=args.submit,
             start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            chunk_size=args.chunk_size,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "hashptcha":
+        ret = await client.solve_hashptcha(
+            base_url=args.base_url,
+            get_task_url=args.get_task_url,
+            verify_url=args.verify_url,
+            public_key=args.public_key,
+            secret_key=args.secret_key,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            submit=args.submit,
             max_attempts=args.max_attempts,
             workers=args.workers,
             chunk_size=args.chunk_size,
@@ -4636,6 +4696,33 @@ async def amain(argv: list[str] | None = None) -> int:
                 body_hash=args.body_hash,
                 submit=args.submit,
                 start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                chunk_size=args.chunk_size,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "hashptcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="hashptcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_hashptcha(
+                base_url=args.base_url,
+                get_task_url=args.get_task_url,
+                verify_url=args.verify_url,
+                public_key=args.public_key,
+                secret_key=args.secret_key,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                submit=args.submit,
                 max_attempts=args.max_attempts,
                 workers=args.workers,
                 chunk_size=args.chunk_size,

@@ -329,6 +329,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "pow_token / hashcash meta / session token",
         "scope": "NeoIRC Hashcash：复现 WebCrypto 的 6 字段 SHA-256 Hashcash，支持 session 级 resource 绑定 stamp 和 channel PRIVMSG 的 channel+bodyHash 绑定 stamp，可提交 /api/v1/session；不启动浏览器。",
     },
+    "hashptcha": {
+        "provider": "hashptcha",
+        "name": "Hashptcha",
+        "category": "solver",
+        "captcha_type": "prefix_hash_cracking_task",
+        "status": "alpha",
+        "output": "token/value/secret_key verify body",
+        "scope": "Hashptcha 分布式 hash-cracking CAPTCHA：复现 iframe 的 byte-aligned binary start_point 递增、MD5/SHA256(raw bytes) 二进制 digest 前缀 target 匹配，输出 token+value，可提交 /verify；不启动浏览器。",
+    },
     "paulpow": {
         "provider": "paulpow",
         "name": "PaulDotSH/pow-captcha",
