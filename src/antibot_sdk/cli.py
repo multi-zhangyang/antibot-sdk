@@ -386,6 +386,7 @@ async def amain(argv: list[str] | None = None) -> int:
     gwaf.add_argument("--redirect")
     gwaf.add_argument("--secret", help="optional local HMAC cookie signing secret for self-hosted fixtures")
     gwaf.add_argument("--client-ip", default="127.0.0.1")
+    gwaf.add_argument("--cookie-name")
     gwaf.add_argument("--cookie-ttl", type=int, default=3600)
     gwaf.add_argument("--start", type=int, default=0)
     gwaf.add_argument("--max-attempts", type=int, default=5_000_000)
@@ -1569,6 +1570,7 @@ async def amain(argv: list[str] | None = None) -> int:
     sgwaf.add_argument("--redirect")
     sgwaf.add_argument("--secret")
     sgwaf.add_argument("--client-ip", default="127.0.0.1")
+    sgwaf.add_argument("--cookie-name")
     sgwaf.add_argument("--cookie-ttl", type=int, default=3600)
     sgwaf.add_argument("--start", type=int, default=0)
     sgwaf.add_argument("--max-attempts", type=int, default=5_000_000)
@@ -2996,6 +2998,7 @@ async def amain(argv: list[str] | None = None) -> int:
             redirect=args.redirect,
             secret=args.secret,
             client_ip=args.client_ip,
+            cookie_name=args.cookie_name,
             cookie_ttl=args.cookie_ttl,
             start=args.start,
             max_attempts=args.max_attempts,
@@ -4342,6 +4345,7 @@ async def amain(argv: list[str] | None = None) -> int:
                 redirect=args.redirect,
                 secret=args.secret,
                 client_ip=args.client_ip,
+                cookie_name=args.cookie_name,
                 cookie_ttl=args.cookie_ttl,
                 start=args.start,
                 max_attempts=args.max_attempts,

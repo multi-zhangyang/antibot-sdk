@@ -90,14 +90,13 @@ def guardianwaf_hash_hex(challenge: str, nonce: int | str) -> str:
 
 
 def guardianwaf_has_leading_zero_bits(digest: bytes, bits: int) -> bool:
-    bits = _validate_difficulty(bits)
-    whole, rem = divmod(bits, 8)
-    if len(digest) < whole + (1 if rem else 0):
+    whole, mask = _guardianwaf_zero_check(bits)
+    if len(digest) < whole + (1 if mask else 0):
         return False
-    if whole and any(digest[i] != 0 for i in range(whole)):
+    if whole and digest[:whole] != b"\x00" * whole:
         return False
-    if rem:
-        return (digest[whole] & ((0xFF << (8 - rem)) & 0xFF)) == 0
+    if mask:
+        return (digest[whole] & mask) == 0
     return True
 
 
@@ -147,12 +146,12 @@ def solve_guardianwaf_nonce(
         while futures:
             done, _ = wait(futures, return_when=FIRST_COMPLETED)
             for fut in done:
-                _begin, end = futures.pop(fut)
+                begin, _end = futures.pop(fut)
                 nonce, digest, _attempts = fut.result()
                 if nonce is not None and digest is not None:
                     for other in futures:
                         other.cancel()
-                    return nonce, format(nonce, "x"), digest.hex(), max(0, end - start)
+                    return nonce, format(nonce, "x"), digest.hex(), max(0, begin - start + _attempts)
                 if submitted < max_attempts:
                     size = min(chunk_size, max_attempts - submitted)
                     nend = next_start + size
@@ -191,7 +190,7 @@ def parse_guardianwaf_challenge(data: Any, *, page_url: str | None = None) -> Gu
             return parse_guardianwaf_challenge(Path(text[1:]).read_text(encoding="utf-8"), page_url=page_url)
         if text.startswith("{"):
             data = json.loads(text)
-        elif "__guardianwaf/challenge/verify" in text or "X-GuardianWAF-Challenge" in text or "var C=" in text:
+        elif _looks_like_guardianwaf_challenge(text) or _has_guardianwaf_js_vars(text):
             return parse_guardianwaf_challenge_html(text, page_url=page_url)
         else:
             return GuardianWafChallenge(challenge=_validate_challenge(text), page_url=page_url)
@@ -202,13 +201,14 @@ def parse_guardianwaf_challenge(data: Any, *, page_url: str | None = None) -> Gu
     challenge = data.get("challenge") or data.get("C") or data.get("pow_challenge")
     if not challenge:
         raise ValueError("GuardianWAF challenge JSON requires challenge/C")
+    difficulty_value = _first_present(data, "difficulty", "D", "bits", default=DEFAULT_DIFFICULTY)
     return GuardianWafChallenge(
         challenge=_validate_challenge(str(challenge)),
-        difficulty=_validate_difficulty(int(data.get("difficulty") or data.get("D") or data.get("bits") or DEFAULT_DIFFICULTY)),
+        difficulty=_validate_difficulty(int(difficulty_value)),
         redirect=_safe_redirect(str(data.get("redirect") or data.get("R") or "/")),
         page_url=str(data.get("page_url") or data.get("url") or page_url or "") or None,
         verify_path=str(data.get("verify_path") or data.get("verifyPath") or data.get("verify_url") or data.get("verifyUrl") or DEFAULT_VERIFY_PATH),
-        cookie_name=str(data.get("cookie_name") or data.get("cookieName") or DEFAULT_COOKIE_NAME),
+        cookie_name=_validate_cookie_name(data.get("cookie_name") or data.get("cookieName") or DEFAULT_COOKIE_NAME),
         raw=data,
     )
 
@@ -339,6 +339,7 @@ class GuardianWafSolver:
         headers: dict[str, str] | None = None,
         secret: str | None = None,
         client_ip: str = "127.0.0.1",
+        cookie_name: str | None = None,
         cookie_ttl: int = DEFAULT_COOKIE_TTL,
     ) -> CaptchaResult:
         started = time.monotonic()
@@ -358,6 +359,7 @@ class GuardianWafSolver:
             "chunk_size": chunk_size,
             "proxy": redacted_proxy(proxy_server),
             "browser": "not_used",
+            "cookie_name_override": cookie_name,
         }
         output_root: Path | None = None
         if output_dir:
@@ -401,6 +403,7 @@ class GuardianWafSolver:
                 direct=direct,
                 difficulty=difficulty,
                 redirect=redirect,
+                cookie_name=cookie_name,
                 timeout_sec=timeout_sec,
                 proxies=proxies,
                 headers=merged_headers,
@@ -410,6 +413,34 @@ class GuardianWafSolver:
                 challenge = _merge_guardianwaf_meta(challenge, difficulty=int(difficulty), redirect=redirect)
             elif redirect is not None:
                 challenge = _merge_guardianwaf_meta(challenge, redirect=redirect)
+            if secret and not submit and not verify_url:
+                cookie_value = make_guardianwaf_cookie(
+                    secret=secret,
+                    client_ip=client_ip,
+                    ttl=cookie_ttl,
+                )
+                diagnostics.update(
+                    {
+                        "challenge": challenge.challenge,
+                        "difficulty": challenge.difficulty,
+                        "redirect": challenge.redirect,
+                        "verify_path": challenge.verify_path,
+                        "cookie_name": challenge.cookie_name,
+                        "pow_skipped": True,
+                        "protocol_gap": "challenge_cookie_can_be_minted_with_known_secret",
+                        "cookie_binding": ["client_ip", "secret_hmac", "expiry"],
+                    }
+                )
+                raw["challenge"] = _challenge_raw(challenge)
+                raw["solution"] = {
+                    "localCookie": {"name": challenge.cookie_name, "value": cookie_value},
+                    "powSkipped": True,
+                }
+                final_ticket = json.dumps(
+                    {"cookie_name": challenge.cookie_name, "cookie_value": cookie_value},
+                    separators=(",", ":"),
+                )
+                return finish(ok=True, ticket=final_ticket, verify_code="local_cookie")
             solution = solve_guardianwaf_challenge(
                 challenge,
                 start=start,
@@ -483,6 +514,7 @@ class GuardianWafSolver:
         direct: bool,
         difficulty: int | None,
         redirect: str | None,
+        cookie_name: str | None,
         timeout_sec: int,
         proxies: dict[str, str] | None,
         headers: dict[str, str],
@@ -490,16 +522,29 @@ class GuardianWafSolver:
     ) -> GuardianWafChallenge:
         loaded = _load_json_arg(challenge_json, challenge_file)
         if loaded is not None:
-            return _merge_guardianwaf_meta(parse_guardianwaf_challenge(loaded, page_url=page_url), difficulty=difficulty, redirect=redirect)
+            return _merge_guardianwaf_meta(
+                parse_guardianwaf_challenge(loaded, page_url=page_url),
+                difficulty=difficulty,
+                redirect=redirect,
+                cookie_name=cookie_name,
+            )
         if challenge_html:
             text = Path(challenge_html[1:]).read_text(encoding="utf-8") if challenge_html.startswith("@") else challenge_html
-            return _merge_guardianwaf_meta(parse_guardianwaf_challenge_html(text, page_url=page_url), difficulty=difficulty, redirect=redirect)
+            return _merge_guardianwaf_meta(
+                parse_guardianwaf_challenge_html(text, page_url=page_url),
+                difficulty=difficulty,
+                redirect=redirect,
+                cookie_name=cookie_name,
+            )
         if direct:
             return GuardianWafChallenge(
                 challenge=make_guardianwaf_challenge(),
-                difficulty=_validate_difficulty(difficulty or DEFAULT_DIFFICULTY),
+                difficulty=_validate_difficulty(
+                    difficulty if difficulty is not None else DEFAULT_DIFFICULTY
+                ),
                 redirect=_safe_redirect(redirect or "/"),
                 page_url=page_url or base_url,
+                cookie_name=_validate_cookie_name(cookie_name or DEFAULT_COOKIE_NAME),
                 raw={"direct": True},
             )
         url = page_url or base_url
@@ -514,7 +559,12 @@ class GuardianWafSolver:
         if resp.status_code >= 500:
             raw["pageResponse"]["text"] = resp.text[:500]
             raise RuntimeError(f"GuardianWAF page HTTP {resp.status_code}")
-        return _merge_guardianwaf_meta(parse_guardianwaf_challenge_html(resp.text, page_url=resp.url), difficulty=difficulty, redirect=redirect)
+        return _merge_guardianwaf_meta(
+            parse_guardianwaf_challenge_html(resp.text, page_url=resp.url),
+            difficulty=difficulty,
+            redirect=redirect,
+            cookie_name=cookie_name,
+        )
 
     def _submit(
         self,
@@ -564,11 +614,21 @@ class GuardianWafSolver:
 
 
 def _search_guardianwaf_range(prefix: bytes, difficulty: int, begin: int, end: int) -> tuple[int | None, bytes | None, int]:
+    whole, mask = _guardianwaf_zero_check(difficulty)
+    zero_prefix = b"\x00" * whole
+    base_hash = hashlib.sha256(prefix)
+    copy_hash = base_hash.copy
     attempts = 0
     for nonce in range(int(begin), int(end)):
-        digest = hashlib.sha256(prefix + format(nonce, "x").encode("ascii")).digest()
+        h = copy_hash()
+        h.update(f"{nonce:x}".encode("ascii"))
+        digest = h.digest()
         attempts += 1
-        if guardianwaf_has_leading_zero_bits(digest, difficulty):
+        if zero_prefix and not digest.startswith(zero_prefix):
+            continue
+        if mask and digest[whole] & mask:
+            continue
+        if len(digest) >= whole + (1 if mask else 0):
             return nonce, digest, attempts
     return None, None, attempts
 
@@ -594,6 +654,20 @@ def _validate_difficulty(value: Any) -> int:
     return bits
 
 
+def _validate_cookie_name(value: Any) -> str:
+    name = str(value or DEFAULT_COOKIE_NAME).strip()
+    if not re.fullmatch(r"[A-Za-z0-9!#$%&'*+\-.^_`|~]{1,128}", name):
+        raise ValueError("GuardianWAF cookie name must be a valid HTTP cookie token")
+    return name
+
+
+def _guardianwaf_zero_check(bits: int) -> tuple[int, int]:
+    bits = _validate_difficulty(bits)
+    whole, rem = divmod(bits, 8)
+    mask = ((0xFF << (8 - rem)) & 0xFF) if rem else 0
+    return whole, mask
+
+
 def _nonce_text(value: int | str) -> str:
     if isinstance(value, int):
         ivalue = int(value)
@@ -608,7 +682,7 @@ def _nonce_text(value: int | str) -> str:
 
 def _js_string_var(text: str, name: str) -> str | None:
     patterns = [
-        rf"\bvar\s+{re.escape(name)}\s*=\s*((?:\"(?:\\.|[^\"\\])*\")|(?:'(?:\\.|[^'\\])*'))",
+        rf"\b(?:var|let|const)\s+{re.escape(name)}\s*=\s*((?:\"(?:\\.|[^\"\\])*\")|(?:'(?:\\.|[^'\\])*'))",
         rf"[,;]\s*{re.escape(name)}\s*=\s*((?:\"(?:\\.|[^\"\\])*\")|(?:'(?:\\.|[^'\\])*'))",
     ]
     raw = _first_match(text, patterns)
@@ -618,7 +692,13 @@ def _js_string_var(text: str, name: str) -> str | None:
 
 
 def _js_number_var(text: str, name: str) -> str | None:
-    return _first_match(text, [rf"\bvar\s+{re.escape(name)}\s*=\s*(\d+)", rf"[,;]\s*{re.escape(name)}\s*=\s*(\d+)"])
+    return _first_match(
+        text,
+        [
+            rf"\b(?:var|let|const)\s+{re.escape(name)}\s*=\s*(\d+)",
+            rf"[,;]\s*{re.escape(name)}\s*=\s*(\d+)",
+        ],
+    )
 
 
 def _decode_js_string(raw: str) -> str:
@@ -660,6 +740,13 @@ def _first_match(text: str, patterns: list[str]) -> str | None:
     return None
 
 
+def _first_present(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
+    for key in keys:
+        if key in data and data[key] is not None:
+            return data[key]
+    return default
+
+
 def _safe_redirect(value: str | None) -> str:
     redirect = str(value or "/")
     if not redirect.startswith("/") or redirect.startswith("//") or any(ch in redirect for ch in "\\@"):
@@ -672,6 +759,7 @@ def _merge_guardianwaf_meta(
     *,
     difficulty: int | None = None,
     redirect: str | None = None,
+    cookie_name: str | None = None,
 ) -> GuardianWafChallenge:
     return GuardianWafChallenge(
         challenge=item.challenge,
@@ -679,7 +767,7 @@ def _merge_guardianwaf_meta(
         redirect=_safe_redirect(redirect if redirect is not None else item.redirect),
         page_url=item.page_url,
         verify_path=item.verify_path,
-        cookie_name=item.cookie_name,
+        cookie_name=_validate_cookie_name(cookie_name or item.cookie_name),
         raw_html=item.raw_html,
         raw=item.raw,
     )
@@ -700,6 +788,13 @@ def _challenge_raw(challenge: GuardianWafChallenge) -> dict[str, Any]:
 
 def _looks_like_guardianwaf_challenge(text: str) -> bool:
     return any(marker in text for marker in ("X-GuardianWAF-Challenge", "__guardianwaf/challenge/verify", "Verifying your browser", "GuardianWAF"))
+
+
+def _has_guardianwaf_js_vars(text: str) -> bool:
+    return bool(
+        re.search(r"\b(?:var|let|const)\s+C\s*=", text)
+        and re.search(r"(?:\b(?:var|let|const)\s+D\s*=|[,;]\s*D\s*=)", text)
+    )
 
 
 def _is_absolute_url(url: str) -> bool:

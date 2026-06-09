@@ -78,11 +78,37 @@ def test_guardianwaf_parse_html_json_and_solution() -> None:
     assert verify_guardianwaf_solution(parsed_json, {"nonce": VALID_NONCE_HEX})
 
 
+def test_guardianwaf_parse_spaced_inline_vars_from_generic_html() -> None:
+    html = (
+        "<script>let C = \"0123456789abcdef0123456789abcdef\", "
+        "D = 16, R = \"/spaced\";</script>"
+    )
+    parsed = parse_guardianwaf_challenge(html, page_url="https://gate.example/start")
+    assert parsed.challenge == CHALLENGE
+    assert parsed.difficulty == DIFFICULTY
+    assert parsed.redirect == "/spaced"
+
+
+def test_guardianwaf_parallel_attempts_hint_is_precise() -> None:
+    nonce, nonce_text, digest_hex, attempts = solve_guardianwaf_nonce(
+        CHALLENGE,
+        DIFFICULTY,
+        max_attempts=100_000,
+        workers=2,
+        chunk_size=50_000,
+    )
+    assert nonce == VALID_NONCE
+    assert nonce_text == VALID_NONCE_HEX
+    assert digest_hex == VALID_DIGEST
+    assert attempts == VALID_NONCE + 1
+
+
 class _GuardianWafHandler(BaseHTTPRequestHandler):
     calls: list[dict[str, Any]] = []
     difficulty = DIFFICULTY
     challenge = CHALLENGE
     secret = SECRET
+    cookie_name = "__gwaf_challenge"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         return
@@ -117,13 +143,17 @@ class _GuardianWafHandler(BaseHTTPRequestHandler):
             303,
             {
                 "Location": form.get("redirect") or "/",
-                "Set-Cookie": f"__gwaf_challenge={cookie}; Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Lax",
+                "Set-Cookie": (
+                    f"{type(self).cookie_name}={cookie}; "
+                    "Path=/; Max-Age=3600; HttpOnly; Secure; SameSite=Lax"
+                ),
             },
         )
 
 
 def _run_server_and_solve(**kwargs: Any):
     _GuardianWafHandler.calls = []
+    _GuardianWafHandler.cookie_name = kwargs.pop("handler_cookie_name", "__gwaf_challenge")
     server = ThreadingHTTPServer(("127.0.0.1", 0), _GuardianWafHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -167,3 +197,37 @@ def test_guardianwaf_solver_direct_stateless_submit_flow() -> None:
     assert [call["method"] for call in calls] == ["POST"]
     ticket = json.loads(ret.ticket or "{}")
     assert ticket["location"] == "/direct"
+
+
+def test_guardianwaf_solver_submit_custom_cookie_name() -> None:
+    ret, calls = _run_server_and_solve(
+        submit=True,
+        cookie_name="__gwaf_custom",
+        handler_cookie_name="__gwaf_custom",
+    )
+    assert ret.ok is True
+    assert ret.verify_code == "cookie_issued"
+    assert [call["method"] for call in calls] == ["GET", "POST"]
+    assert ret.diagnostics["cookie_name"] == "__gwaf_custom"
+    ticket = json.loads(ret.ticket or "{}")
+    assert ticket["cookie_name"] == "__gwaf_custom"
+    assert verify_guardianwaf_cookie(ticket["cookie_value"], secret=SECRET, client_ip="127.0.0.1", now=1_700_000_100)
+
+
+def test_guardianwaf_solver_secret_local_cookie_skips_pow() -> None:
+    ret = asyncio.run(
+        GuardianWafSolver().solve(
+            direct=True,
+            difficulty=32,
+            secret=SECRET,
+            client_ip="127.0.0.1",
+            cookie_name="__gwaf_local",
+            max_attempts=1,
+        )
+    )
+    assert ret.ok is True
+    assert ret.verify_code == "local_cookie"
+    assert ret.diagnostics["pow_skipped"] is True
+    ticket = json.loads(ret.ticket or "{}")
+    assert ticket["cookie_name"] == "__gwaf_local"
+    assert verify_guardianwaf_cookie(ticket["cookie_value"], secret=SECRET, client_ip="127.0.0.1")

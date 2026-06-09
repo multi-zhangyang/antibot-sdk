@@ -629,6 +629,7 @@ class AntibotClient:
                     "headers",
                     "secret",
                     "client_ip",
+                    "cookie_name",
                     "cookie_ttl",
                 }
                 and v is not None
