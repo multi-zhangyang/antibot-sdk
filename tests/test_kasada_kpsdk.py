@@ -93,6 +93,117 @@ window.XMLHttpRequest.prototype.send = function (body) {
 window.postMessage("KPSDK:DONE:xhr", location.origin);
 """
 
+SHIM_FIXTURE = r"""
+window.KPSDK = { isReady() { return true; } };
+new PerformanceObserver(function (list) {
+  window.__observerCount = (window.__observerCount || 0) + list.getEntries().length;
+}).observe({ entryTypes: ["resource"], buffered: true });
+document.body.style.display = "block";
+window.addEventListener("load", function () {
+  throw new Error("safe-load");
+});
+queueMicrotask(function () {
+  const ok = document.hasFocus()
+    && document.visibilityState === "visible"
+    && document.defaultView === window
+    && !!document.documentElement
+    && matchMedia("(min-width: 1000px)").matches
+    && getComputedStyle(document.body).display === "block"
+    && navigator.connection.effectiveType === "4g"
+    && !!navigator.permissions
+    && !!navigator.mediaDevices;
+  fetch("https://target.example/kpsdk/micro", {
+    method: "POST",
+    body: new URLSearchParams({ ok: ok ? "1" : "0" })
+  });
+});
+const cancelled = requestAnimationFrame(function () {
+  window.__cancelledShouldNotRun = true;
+});
+cancelAnimationFrame(cancelled);
+requestAnimationFrame(function () {
+  const resourceCount = performance.getEntriesByType("resource").length;
+  navigator.permissions.query({ name: "notifications" }).then(function () {});
+  navigator.mediaDevices.enumerateDevices().then(function () {});
+  navigator.sendBeacon(
+    "https://target.example/kpsdk/beacon",
+    new URLSearchParams({ resource: resourceCount >= 1 ? "1" : "0" })
+  );
+});
+setImmediate(function () {
+  throw new Error("safe-immediate");
+});
+window.postMessage("KPSDK:DONE:shim", location.origin);
+"""
+
+BODY_SERIALIZATION_FIXTURE = r"""
+window.KPSDK = { isReady() { return true; } };
+const fd = new FormData();
+fd.append("field", "value");
+fd.append("blob", new Blob(["blob-value"], { type: "text/plain" }), "blob.txt");
+fetch("https://target.example/kpsdk/form", { method: "POST", body: fd });
+fetch("https://target.example/kpsdk/blob", {
+  method: "POST",
+  body: new Blob(["plain-blob"], { type: "text/plain" })
+});
+fetch("https://target.example/kpsdk/bytes", {
+  method: "POST",
+  body: new Uint8Array([65, 66])
+});
+navigator.sendBeacon(
+  "https://target.example/kpsdk/params",
+  new URLSearchParams({ a: "1", b: "two" })
+);
+window.postMessage("KPSDK:DONE:body", location.origin);
+"""
+
+DYNAMIC_SCRIPT_WORKER_FIXTURE = r"""
+window.KPSDK = { isReady() { return true; } };
+const first = document.createElement("script");
+first.addEventListener("load", function () {
+  fetch("https://target.example/kpsdk/loaded", { method: "POST", body: "loaded=1" });
+});
+first.src = "https://target.example/kpsdk/child.js";
+document.head.appendChild(first);
+
+const late = document.createElement("script");
+document.body.appendChild(late);
+late.onload = function () {
+  fetch("https://target.example/kpsdk/late", { method: "POST", body: "late=1" });
+};
+late.src = "https://target.example/kpsdk/late.js";
+
+const workerUrl = URL.createObjectURL(
+  new Blob(["self.onmessage=function(){}"], { type: "application/javascript" })
+);
+const worker = new Worker(workerUrl);
+worker.postMessage("ping");
+worker.terminate();
+URL.revokeObjectURL(workerUrl);
+window.postMessage("KPSDK:DONE:dynamic", location.origin);
+"""
+
+SCRIPT_ENUM_RESPONSE_SHAREDWORKER_FIXTURE = r"""
+window.KPSDK = { isReady() { return true; } };
+const script = document.createElement("script");
+script.src = "https://target.example/kpsdk/enumerated.js";
+document.head.appendChild(script);
+const shared = new SharedWorker("https://target.example/kpsdk/shared-worker.js");
+shared.port.start();
+fetch("https://target.example/kpsdk/response").then(function (res) {
+  fetch("https://target.example/kpsdk/probe", {
+    method: "POST",
+    body: JSON.stringify({
+      scripts: document.scripts.length,
+      tagScripts: document.getElementsByTagName("script").length,
+      responseInstance: res instanceof Response,
+      sharedPort: !!(shared.port && shared.port.postMessage && shared.port.start && shared.port.close)
+    })
+  });
+});
+window.postMessage("KPSDK:DONE:enum", location.origin);
+"""
+
 
 pytestmark = pytest.mark.skipif(not shutil.which("node"), reason="node executable is required")
 
@@ -158,6 +269,76 @@ def test_kasada_vm_runner_can_trigger_xhr_transport() -> None:
     assert data["request"]["transport"] == "xhr"
     assert extract_kpsdk_headers(data) == {"x-kpsdk-cd": "cd-xhr", "x-kpsdk-ct": "ct-xhr"}
     assert data["request"]["last"]["url"] == "https://target.example/api"
+
+
+def test_kasada_vm_runner_browser_api_shims_and_safe_callbacks() -> None:
+    data = run_kasada_kpsdk_vm(
+        SHIM_FIXTURE,
+        page_url="https://target.example/login",
+        script_url="https://target.example/kpsdk/p.js",
+        profile={"innerWidth": 1440, "screen_width": 1440},
+        settle_ms=120,
+        timeout_sec=5,
+    )
+    bodies_by_url = {item["url"]: item["body"] for item in data["fetches"]}
+    assert bodies_by_url["https://target.example/kpsdk/micro"] == "ok=1"
+    assert bodies_by_url["https://target.example/kpsdk/beacon"] == "resource=1"
+    assert parse_kpsdk_done_messages(data["messages"])[0]["ct"] == "shim"
+    assert data["diagnostics"]["kpsdkReady"] is True
+    assert data["diagnostics"]["errorCount"] >= 2
+    assert {item["source"] for item in data["errors"]} >= {"window.load", "setImmediate"}
+
+
+def test_kasada_vm_runner_serializes_modern_request_bodies() -> None:
+    data = run_kasada_kpsdk_vm(
+        BODY_SERIALIZATION_FIXTURE,
+        page_url="https://target.example/",
+        settle_ms=80,
+        timeout_sec=5,
+    )
+    bodies_by_url = {item["url"]: item["body"] for item in data["fetches"]}
+    assert bodies_by_url["https://target.example/kpsdk/form"] == "field=value&blob=blob-value"
+    assert bodies_by_url["https://target.example/kpsdk/blob"] == "plain-blob"
+    assert bodies_by_url["https://target.example/kpsdk/bytes"] == "AB"
+    assert bodies_by_url["https://target.example/kpsdk/params"] == "a=1&b=two"
+    assert parse_kpsdk_done_messages(data["messages"])[0]["ct"] == "body"
+
+
+def test_kasada_vm_runner_dynamic_script_and_worker_stubs() -> None:
+    data = run_kasada_kpsdk_vm(
+        DYNAMIC_SCRIPT_WORKER_FIXTURE,
+        page_url="https://target.example/",
+        settle_ms=120,
+        timeout_sec=5,
+    )
+    by_kind = {(item["kind"], item["url"]): item for item in data["fetches"]}
+    assert ("script", "https://target.example/kpsdk/child.js") in by_kind
+    assert ("script", "https://target.example/kpsdk/late.js") in by_kind
+    assert ("worker", next(item["url"] for item in data["fetches"] if item["kind"] == "worker")) in by_kind
+    assert by_kind[("fetch", "https://target.example/kpsdk/loaded")]["body"] == "loaded=1"
+    assert by_kind[("fetch", "https://target.example/kpsdk/late")]["body"] == "late=1"
+    assert parse_kpsdk_done_messages(data["messages"])[0]["ct"] == "dynamic"
+
+
+def test_kasada_vm_runner_enumerates_scripts_response_and_sharedworker_port() -> None:
+    data = run_kasada_kpsdk_vm(
+        SCRIPT_ENUM_RESPONSE_SHAREDWORKER_FIXTURE,
+        page_url="https://target.example/",
+        settle_ms=120,
+        timeout_sec=5,
+    )
+    bodies_by_url = {item["url"]: item["body"] for item in data["fetches"]}
+    probe = json.loads(bodies_by_url["https://target.example/kpsdk/probe"])
+    assert probe == {
+        "scripts": 2,
+        "tagScripts": 2,
+        "responseInstance": True,
+        "sharedPort": True,
+    }
+    assert ("worker", "https://target.example/kpsdk/shared-worker.js") in {
+        (item["kind"], item["url"]) for item in data["fetches"]
+    }
+    assert parse_kpsdk_done_messages(data["messages"])[0]["ct"] == "enum"
 
 
 def test_parse_done_and_extract_headers_fallback() -> None:

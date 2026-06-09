@@ -437,6 +437,9 @@ async def amain(argv: list[str] | None = None) -> int:
     awaf.add_argument("--max-attempts", type=int, default=5_000_000)
     awaf.add_argument("--workers", type=int, default=1)
     awaf.add_argument("--chunk-size", type=int, default=100_000)
+    awaf.add_argument("--submit", action="store_true")
+    awaf.add_argument("--submit-url")
+    awaf.add_argument("--base-url")
     awaf.add_argument("--timeout", type=int, default=30)
     awaf.add_argument("--proxy")
     awaf.add_argument("--output-dir")
@@ -1891,6 +1894,9 @@ async def amain(argv: list[str] | None = None) -> int:
     sawaf.add_argument("--max-attempts", type=int, default=5_000_000)
     sawaf.add_argument("--workers", type=int, default=1)
     sawaf.add_argument("--chunk-size", type=int, default=100_000)
+    sawaf.add_argument("--submit", action="store_true")
+    sawaf.add_argument("--submit-url")
+    sawaf.add_argument("--base-url")
     sawaf.add_argument("--runs", type=int, default=10)
     sawaf.add_argument("--concurrency", type=int, default=2)
     sawaf.add_argument("--timeout", type=int, default=30)
@@ -3631,6 +3637,9 @@ async def amain(argv: list[str] | None = None) -> int:
             max_attempts=args.max_attempts,
             workers=args.workers,
             chunk_size=args.chunk_size,
+            submit=args.submit,
+            submit_url=args.submit_url,
+            base_url=args.base_url,
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
@@ -5308,6 +5317,9 @@ async def amain(argv: list[str] | None = None) -> int:
                 max_attempts=args.max_attempts,
                 workers=args.workers,
                 chunk_size=args.chunk_size,
+                submit=args.submit,
+                submit_url=args.submit_url,
+                base_url=args.base_url,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,

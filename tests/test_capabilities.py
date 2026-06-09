@@ -174,6 +174,11 @@ def test_captcha_result_schema_has_type_and_capability() -> None:
 
 def test_new_protocol_solvers_are_top_level_sdk_exports() -> None:
     assert antibot_sdk.AwsWafSolver
+    assert antibot_sdk.build_awswaf_verify_payload
+    assert antibot_sdk.build_awswaf_mp_verify_payload
+    assert antibot_sdk.run_awswaf_challenge_vm
+    assert antibot_sdk.parse_awswaf_challenge_vm_result
+    assert antibot_sdk.extract_awswaf_crypto_from_vm_result
     assert antibot_sdk.Wargon2Solver
     assert antibot_sdk.BalooProxySolver
     assert antibot_sdk.BasedFlareSolver

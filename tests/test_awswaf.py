@@ -2,9 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
+import threading
+from typing import Any, Iterator
 
+from antibot_sdk.cli import amain
 from antibot_sdk.providers.awswaf import (
+    AWSWAF_TOKEN_COOKIE,
     AwsWafSolver,
     awswaf_challenge_base,
     awswaf_challenge_mode,
@@ -14,7 +20,9 @@ from antibot_sdk.providers.awswaf import (
     awswaf_sha2_digest,
     awswaf_signals_checksum,
     awswaf_scrypt_digest,
+    build_awswaf_mp_verify_payload,
     build_awswaf_signals,
+    build_awswaf_verify_payload,
     decode_awswaf_signal,
     encode_awswaf_signals,
     extract_awswaf_script_url,
@@ -33,6 +41,53 @@ NB_INPUT = "eyJjaGFsbGVuZ2VfdHlwZSI6Ik5ldHdvcmtCYW5kd2lkdGgiLCJyZWdpb24iOiJ1cy1l
 CHECKSUM = "1a2b3c4d"
 SHA_TYPE = "h7b0c470f" + "a" * 60
 SCRYPT_TYPE = "h72f957df" + "b" * 60
+MP_TYPE = "ha9faaffd" + "c" * 60
+
+
+@contextmanager
+def awswaf_mock_server(
+    *,
+    token: str | None = "mock-token",
+    json_token_field: str | None = None,
+    json_token: str | None = None,
+) -> Iterator[tuple[str, list[dict[str, Any]]]]:
+    captured: list[dict[str, Any]] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802
+            length = int(self.headers.get("Content-Length") or "0")
+            body = self.rfile.read(length)
+            captured.append(
+                {
+                    "path": self.path,
+                    "headers": dict(self.headers),
+                    "body": body.decode("utf-8"),
+                    "json": json.loads(body.decode("utf-8")),
+                }
+            )
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            if token:
+                self.send_header("Set-Cookie", f"{AWSWAF_TOKEN_COOKIE}={token}; Path=/; HttpOnly")
+            self.end_headers()
+            response = {"ok": True}
+            if json_token_field:
+                response[json_token_field] = json_token or "json-token"
+            self.wfile.write(json.dumps(response).encode("utf-8"))
+
+        def log_message(self, *_args: object) -> None:
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host, port = server.server_address
+        yield f"http://{host}:{port}", captured
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
 
 
 def test_awswaf_sha2_and_scrypt_fixtures() -> None:
@@ -161,3 +216,191 @@ def test_awswaf_solver_core_result() -> None:
     payload = json.loads(ret.ticket or "{}")
     assert payload["solution"] == "2605"
     assert payload["challenge"]["region"] == "us-east-1"
+
+
+def test_awswaf_verify_payload_builder_merges_encrypted_signals() -> None:
+    crypto = parse_awswaf_crypto_config(
+        {"key": "11" * 32, "identifier": "AwsWafEncryptedSignals", "signalVersion": "2.4.0"}
+    )
+    signal_array, checksum, encrypted = encode_awswaf_signals(
+        {"version": "2.4.0", "fixture": True},
+        crypto,
+        nonce=b"\x02" * 12,
+    )
+    challenge = parse_awswaf_challenge(
+        {"challenge": {"input": SHA_INPUT, "hmac": "fixturehmac", "region": "us-east-1"}, "challenge_type": SHA_TYPE, "difficulty": 8}
+    )
+    solution = solve_awswaf_challenge(challenge, checksum=checksum, max_attempts=10_000)
+
+    payload = build_awswaf_verify_payload(solution, signals=signal_array)
+
+    assert payload["challenge"] == {
+        "input": SHA_INPUT,
+        "hmac": "fixturehmac",
+        "region": "us-east-1",
+    }
+    assert payload["solution"].isdigit()
+    assert payload["checksum"] == checksum
+    assert payload["client"] == "Browser"
+    assert payload["signals"] == [{"name": "AwsWafEncryptedSignals", "value": {"Present": encrypted}}]
+    decoded_checksum, decoded_signals = decode_awswaf_signal(
+        payload["signals"][0]["value"]["Present"],
+        crypto.key,
+    )
+    assert decoded_checksum == checksum
+    assert decoded_signals["fixture"] is True
+
+
+def test_awswaf_mp_verify_payload_builder_uses_same_solved_body_shape() -> None:
+    crypto = parse_awswaf_crypto_config({"key": "22" * 32, "identifier": "AwsWafEncryptedSignals"})
+    signal_array, checksum, _encrypted = encode_awswaf_signals(
+        {"version": "2.4.0", "mp": True},
+        crypto,
+        nonce=b"\x03" * 12,
+    )
+    challenge = parse_awswaf_challenge(
+        {"challenge": {"input": NB_INPUT, "hmac": "mphmac", "region": "us-east-1"}, "challenge_type": MP_TYPE, "difficulty": 1}
+    )
+    solution = solve_awswaf_challenge(challenge, checksum=checksum, max_attempts=10)
+
+    payload = build_awswaf_mp_verify_payload(solution, signals={"array": signal_array})
+
+    assert awswaf_endpoint_type(MP_TYPE) == "mp_verify"
+    assert payload["challenge"]["input"] == NB_INPUT
+    assert payload["solution"] == solve_awswaf_network_bandwidth(1)
+    assert payload["checksum"] == checksum
+    assert payload["signals"][0]["name"] == "AwsWafEncryptedSignals"
+
+
+def test_awswaf_solver_mock_submit_verify_parses_token_cookie() -> None:
+    with awswaf_mock_server(token="verify-token") as (base_url, captured):
+        ret = asyncio.run(
+            AwsWafSolver().solve(
+                challenge_json={
+                    "challenge": {"input": SHA_INPUT, "hmac": "fixturehmac", "region": "us-east-1"},
+                    "challenge_type": SHA_TYPE,
+                    "difficulty": 8,
+                },
+                crypto_json={"key": "33" * 32, "identifier": "AwsWafEncryptedSignals"},
+                signals_json={"version": "2.4.0", "fixture": "verify"},
+                submit=True,
+                submit_url=f"{base_url}/verify",
+                max_attempts=10_000,
+            )
+        )
+
+    assert ret.ok is True
+    assert ret.verify_code == "verified"
+    assert ret.diagnostics["endpoint_type"] == "verify"
+    assert ret.diagnostics["submitted"] is True
+    assert ret.diagnostics["submit_token_received"] is True
+    assert ret.raw["submitResponse"]["awsWafToken"] == "verify-token"
+    ticket = json.loads(ret.ticket or "{}")
+    assert ticket[AWSWAF_TOKEN_COOKIE] == "verify-token"
+    assert len(captured) == 1
+    assert captured[0]["path"] == "/verify"
+    body = captured[0]["json"]
+    assert body["client"] == "Browser"
+    assert body["solution"].isdigit()
+    assert body["signals"][0]["name"] == "AwsWafEncryptedSignals"
+    decoded_checksum, decoded_signals = decode_awswaf_signal(
+        body["signals"][0]["value"]["Present"],
+        bytes.fromhex("33" * 32),
+    )
+    assert body["checksum"] == decoded_checksum
+    assert decoded_signals["fixture"] == "verify"
+
+
+def test_awswaf_solver_mock_submit_mp_verify_endpoint() -> None:
+    with awswaf_mock_server(token="mp-token") as (base_url, captured):
+        ret = asyncio.run(
+            AwsWafSolver().solve(
+                challenge_json={
+                    "challenge": {"input": NB_INPUT, "hmac": "mphmac", "region": "us-east-1"},
+                    "challenge_type": MP_TYPE,
+                    "difficulty": 1,
+                },
+                crypto_json={"key": "44" * 32, "identifier": "AwsWafEncryptedSignals"},
+                signals_json={"version": "2.4.0", "fixture": "mp"},
+                submit=True,
+                submit_url=f"{base_url}/mp_verify",
+                max_attempts=10,
+            )
+        )
+
+    assert ret.ok is True
+    assert ret.verify_code == "verified"
+    assert ret.diagnostics["endpoint_type"] == "mp_verify"
+    assert ret.raw["submitResponse"]["awsWafToken"] == "mp-token"
+    assert len(captured) == 1
+    assert captured[0]["path"] == "/mp_verify"
+    body = captured[0]["json"]
+    assert body["solution"] == solve_awswaf_network_bandwidth(1)
+    assert body["signals"][0]["name"] == "AwsWafEncryptedSignals"
+    ticket = json.loads(ret.ticket or "{}")
+    assert ticket[AWSWAF_TOKEN_COOKIE] == "mp-token"
+    assert ticket["endpoint_type"] == "mp_verify"
+
+
+def test_awswaf_solver_submit_parses_json_token_and_sets_origin_headers() -> None:
+    with awswaf_mock_server(token=None, json_token_field="awsWafToken", json_token="json-token") as (
+        base_url,
+        captured,
+    ):
+        ret = asyncio.run(
+            AwsWafSolver().solve(
+                challenge_json={
+                    "challenge": {"input": SHA_INPUT, "hmac": "fixturehmac", "region": "us-east-1"},
+                    "challenge_type": SHA_TYPE,
+                    "difficulty": 8,
+                },
+                submit=True,
+                submit_url=f"{base_url}/verify",
+                checksum=CHECKSUM,
+                max_attempts=10_000,
+            )
+        )
+
+    assert ret.ok is True
+    assert ret.verify_code == "verified"
+    ticket = json.loads(ret.ticket or "{}")
+    assert ticket[AWSWAF_TOKEN_COOKIE] == "json-token"
+    assert captured[0]["headers"]["Origin"] == base_url
+    assert captured[0]["headers"]["Referer"] == base_url + "/"
+
+
+def test_awswaf_cli_stress_mock_submit(capsys) -> None:
+    challenge = {
+        "challenge": {"input": SHA_INPUT, "hmac": "fixturehmac", "region": "us-east-1"},
+        "challenge_type": SHA_TYPE,
+        "difficulty": 8,
+    }
+    with awswaf_mock_server(token="stress-token") as (base_url, captured):
+        code = asyncio.run(
+            amain(
+                [
+                    "stress",
+                    "awswaf",
+                    "--challenge-json",
+                    json.dumps(challenge),
+                    "--checksum",
+                    CHECKSUM,
+                    "--submit",
+                    "--submit-url",
+                    f"{base_url}/verify",
+                    "--max-attempts",
+                    "10000",
+                    "--runs",
+                    "1",
+                    "--concurrency",
+                    "1",
+                ]
+            )
+        )
+
+    out = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert out["summary"]["ok"] == 1
+    assert out["summary"]["fail"] == 0
+    assert len(captured) == 1
+    assert captured[0]["path"] == "/verify"

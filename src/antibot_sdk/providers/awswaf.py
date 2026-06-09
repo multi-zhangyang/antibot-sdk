@@ -8,15 +8,19 @@ import json
 import multiprocessing as mp
 import os
 import re
+import shutil
+import subprocess
 import time
 import zlib
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from http.cookies import SimpleCookie
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
+import requests
 from Crypto.Cipher import AES
 
 from ..models import CaptchaResult
@@ -27,6 +31,8 @@ DEFAULT_MAX_ATTEMPTS = 5_000_000
 DEFAULT_CHUNK_SIZE = 100_000
 DEFAULT_BASE_URL = "https://example.com"
 AWSWAF_TOKEN_COOKIE = "aws-waf-token"
+VENDOR_DIR = Path(__file__).resolve().parents[1] / "vendor" / "awswaf"
+CHALLENGE_VM_RUNNER = VENDOR_DIR / "challenge_vm_runner.mjs"
 TYPE_SCRYPT_PREFIX = "h72f957df"
 TYPE_SHA2_PREFIX = "h7b0c470f"
 TYPE_MP_VERIFY_PREFIX = "ha9faaffd"
@@ -82,12 +88,98 @@ class AwsWafSolution:
 
     @property
     def verify_payload(self) -> dict[str, Any]:
-        return {
-            "challenge": self.challenge_body,
-            "solution": self.solution,
-            "checksum": self.checksum,
-            "client": "Browser",
+        return build_awswaf_verify_payload(self)
+
+
+def build_awswaf_verify_payload(
+    solution: AwsWafSolution | dict[str, Any],
+    *,
+    signals: Any = None,
+    client: str = "Browser",
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the JSON body posted to AWS WAF `/verify`.
+
+    The PoW solution and checksum stay at the top level; encrypted telemetry is
+    merged into the same body as `signals` when a signal array is provided.
+    """
+
+    return _build_awswaf_submit_payload(solution, signals=signals, client=client, extra=extra)
+
+
+def build_awswaf_mp_verify_payload(
+    solution: AwsWafSolution | dict[str, Any],
+    *,
+    signals: Any = None,
+    client: str = "Browser",
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the JSON body posted to AWS WAF `/mp_verify`.
+
+    AWS WAF's multi-page verify endpoint accepts the same solved challenge body
+    shape for the primitives supported here; endpoint selection is tracked
+    separately by `awswaf_endpoint_type()`.
+    """
+
+    return _build_awswaf_submit_payload(solution, signals=signals, client=client, extra=extra)
+
+
+def _build_awswaf_submit_payload(
+    solution: AwsWafSolution | dict[str, Any],
+    *,
+    signals: Any = None,
+    client: str = "Browser",
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if isinstance(solution, AwsWafSolution):
+        payload: dict[str, Any] = {
+            "challenge": solution.challenge_body,
+            "solution": solution.solution,
+            "checksum": solution.checksum,
         }
+    elif isinstance(solution, dict):
+        payload = dict(solution)
+    else:
+        raise TypeError("AWS WAF payload builder requires AwsWafSolution or dict payload")
+
+    if client:
+        payload["client"] = str(client)
+    else:
+        payload.setdefault("client", "Browser")
+
+    if signals is not None:
+        signal_array = _normalize_awswaf_signal_array(signals)
+        if signal_array:
+            payload["signals"] = signal_array
+
+    if extra:
+        payload.update(dict(extra))
+    return payload
+
+
+def _normalize_awswaf_signal_array(signals: Any) -> list[dict[str, Any]]:
+    value = signals[0] if isinstance(signals, tuple) and signals else signals
+    if isinstance(value, dict):
+        if isinstance(value.get("array"), list):
+            value = value["array"]
+        elif isinstance(value.get("signals"), list):
+            value = value["signals"]
+        elif "name" in value and "value" in value:
+            value = [value]
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("AWS WAF signals must be a signal array or {array:[...]}")
+
+    out: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise ValueError("AWS WAF signal entries must be JSON objects")
+        name = str(item.get("name") or "").strip()
+        if not name or "value" not in item:
+            raise ValueError("AWS WAF signal entries require name and value")
+        out.append({"name": name, "value": item["value"]})
+    return out
 
 
 def awswaf_has_leading_zero_bits(digest: bytes, bits: int) -> bool:
@@ -369,6 +461,109 @@ def parse_awswaf_crypto_config(data: AwsWafCryptoConfig | dict[str, Any] | str) 
     )
 
 
+def run_awswaf_challenge_vm(
+    script: str,
+    *,
+    script_url: str | None = None,
+    page_url: str = "https://target.example/",
+    cookie: str | None = None,
+    profile: dict[str, Any] | None = None,
+    config: dict[str, Any] | None = None,
+    resources: dict[str, str] | None = None,
+    node: str | None = None,
+    timeout_sec: int = DEFAULT_TIMEOUT,
+    settle_ms: int = 120,
+) -> dict[str, Any]:
+    """Execute AWS WAF ``challenge.js`` in a browserless Node VM extractor.
+
+    The runner is an extraction primitive: it captures challenge/config globals,
+    postMessage/fetch/XHR/beacon traffic, and likely verify endpoints. It does
+    not fetch remote subresources unless the caller injects them through
+    ``resources``.
+    """
+
+    source = _load_text_arg(script)
+    if not source.strip():
+        raise ValueError("AWS WAF challenge VM requires non-empty script")
+    node_bin = node or shutil.which("node")
+    if not node_bin:
+        raise RuntimeError("node executable is required for AWS WAF challenge VM mode")
+    if not CHALLENGE_VM_RUNNER.is_file():
+        raise RuntimeError(f"AWS WAF challenge VM helper is missing: {CHALLENGE_VM_RUNNER}")
+    payload = {
+        "script": source,
+        "script_url": script_url,
+        "page_url": page_url,
+        "cookie": cookie or "",
+        "profile": profile or {},
+        "config": config or {},
+        "resources": resources or {},
+        "settle_ms": max(0, int(settle_ms)),
+        "vm_timeout_ms": max(1000, int(timeout_sec * 1000)),
+    }
+    try:
+        proc = subprocess.run(
+            [node_bin, str(CHALLENGE_VM_RUNNER)],
+            input=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=max(1, int(timeout_sec) + 2),
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"AWS WAF challenge VM helper timed out after {timeout_sec}s") from exc
+    if proc.returncode != 0:
+        message = (proc.stderr or proc.stdout or "AWS WAF challenge VM helper failed").strip()
+        raise RuntimeError(message)
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("AWS WAF challenge VM helper returned non-JSON output") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError("AWS WAF challenge VM helper returned invalid payload")
+    return data
+
+
+def parse_awswaf_challenge_vm_result(vm_result: dict[str, Any]) -> AwsWafChallenge:
+    """Convert a VM extractor result into an ``AwsWafChallenge`` dataclass."""
+
+    if not isinstance(vm_result, dict):
+        raise ValueError("AWS WAF VM result must be a JSON object")
+    extracted = vm_result.get("extracted") if isinstance(vm_result.get("extracted"), dict) else vm_result
+    challenge = extracted.get("challenge") if isinstance(extracted.get("challenge"), dict) else {}
+    data = {
+        "challenge": {
+            "input": challenge.get("input") or extracted.get("input") or "",
+            "hmac": challenge.get("hmac") or extracted.get("hmac") or "",
+            "region": challenge.get("region") or extracted.get("region") or "",
+        },
+        "challenge_type": extracted.get("challenge_type") or extracted.get("challengeType") or "",
+        "difficulty": extracted.get("difficulty") or 0,
+        "memory": extracted.get("memory") or 0,
+    }
+    return parse_awswaf_challenge(data)
+
+
+def extract_awswaf_crypto_from_vm_result(vm_result: dict[str, Any]) -> dict[str, Any]:
+    """Return normalized crypto config hints captured by the VM extractor."""
+
+    if not isinstance(vm_result, dict):
+        return {}
+    extracted = vm_result.get("extracted") if isinstance(vm_result.get("extracted"), dict) else vm_result
+    crypto = extracted.get("crypto") if isinstance(extracted.get("crypto"), dict) else {}
+    out: dict[str, Any] = {}
+    if crypto.get("key"):
+        out["key"] = str(crypto["key"])
+    if crypto.get("identifier"):
+        out["identifier"] = str(crypto["identifier"])
+    if crypto.get("signalVersion"):
+        out["signalVersion"] = str(crypto["signalVersion"])
+    if isinstance(crypto.get("typeNames"), dict):
+        out["typeNames"] = dict(crypto["typeNames"])
+    return out
+
+
 def parse_awswaf_challenge(data: AwsWafChallenge | dict[str, Any] | str) -> AwsWafChallenge:
     if isinstance(data, AwsWafChallenge):
         return data
@@ -482,6 +677,9 @@ class AwsWafSolver:
         workers: int = 1,
         chunk_size: int = DEFAULT_CHUNK_SIZE,
         timeout_sec: int = DEFAULT_TIMEOUT,
+        submit: bool = False,
+        submit_url: str | None = None,
+        base_url: str | None = None,
         proxy_server: str | None = None,
         output_dir: str | None = None,
         headers: dict[str, str] | None = None,
@@ -491,7 +689,9 @@ class AwsWafSolver:
         artifacts: dict[str, str] = {}
         errors: list[str] = []
         diagnostics: dict[str, Any] = {
-            "submit": False,
+            "submit": bool(submit or submit_url),
+            "submit_url": submit_url,
+            "base_url": base_url,
             "browser": "not_used",
             "start": start,
             "max_attempts": max_attempts,
@@ -529,18 +729,34 @@ class AwsWafSolver:
             )
 
         try:
-            _ = parse_proxy(proxy_server) if proxy_server else None
+            proxies = _requests_proxies(proxy_server)
             challenge = self._load_challenge(challenge_json, challenge_file, challenge_js)
             crypto = self._load_crypto(crypto_json, crypto_file, aes_key_hex, identifier, signal_version)
             merged_headers = {**DEFAULT_HEADERS, **(headers or {})}
-            signals = _load_json_arg(signals_json) if signals_json is not None else build_awswaf_signals(user_agent=merged_headers["User-Agent"], signal_version=crypto.signal_version if crypto else signal_version)
+            signals = (
+                _load_json_arg(signals_json)
+                if signals_json is not None
+                else build_awswaf_signals(
+                    user_agent=merged_headers["User-Agent"],
+                    signal_version=crypto.signal_version if crypto else signal_version,
+                )
+            )
+            signal_array = None
             encrypted_signals = None
+            signal_checksum = None
+            if crypto is not None:
+                signal_array, signal_checksum, encrypted_signals = encode_awswaf_signals(signals, crypto)
+                raw["signals"] = {
+                    "array": signal_array,
+                    "encrypted": encrypted_signals,
+                    "checksum": signal_checksum,
+                }
             if checksum is None:
-                if crypto is not None:
-                    signal_array, checksum, encrypted_signals = encode_awswaf_signals(signals, crypto)
-                    raw["signals"] = {"array": signal_array, "encrypted": encrypted_signals, "checksum": checksum}
-                else:
-                    checksum = awswaf_signals_checksum(signals)
+                checksum = signal_checksum if signal_checksum is not None else awswaf_signals_checksum(signals)
+            else:
+                checksum = _validate_checksum(checksum)
+                if signal_checksum is not None and checksum != signal_checksum:
+                    diagnostics["signal_checksum_mismatch"] = True
             solution = solve_awswaf_challenge(
                 challenge,
                 checksum=checksum,
@@ -572,9 +788,56 @@ class AwsWafSolver:
                 }
             )
             raw["challenge"] = _challenge_raw(challenge)
-            raw["solution"] = {"payload": solution.verify_payload, "mode": solution.mode, "digestHex": solution.digest_hex, "elapsedMs": solution.elapsed_ms}
-            ticket = json.dumps(solution.verify_payload, ensure_ascii=False, separators=(",", ":"))
-            return finish(ok=True, ticket=ticket, verify_code="solved")
+            if endpoint_type == "mp_verify":
+                payload = build_awswaf_mp_verify_payload(solution, signals=signal_array)
+            else:
+                payload = build_awswaf_verify_payload(solution, signals=signal_array)
+            raw["solution"] = {
+                "payload": payload,
+                "mode": solution.mode,
+                "digestHex": solution.digest_hex,
+                "elapsedMs": solution.elapsed_ms,
+            }
+            ticket = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            verify_code = "solved"
+            if submit or submit_url:
+                target_url = submit_url or _awswaf_default_submit_url(base_url, endpoint_type)
+                if not target_url:
+                    errors.append("AWS WAF submit requires submit_url or base_url")
+                    return finish(ok=False, ticket=ticket, verify_code="submit_missing_url")
+                submit_data = self._submit_payload(
+                    url=target_url,
+                    payload=payload,
+                    timeout_sec=timeout_sec,
+                    proxies=proxies,
+                    headers=merged_headers,
+                    raw=raw,
+                )
+                diagnostics.update(
+                    {
+                        "submitted": True,
+                        "submit_status": submit_data["status"],
+                        "submit_token_received": bool(submit_data.get("aws_waf_token")),
+                    }
+                )
+                if submit_data["status"] >= 400:
+                    errors.append(f"AWS WAF submit failed: HTTP {submit_data['status']}")
+                    return finish(ok=False, ticket=ticket, verify_code="submit_failed")
+                token = submit_data.get("aws_waf_token")
+                if token:
+                    ticket = json.dumps(
+                        {
+                            AWSWAF_TOKEN_COOKIE: token,
+                            "endpoint_type": endpoint_type,
+                            "payload": payload,
+                        },
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                    verify_code = "verified"
+                else:
+                    verify_code = "submitted"
+            return finish(ok=True, ticket=ticket, verify_code=verify_code)
         except Exception as exc:
             raw["error"] = {"type": type(exc).__name__, "message": str(exc)}
             errors.append(str(exc))
@@ -596,6 +859,55 @@ class AwsWafSolver:
         if aes_key_hex or identifier:
             return parse_awswaf_crypto_config({"key": aes_key_hex or "", "identifier": identifier or "", "signalVersion": signal_version})
         return None
+
+    def _submit_payload(
+        self,
+        *,
+        url: str,
+        payload: dict[str, Any],
+        timeout_sec: int,
+        proxies: dict[str, str] | None,
+        headers: dict[str, str],
+        raw: dict[str, Any],
+    ) -> dict[str, Any]:
+        submit_headers = {
+            **headers,
+            "Accept": "application/json, text/plain, */*",
+            "Content-Type": "application/json",
+        }
+        if origin := _url_origin(url):
+            submit_headers.setdefault("Origin", origin)
+            submit_headers.setdefault("Referer", origin + "/")
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        resp = requests.post(
+            url,
+            data=body.encode("utf-8"),
+            headers=submit_headers,
+            timeout=timeout_sec,
+            proxies=proxies,
+            allow_redirects=False,
+        )
+        token = _extract_awswaf_token(resp)
+        raw["submitRequest"] = {
+            "url": url,
+            "method": "POST",
+            "headers": _kept_headers(submit_headers),
+            "body": payload,
+        }
+        raw["submitResponse"] = {
+            "status": resp.status_code,
+            "url": resp.url,
+            "contentType": resp.headers.get("Content-Type"),
+            "location": resp.headers.get("Location"),
+            "cookieNames": _response_cookie_names(resp),
+            "awsWafToken": token,
+        }
+        try:
+            if resp.text:
+                raw["submitResponse"]["json"] = resp.json()
+        except Exception:
+            raw["submitResponse"]["text"] = resp.text[:500]
+        return {"status": resp.status_code, "aws_waf_token": token}
 
 
 def _search_sha2_range(prefix: bytes, difficulty: int, begin: int, end: int) -> tuple[int | None, bytes | None, int]:
@@ -719,6 +1031,13 @@ def _first_match(text: str, patterns: list[str]) -> str | None:
     return None
 
 
+def _load_text_arg(value: str) -> str:
+    text = str(value)
+    if text.startswith("@"):
+        return Path(text[1:]).read_text(encoding="utf-8")
+    return text
+
+
 def _load_json_arg(value: Any, file_path: str | None = None) -> Any:
     if file_path:
         text = Path(file_path).read_text(encoding="utf-8").strip()
@@ -787,6 +1106,108 @@ def _challenge_raw(challenge: AwsWafChallenge) -> dict[str, Any]:
         "memory": challenge.memory,
         "hasJs": bool(challenge.raw_js),
     }
+
+
+def _awswaf_default_submit_url(base_url: str | None, endpoint_type: str) -> str | None:
+    if not base_url:
+        return None
+    endpoint = "mp_verify" if endpoint_type == "mp_verify" else "verify"
+    return urljoin(str(base_url).rstrip("/") + "/", endpoint)
+
+
+def _extract_awswaf_token(resp: requests.Response) -> str | None:
+    token = resp.cookies.get(AWSWAF_TOKEN_COOKIE)
+    if token:
+        return token
+    for value in _set_cookie_headers(resp):
+        cookie = SimpleCookie()
+        try:
+            cookie.load(value)
+        except Exception:
+            continue
+        if AWSWAF_TOKEN_COOKIE in cookie:
+            return cookie[AWSWAF_TOKEN_COOKIE].value
+    try:
+        data = resp.json()
+    except Exception:
+        data = None
+    token = _find_awswaf_token_field(data)
+    if token:
+        return token
+    return None
+
+
+def _find_awswaf_token_field(value: Any, depth: int = 0) -> str | None:
+    if depth > 4 or value is None:
+        return None
+    wanted = {
+        AWSWAF_TOKEN_COOKIE.lower(),
+        "awswaftoken",
+        "aws_waf_token",
+        "token",
+        "captcha_voucher",
+        "challengeToken".lower(),
+        "challenge_token",
+    }
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if str(key).lower().replace("-", "_") in wanted or str(key).lower() in wanted:
+                if isinstance(item, str) and item:
+                    return item
+            found = _find_awswaf_token_field(item, depth + 1)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for item in value:
+            found = _find_awswaf_token_field(item, depth + 1)
+            if found:
+                return found
+    return None
+
+
+def _set_cookie_headers(resp: requests.Response) -> list[str]:
+    values: list[str] = []
+    raw_headers = getattr(getattr(resp, "raw", None), "headers", None)
+    get_all = getattr(raw_headers, "get_all", None)
+    if callable(get_all):
+        values.extend(str(item) for item in get_all("Set-Cookie") or [])
+    header = resp.headers.get("Set-Cookie")
+    if header and header not in values:
+        values.append(header)
+    return values
+
+
+def _response_cookie_names(resp: requests.Response) -> list[str]:
+    names = {cookie.name for cookie in resp.cookies}
+    for value in _set_cookie_headers(resp):
+        cookie = SimpleCookie()
+        try:
+            cookie.load(value)
+        except Exception:
+            continue
+        names.update(cookie.keys())
+    return sorted(names)
+
+
+def _kept_headers(headers: dict[str, str]) -> dict[str, str]:
+    keep = {"User-Agent", "Accept", "Accept-Language", "Content-Type", "Origin", "Referer"}
+    return {key: value for key, value in headers.items() if key in keep}
+
+
+def _requests_proxies(proxy_server: str | None) -> dict[str, str] | None:
+    cfg = parse_proxy(proxy_server) if proxy_server else None
+    if not cfg:
+        return None
+    return {"http": cfg.url, "https": cfg.url}
+
+
+def _url_origin(url: str | None) -> str | None:
+    if not url:
+        return None
+    parsed = urlparse(url)
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def _url_host(url: str | None) -> str | None:

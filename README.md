@@ -21,7 +21,7 @@
 - SHAPOW：新增 Nginx 模块 PoW 协议 solver，解析 `challenge-settings.js` 中 IP、服务端时间和 `random_challenge` 绑定的 `serverData`，复现 Worker 的 `SHA256(serverData||nonce16_le_counter)` 前导 bit 搜索，通过 `shapow-response` 查询参数进入 IP whitelist，不启动浏览器。
 - Anubis：新增 `fast/slow` PoW 协议 solver，解析 challenge 页面或 make-challenge JSON，计算 `SHA256(randomData+nonce)` 前导零，可生成 `pass-challenge` 参数或直接换取 auth cookie，不启动浏览器。
 - Auro.Network：新增 AES-GCM 行为数据 + PoW 协议 solver，获取 `/enckey`，生成鼠标 telemetry 并 AES-GCM 加密，提交 `/api/pow/setup` 后搜索 `SHA256(prefix+nonce)`，可 `/api/pow/validate`，不启动浏览器。
-- AWS WAF Challenge：新增 challenge.js 核心 solver，复现 CRC32 checksum、AES-256-GCM encrypted signals、NetworkBandwidth、SHA2 Hashcash 与 Scrypt Hashcash，输出 verify/mp_verify payload；当前不启动浏览器。
+- AWS WAF Challenge：升级 challenge.js 核心 solver，复现 CRC32 checksum、AES-256-GCM encrypted signals、NetworkBandwidth、SHA2 Hashcash 与 Scrypt Hashcash，输出并可 mock-submit `/verify`/`/mp_verify` payload；新增 Node VM extractor 原型提取 challenge/config/request 线索，不启动浏览器。
 - Wargon2 Captcha：新增 Argon2id memory-hard 前缀 PoW + AES-GCM fingerprint solver，复现 WASM `salt+nonce` 链路，可提交 `/api/v1/verify`，不启动浏览器。
 - balooProxy / balooPow：新增 JS suffix cookie solver，复现 accessKey + OTP + BLAKE3 派生与 `SHA256(publicSalt+suffix)` 精确匹配，输出 `_2__bProxy_v` clearance cookie；不启动浏览器。
 - BasedFlare / haproxy-protection：新增 HAProxy 边缘 PoW 集成入口，面向 `/.basedflare/bot-check` 的 JSON/HTML challenge，输出 `pow_response` / `_basedflare_pow` cookie；不启动浏览器。
@@ -94,6 +94,7 @@
 | Powxy | 协议 solver | `reverse_proxy_pow` | alpha | `powxy` form field / HMAC cookie |
 | go-away js-pow-sha256 | 协议 solver | `goaway_js_pow_sha256` | alpha | `__goaway_token` / `*-state` cookie |
 | GuardianWAF JS Challenge | 协议 solver | `unsigned_js_pow_hmac_cookie` | alpha | `__gwaf_challenge` HMAC cookie / verify body |
+| AWS WAF Challenge | 协议 primitive | `encrypted_telemetry_scrypt_sha2_network_pow` | prototype | `/verify`/`/mp_verify` payload / `aws-waf-token` mock flow |
 | SHAPOW Nginx PoW | 协议 solver | `nginx_ip_time_bound_pow` | alpha | `shapow-response` / IP whitelist |
 | BasedFlare / haproxy-protection | 协议 solver | `haproxy_pow_cookie` | alpha | `pow_response` / `_basedflare_pow` cookie |
 | Aliyun / acw_sc__v2 JS Cookie | 协议 solver | `aliyun_acw_sc_v2_js_cookie` | alpha | `acw_sc__v2` cookie |
@@ -1065,11 +1066,11 @@ antibot stress guardianwaf \
 
 ---
 
-### AWS WAF Challenge / Wargon2 / balooProxy / BasedFlare / acw_sc__v2 / Pingoo / Akamai BM / Arkose / Vercel BotID
+### 协议 PoW / VM primitive：AWS WAF、Kasada、DataDome、PX、hCaptcha HSW 等
 
 这一组是本轮新增的协议层/内存硬化方向，定位是“能离线证明核心算法 + 本地 mock 可闭环”，不启动浏览器。
 
-- `awswaf`：解析 challenge JSON 或 deobfuscated `challenge.js`，合成 browser signals，计算 CRC32 checksum，并用 AES-256-GCM 生成 `AwsWafEncryptedSignals`；PoW 支持 `NetworkBandwidth`、SHA2 Hashcash、Scrypt Hashcash，输出 `/verify` 或 `/mp_verify` 可用 payload。
+- `awswaf`：解析 challenge JSON、deobfuscated `challenge.js`，也提供 browserless Node VM extractor 原型用于执行本地 `challenge.js` fixture 并捕获 challenge/config/request 线索；合成 browser signals，计算 CRC32 checksum，并用 AES-256-GCM 生成 `AwsWafEncryptedSignals`；PoW 支持 `NetworkBandwidth`、SHA2 Hashcash、Scrypt Hashcash，输出 `/verify` 或 `/mp_verify` payload，`--submit --submit-url` 可对受控/mock endpoint 做协议闭环并解析 `aws-waf-token`。
 - `wargon2`：复现 femshift/wargon2-captcha 的 Argon2id 参数链路：`password = salt_b64 + nonce`，`salt = base64_decode(salt_b64)`，命中 `target` 十六进制前缀；同时合成反向 base64 + AES-GCM fingerprint，可直接提交 `/api/v1/verify`。
 - `balooproxy`：复现 balooProxy/balooPow 的 suffix challenge：`publicSalt + suffix` 的 SHA-256 必须等于 challenge，成功后输出 `_2__bProxy_v` cookie value；accessKey/OTP 派生 helper 已作为 SDK API 暴露。
 - `basedflare`：复现 BasedFlare/haproxy-protection 的 HAProxy edge PoW 路径：解析 `/.basedflare/bot-check` JSON/HTML challenge，兼容上游 Lua `checkdiff` 的非标准 nibble/bit 行为，支持 sha256 与 Argon2id worker PoW，POST `pow_response` 换 `_basedflare_pow` cookie；JSON 只暴露 `ceil(pd/8)` 时可用 `--difficulty-bits` 指定精确难度。
@@ -1090,6 +1091,13 @@ antibot solve awswaf \
   --challenge-json '{"challenge":{"input":"eyJjaGFsbGVuZ2VfdHlwZSI6Ikhhc2hjYXNoIn0=","hmac":"fixture","region":"us-east-1"},"challenge_type":"h7b0c470faaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","difficulty":12,"memory":16}' \
   --checksum 1a2b3c4d \
   --max-attempts 10000
+
+# 受控/mock verify endpoint 闭环
+antibot solve awswaf \
+  --challenge-json @awswaf-challenge.json \
+  --crypto-json @awswaf-crypto.json \
+  --submit \
+  --submit-url http://127.0.0.1:8080/verify
 
 antibot solve wargon2 \
   --challenge-json @challenge.json \
@@ -1223,7 +1231,7 @@ antibot stress vercel_botid --script-js @raw-c.js --raw-vm --runs 20 --concurren
 antibot stress vercel_botid --script-js @raw-c.js --raw-vm --submit-url https://target.example/api/contact/test --x-path /api/contact/test --submit --runs 20 --concurrency 4
 ```
 
-当前限制：AWS WAF 的 live `challenge.js` 混淆版本会变化，SDK 目前吃解析后的 JS/JSON fixture；balooProxy 已支持 GET 真实 challenge 页面、求 suffix、带 `_2__bProxy_v` cookie 二次请求的无浏览器闭环；BasedFlare 已支持无浏览器 GET/POST `bot-check` 闭环，若站点额外开启 hCaptcha/reCAPTCHA/BFCaptcha，当前只输出 PoW 部分；acwscv2 已覆盖参考实现和本地 HTML fixture，真实站点若混淆变量/decoder 结构大改需要扩 parser；Pingoo 的 verified JWT 由服务端签名且绑定客户端，必须保持 init/verify 的 IP、UA、Host 一致；Akamai BM 当前是 experimental primitive，只证明 key extraction、sensor transform、minimal JSON envelope、`mn_*` PoW 原语和 mock submit，不等于完整 `_abck`/动态 bmak 通过；DataDome 当前是 browserless VM primitive，只证明 `tags.js` 环境补全、signal request 捕获、cookie 写入/响应 cookie 解析和 mock submit，不等于完整 Device Check/CAPTCHA 通过；PerimeterX/HUMAN PX 当前是 browserless VM primitive，只证明 `px.js` 环境补全、collector request 捕获、`_px*` cookie 写入/响应 cookie 解析和 mock submit，不等于完整 PX/HUMAN 通过；hCaptcha HSW 当前只证明 HSW JS/WASM glue 的 VM 执行和 `n/proof` 原语，不等于完整 hCaptcha token/视觉任务通过；Kasada KPSDK 当前是 browserless VM primitive，只证明环境补全、脚本执行、`fetch/new Request/XMLHttpRequest` 捕获和 `x-kpsdk-*` header 提取，不等于完整 Kasada 通过；Vercel BotID 已支持输出 `X-Is-Human` header 与本地 mock/受控接口 submit flow，本地 parser 对简化/可静态提取脚本最稳，raw obfuscated `c.js` 可用 `--raw-vm` 直接跑最小环境补全；这些 VM 模式需要本机有 `node`，但不需要 npm/Playwright/浏览器；真实站点仍要保持提交接口的 TLS 指纹、UA、Origin/Referer、出口 IP 与领取脚本的环境一致；如果目标未来把 callback、WebGL/crypto 或 SDK hook 链路改形，再接 AST deobf helper 和更厚环境 shim。
+当前限制：AWS WAF 的 live `challenge.js` 混淆版本会变化，SDK 当前以解析后的 JS/JSON fixture 和 VM extractor 线索提取为主，VM 不等价完整浏览器；balooProxy 已支持 GET 真实 challenge 页面、求 suffix、带 `_2__bProxy_v` cookie 二次请求的无浏览器闭环；BasedFlare 已支持无浏览器 GET/POST `bot-check` 闭环，若站点额外开启 hCaptcha/reCAPTCHA/BFCaptcha，当前只输出 PoW 部分；acwscv2 已覆盖参考实现和本地 HTML fixture，真实站点若混淆变量/decoder 结构大改需要扩 parser；Pingoo 的 verified JWT 由服务端签名且绑定客户端，必须保持 init/verify 的 IP、UA、Host 一致；Akamai BM 当前是 experimental primitive，只证明 key extraction、sensor transform、minimal JSON envelope、`mn_*` PoW 原语和 mock submit，不等于完整 `_abck`/动态 bmak 通过；DataDome 当前是 browserless VM primitive，只证明 `tags.js` 环境补全、signal request 捕获、cookie 写入/响应 cookie 解析和 mock submit，不等于完整 Device Check/CAPTCHA 通过；PerimeterX/HUMAN PX 当前是 browserless VM primitive，只证明 `px.js` 环境补全、collector request 捕获、`_px*` cookie 写入/响应 cookie 解析和 mock submit，不等于完整 PX/HUMAN 通过；hCaptcha HSW 当前只证明 HSW JS/WASM glue 的 VM 执行和 `n/proof` 原语，不等于完整 hCaptcha token/视觉任务通过；Kasada KPSDK 当前是 browserless VM primitive，只证明环境补全、脚本执行、`fetch/new Request/XMLHttpRequest` 捕获和 `x-kpsdk-*` header 提取，不等于完整 Kasada 通过；Vercel BotID 已支持输出 `X-Is-Human` header 与本地 mock/受控接口 submit flow，本地 parser 对简化/可静态提取脚本最稳，raw obfuscated `c.js` 可用 `--raw-vm` 直接跑最小环境补全；这些 VM 模式需要本机有 `node`，但不需要 npm/Playwright/浏览器；真实站点仍要保持提交接口的 TLS 指纹、UA、Origin/Referer、出口 IP 与领取脚本的环境一致；如果目标未来把 callback、WebGL/crypto 或 SDK hook 链路改形，再接 AST deobf helper 和更厚环境 shim。
 
 SDK 顶层也暴露这批 solver 和 helper，适合直接嵌到业务代码：
 
