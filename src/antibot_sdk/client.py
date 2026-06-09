@@ -5,6 +5,7 @@ from typing import Any
 from .models import BrowserResult, CaptchaResult
 from .profiles import detect_provider_for_url
 from .providers.aliyun import AliyunCaptchaSolver
+from .providers.activehashcash import ActiveHashcashSolver
 from .providers.ajcaptcha import AJCaptchaSolver
 from .providers.altcha import AltchaSolver
 from .providers.anubis import AnubisSolver
@@ -58,6 +59,7 @@ class AntibotClient:
         self.profile = profile
         self.browser_binary = browser_binary
         self.browser = BrowserAutomation()
+        self.activehashcash = ActiveHashcashSolver()
         self.cap = CapSolver()
         self.capybara = CapybaraSolver()
         self.captxa = CaptxaSolver()
@@ -115,6 +117,9 @@ class AntibotClient:
 
     async def solve_tencent(self, **kwargs: Any) -> CaptchaResult:
         return await self.tencent.solve(**kwargs)
+
+    async def solve_activehashcash(self, **kwargs: Any) -> CaptchaResult:
+        return await self.activehashcash.solve(**kwargs)
 
     async def solve_aliyun(self, **kwargs: Any) -> CaptchaResult:
         return await self.aliyun.solve(**kwargs)
@@ -247,6 +252,37 @@ class AntibotClient:
 
     async def solve_auto(self, target_url: str, **kwargs: Any) -> BrowserResult | CaptchaResult:
         provider = kwargs.pop("provider", None) or detect_provider_for_url(target_url)
+        if provider == "activehashcash":
+            ah_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "resource",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_html",
+                    "challenge_url",
+                    "submit_url",
+                    "submit",
+                    "submit_format",
+                    "bits",
+                    "stamp_date",
+                    "rand",
+                    "response_field",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            ah_kwargs.setdefault("challenge_url", target_url)
+            return await self.solve_activehashcash(**ah_kwargs)
         if provider == "ajcaptcha":
             aj_kwargs = {
                 k: v

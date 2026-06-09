@@ -25,6 +25,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://cloud.google.com/recaptcha/docs/overview") == "recaptcha"
     assert detect_provider_for_url("https://developers.cloudflare.com/turnstile/") == "turnstile"
     assert detect_provider_for_url("https://captcha.example/api/pow/challenge?siteKey=site-key") == "fcaptcha"
+    assert detect_provider_for_url("https://example.com/active_hashcash/session") == "activehashcash"
     assert detect_provider_for_url("https://auro.network/api/pow/setup") == "auro"
     assert detect_provider_for_url("https://captcha.example/crypto-puzzle/challenge") == "cryptopuzzle"
     assert detect_provider_for_url("https://captcha.example/challenge/simp") == "captxa"
@@ -61,6 +62,7 @@ def test_generic_provider_detection():
     assert "generic_widget" in list_profiles()["hcaptcha"]
     assert "generic_widget_enterprise" in list_profiles()["recaptcha"]
     assert "generic_widget" in list_profiles()["turnstile"]
+    assert "rails_hashcash_sha256" in list_profiles()["activehashcash"]
     assert "buffer_reconstruction_pow" in list_profiles()["powcaptcha"]
     assert "scrypt_pow" in list_profiles()["powbot"]
     assert "argon2id_memory_pow" in list_profiles()["powchallenge"]

@@ -32,6 +32,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "captchaVerification/token",
         "scope": "AJ-Captcha blockPuzzle：/captcha/get 图像缺口定位 + AES pointJson + /captcha/check 协议提交；不启动浏览器。",
     },
+    "activehashcash": {
+        "provider": "activehashcash",
+        "name": "ActiveHashcash",
+        "category": "solver",
+        "captcha_type": "rails_hashcash_sha256",
+        "status": "alpha",
+        "output": "hashcash hidden field / validated response",
+        "scope": "BaseSecrete/active_hashcash Rails 中间件 solver：解析 input[data-hashcash] 的 resource/bits/date，生成 rand，复现 Web Worker 的 SHA-256 Hashcash leading-zero bit counter 搜索，输出 hashcash hidden field；不启动浏览器。",
+    },
     "altcha": {
         "provider": "altcha",
         "name": "ALTCHA",

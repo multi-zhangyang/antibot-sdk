@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -12,6 +12,7 @@
 - Tencent Captcha：封装腾讯滑块的页面触发、浏览器池、缺口识别、轨迹拖拽、ticket/randstr 输出。
 - Aliyun Captcha：封装阿里云滑块的 Node/Puppeteer runner、站点 profile、attempt/session retry、错误归一、artifact 保留。
 - AJ-Captcha / Anji：新增纯 HTTP 协议 solver，走 `/captcha/get` 图像缺口定位、AES `pointJson`、`/captcha/check`，输出二次校验用的 `captchaVerification`，不启动浏览器。
+- ActiveHashcash：新增 Rails 中间件级 Hashcash solver，解析 `input[data-hashcash]` 的 `resource/bits/date`，复现 Web Worker 的 `SHA256(stamp)` 前导零 bit counter 搜索，输出 `hashcash` 隐藏字段，不启动浏览器。
 - ALTCHA：升级 v1/v2 PoW 协议 solver，v1 反查 `hash(salt+number)`，v2 复现 `PBKDF2/SHA-* / SCRYPT / ARGON2ID` KDF challenge、HMAC 签名与 verify-compatible fast path，输出表单 base64 payload 或 M2M Authorization header，不启动浏览器。
 - Anubis：新增 `fast/slow` PoW 协议 solver，解析 challenge 页面或 make-challenge JSON，计算 `SHA256(randomData+nonce)` 前导零，可生成 `pass-challenge` 参数或直接换取 auth cookie，不启动浏览器。
 - Auro.Network：新增 AES-GCM 行为数据 + PoW 协议 solver，获取 `/enckey`，生成鼠标 telemetry 并 AES-GCM 加密，提交 `/api/pow/setup` 后搜索 `SHA256(prefix+nonce)`，可 `/api/pow/validate`，不启动浏览器。
@@ -64,6 +65,7 @@
 | Tencent Captcha | 真实 solver | `slider` | primary | `ticket/randstr` |
 | Aliyun Captcha | 真实 solver | `slider` | primary | `VerifyCode` / artifacts |
 | AJ-Captcha / Anji | 协议 solver | `slider_protocol` | alpha | `captchaVerification/token` |
+| ActiveHashcash | 协议 solver | `rails_hashcash_sha256` | alpha | `hashcash` hidden field / validated response |
 | ALTCHA | 协议 solver | `proof_of_work` | alpha | base64 payload / Authorization header |
 | Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
 | Auro.Network | 协议 solver | `encrypted_behavior_pow` | alpha | validate body / Auro token |
@@ -2173,6 +2175,55 @@ antibot stress spow \
 
 ---
 
+### 20.8 ActiveHashcash / Rails Hashcash hidden-field PoW
+
+`BaseSecrete/active_hashcash` 是 Rails 中间件级 PoW CAPTCHA：页面渲染时在隐藏 input 上放 `data-hashcash`，浏览器 Web Worker 搜索 Hashcash counter，表单提交时把 stamp 写回 `hashcash` 字段。SDK 当前复现的是这条底层协议链路，不依赖 headless 浏览器，也不做图片识别。
+
+关键点：
+
+```text
+hidden input:
+<input name="hashcash" data-hashcash='{"resource":"...","bits":16,"date":"YYMMDD"}'>
+
+stamp = ver + ":" + bits + ":" + date + ":" + resource + ":sha256:" + rand + ":" + counter
+valid iff sha256(stamp) has >= bits leading zero bits
+submit body = {"hashcash": stamp}
+```
+
+SDK 当前支持：
+
+- 解析 challenge JSON、HTML `input[data-hashcash]`、完整 stamp 或 challenge URL；
+- 自动识别隐藏字段的 `name/id`，默认输出 `{ "hashcash": stamp }`；
+- 复现 Web Worker 的 `SHA256(stamp)` leading-zero bit counter 搜索；
+- 支持本地 verify、form/json 提交、stress 压测和多进程分段搜索；
+- 不启动浏览器，适合当前 VPS/headless 受限环境。
+
+命令示例：
+
+```bash
+antibot solve activehashcash \
+  --challenge-url 'https://target.example/session/new' \
+  --submit-url 'https://target.example/session' \
+  --submit
+
+antibot solve activehashcash \
+  --challenge-json '{"resource":"active.example","bits":12,"date":"260609","rand":"ActiveHashcash01"}' \
+  --timeout 5
+
+antibot stress activehashcash \
+  --challenge-json '{"resource":"active.example","bits":12,"date":"260609","rand":"ActiveHashcash01"}' \
+  --runs 20 \
+  --concurrency 4
+```
+
+当前定位：
+
+- 这是 Rails hidden-field Hashcash 协议 solver；
+- SDK 完成客户端 PoW，不伪造服务端 resource/date/min-date/防双花状态；
+- bits 越高平均搜索越慢，必要时用 `--workers` 做多进程分段。
+
+---
+
 ### 21. P-Captcha QuadraticResidueProblem
 
 P-Captcha 比普通 hashcash 更有意思：服务端给出 Woodall prime `p` 下的一组二次剩余 `n = x² mod p`，浏览器 worker 用 Tonelli-Shanks 求模平方根并把答案串提交给服务端。SDK 当前把这条链路下沉成纯 Python 协议 solver。
@@ -3068,6 +3119,7 @@ SDK 可以根据 URL 粗略判断 provider：
 
 - Qoder / Aliyun 相关 URL -> `aliyun`
 - AJ-Captcha / Anji / `/captcha/get` 相关 URL -> `ajcaptcha`
+- ActiveHashcash / `active_hashcash` / `input[data-hashcash]` 相关 URL -> `activehashcash`
 - ALTCHA 相关 URL -> `altcha`
 - Anubis / `.within.website/x/cmd/anubis` 相关 URL -> `anubis`
 - Auro.Network / `/api/pow/setup` / `/api/pow/validate` 相关 URL -> `auro`
@@ -3326,6 +3378,11 @@ antibot stress recaptcha --url 'https://target.example/path-with-recaptcha' --ru
 # AJ-Captcha
 antibot solve ajcaptcha --base-url 'http://127.0.0.1:18080'
 antibot stress ajcaptcha --base-url 'http://127.0.0.1:18080' --runs 50 --concurrency 5
+
+# ActiveHashcash / Rails Hashcash
+antibot solve activehashcash --challenge-url 'https://target.example/session/new'
+antibot solve activehashcash --challenge-json '{"resource":"active.example","bits":12,"date":"260609","rand":"ActiveHashcash01"}' --timeout 5
+antibot stress activehashcash --challenge-json '{"resource":"active.example","bits":12,"date":"260609","rand":"ActiveHashcash01"}' --runs 20 --concurrency 4
 
 # ALTCHA
 antibot solve altcha --challenge-url 'https://target.example/altcha/challenge'
@@ -3587,6 +3644,7 @@ src/antibot_sdk/
     tencent.py              # Tencent provider adapter
     aliyun.py               # Aliyun provider adapter
     ajcaptcha.py            # AJ-Captcha blockPuzzle protocol solver
+    activehashcash.py       # ActiveHashcash Rails Hashcash SHA-256 hidden-field solver
     altcha.py               # ALTCHA PoW protocol solver
     anubis.py               # Anubis SHA-256 PoW protocol solver
     auro.py                 # Auro AES-GCM mouse telemetry + SHA-256 PoW protocol solver
@@ -3670,11 +3728,12 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 149 passed
+pytest: 154 passed
 ruff check src tests: passed
 uv build: success
 Vulcan fixture/html/CLI/stress: chained SHA256 uint32-target PoW，solution=1136;5242;945，4/4 stress 验证通过
 spow/leptos-captcha fixture/mock/CLI/stress: signed challenge + SHA256(challenge||counter) leading-zero PoW，counter=96113 验证通过
+ActiveHashcash fixture/mock/CLI/stress: input[data-hashcash] + SHA256(stamp) leading-zero bit，counter=15910 验证通过
 Swetrix fixture/mock/live/stress: /generate + SHA256(challenge:nonce) PoW + /verify + /validate 验证通过
 Crovly fixture/mock/stress: /challenge + fingerprint/environment/behavior + SHA256(nonce+counter) bit-PoW + /verify 验证通过
 HashGuard fixture/mock/stress: /pow/challenges + SHA256(challengeId:seed:nonce)<=target + /pow/verifications + /pow/assertions/introspect 验证通过

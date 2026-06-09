@@ -127,6 +127,7 @@ async def amain(argv: list[str] | None = None) -> int:
         choices=[
             "auto",
             "ajcaptcha",
+            "activehashcash",
             "altcha",
             "anubis",
             "auro",
@@ -238,6 +239,29 @@ async def amain(argv: list[str] | None = None) -> int:
     aj.add_argument("--no-returned-point", action="store_true")
     aj.add_argument("--verify-after-check", action="store_true")
     aj.add_argument("--raw", action="store_true")
+
+    ah = solve_sub.add_parser("activehashcash")
+    ah_source = ah.add_mutually_exclusive_group(required=True)
+    ah_source.add_argument("--resource", help="ActiveHashcash resource, usually request.host")
+    ah_source.add_argument("--challenge-json", help="inline {resource,bits,date,rand} JSON, or @/path")
+    ah_source.add_argument("--challenge-file")
+    ah_source.add_argument("--challenge-html", help="HTML form containing input[data-hashcash]")
+    ah_source.add_argument("--challenge-url", help="GET endpoint returning ActiveHashcash HTML/JSON")
+    ah.add_argument("--submit-url")
+    ah.add_argument("--submit", action="store_true")
+    ah.add_argument("--submit-format", choices=["form", "json"], default="form")
+    ah.add_argument("--bits", type=int)
+    ah.add_argument("--date", dest="stamp_date")
+    ah.add_argument("--rand")
+    ah.add_argument("--response-field", default="hashcash")
+    ah.add_argument("--start", type=int, default=0)
+    ah.add_argument("--max-attempts", type=int, default=100_000_000)
+    ah.add_argument("--workers", type=int, default=1)
+    ah.add_argument("--timeout", type=int, default=60)
+    ah.add_argument("--proxy")
+    ah.add_argument("--output-dir")
+    ah.add_argument("--user-agent")
+    ah.add_argument("--raw", action="store_true")
 
     alt = solve_sub.add_parser("altcha")
     alt_source = alt.add_mutually_exclusive_group(required=True)
@@ -1104,6 +1128,32 @@ async def amain(argv: list[str] | None = None) -> int:
     saj.add_argument("--min-score", type=float, default=0.15)
     saj.add_argument("--output-json")
     saj.add_argument("--full", action="store_true")
+
+    sah = stress_sub.add_parser("activehashcash")
+    sah_source = sah.add_mutually_exclusive_group(required=True)
+    sah_source.add_argument("--resource")
+    sah_source.add_argument("--challenge-json")
+    sah_source.add_argument("--challenge-file")
+    sah_source.add_argument("--challenge-html")
+    sah_source.add_argument("--challenge-url")
+    sah.add_argument("--submit-url")
+    sah.add_argument("--submit", action="store_true")
+    sah.add_argument("--submit-format", choices=["form", "json"], default="form")
+    sah.add_argument("--bits", type=int)
+    sah.add_argument("--date", dest="stamp_date")
+    sah.add_argument("--rand")
+    sah.add_argument("--response-field", default="hashcash")
+    sah.add_argument("--runs", type=int, default=10)
+    sah.add_argument("--concurrency", type=int, default=2)
+    sah.add_argument("--timeout", type=int, default=60)
+    sah.add_argument("--start", type=int, default=0)
+    sah.add_argument("--max-attempts", type=int, default=100_000_000)
+    sah.add_argument("--workers", type=int, default=1)
+    sah.add_argument("--proxy")
+    sah.add_argument("--output-dir")
+    sah.add_argument("--output-json")
+    sah.add_argument("--user-agent")
+    sah.add_argument("--full", action="store_true")
 
     salt = stress_sub.add_parser("altcha")
     salt.add_argument("--challenge-url", required=True)
@@ -2039,6 +2089,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "hcaptcha",
             "recaptcha",
             "turnstile",
+            "activehashcash",
             "cap",
             "cryptopuzzle",
             "captxa",
@@ -2167,6 +2218,30 @@ async def amain(argv: list[str] | None = None) -> int:
             min_score=args.min_score,
             use_returned_point=not args.no_returned_point,
             verify_after_check=args.verify_after_check,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "activehashcash":
+        ret = await client.solve_activehashcash(
+            resource=args.resource,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_html=args.challenge_html,
+            challenge_url=args.challenge_url,
+            submit_url=args.submit_url,
+            submit=args.submit,
+            submit_format=args.submit_format,
+            bits=args.bits,
+            stamp_date=args.stamp_date,
+            rand=args.rand,
+            response_field=args.response_field,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -3134,6 +3209,38 @@ async def amain(argv: list[str] | None = None) -> int:
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
                 min_score=args.min_score,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "activehashcash":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="activehashcash",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_activehashcash(
+                resource=args.resource,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_html=args.challenge_html,
+                challenge_url=args.challenge_url,
+                submit_url=args.submit_url,
+                submit=args.submit,
+                submit_format=args.submit_format,
+                bits=args.bits,
+                stamp_date=args.stamp_date,
+                rand=args.rand,
+                response_field=args.response_field,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
             ),
         )
         emit_stress(ret, full=args.full)

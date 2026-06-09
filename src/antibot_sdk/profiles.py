@@ -109,6 +109,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "aliyun"
     if any(x in u or x in host for x in ("ajcaptcha", "anji-plus", "/captcha/get", "/captcha/check")):
         return "ajcaptcha"
+    if any(x in u or x in host for x in ("active_hashcash", "activehashcash", "data-hashcash")):
+        return "activehashcash"
     if any(x in u or x in host for x in ("altcha", "altcha.org")):
         return "altcha"
     if any(x in u or x in host for x in ("anubis", ".within.website/x/cmd/anubis", "techaro.lol-anubis")):
@@ -236,6 +238,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "http-protocol-solver",
                 "successFields": ["captchaVerification", "token"],
                 "endpoints": ["/captcha/get", "/captcha/check"],
+            }
+        },
+        "activehashcash": {
+            "rails_hashcash_sha256": {
+                "patterns": ["active_hashcash", "activehashcash", "input[data-hashcash]"],
+                "mode": "rails-hashcash-sha256-webworker-protocol-solver",
+                "successFields": ["hashcash"],
+                "endpoints": ["HTML form containing input[data-hashcash]", "protected form submit endpoint"],
             }
         },
         "altcha": {
