@@ -19,7 +19,9 @@ from antibot_sdk.providers.akamai_bm import (
     decode_minimal_sensor_json,
     encode_minimal_sensor_json,
     extract_bm_sz_keys,
+    fetch_akamai_bm_get_params,
     parse_abck_mn_challenges,
+    parse_akamai_bm_get_params,
     solve_abck_mn_challenge,
     submit_akamai_bm_sensor,
     verify_abck_mn_solution,
@@ -75,6 +77,22 @@ class _AkamaiBmHandler(BaseHTTPRequestHandler):
                 "Set-Cookie": "_abck=updated-fixture; Path=/; HttpOnly",
             },
         )
+
+    def do_GET(self) -> None:  # noqa: N802
+        type(self).calls.append({"path": self.path, "headers": dict(self.headers)})
+        if self.path != "/_bm/get_params?type=sensor":
+            self._write(b"not found", 404, {"Content-Type": "text/plain"})
+            return
+        body = json.dumps(
+            {
+                "k": f"{KEYS.shuffle_key}~{KEYS.cipher_key}",
+                "t": "1700000000000~42",
+                "e": "encrypted-state-fixture",
+                "a": "JB~lB",
+            },
+            separators=(",", ":"),
+        ).encode("utf-8")
+        self._write(body, 200, {"Content-Type": "application/json"})
 
 
 def test_extract_bm_sz_keys_from_value_and_cookie_header() -> None:
@@ -146,6 +164,45 @@ def test_abck_mn_challenge_parse_solve_and_verify_fixture() -> None:
         assert item.input_value.endswith(item.nonce)
         assert item.digest_hex == akamai_mn_hash_hex(item.input_value)
         assert akamai_mn_mod(item.digest_hex, item.divisor) == 0
+
+
+def test_get_params_parse_fetch_and_profile_injection() -> None:
+    params = parse_akamai_bm_get_params(
+        {"k": f"{KEYS.shuffle_key}~{KEYS.cipher_key}", "t": "1700000000000~42", "e": "e-state", "a": "JB~lB"}
+    )
+    assert params.key_parts == [str(KEYS.shuffle_key), str(KEYS.cipher_key)]
+    assert params.time_parts == ["1700000000000", "42"]
+    assert params.action_parts == ["JB", "lB"]
+    assert params.transform_keys == KEYS
+
+    _AkamaiBmHandler.calls = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _AkamaiBmHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        url = f"http://127.0.0.1:{server.server_port}/_bm/get_params?type=sensor"
+        fetched, raw = fetch_akamai_bm_get_params(url, headers={"User-Agent": "Mozilla/5.0 fixture"}, timeout=5)
+        result = asyncio.run(
+            AkamaiBmSolver().solve(
+                page_url=f"http://127.0.0.1:{server.server_port}/protected",
+                get_params_url="/_bm/get_params?type=sensor",
+                user_agent="Mozilla/5.0 fixture",
+            )
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    assert fetched.transform_keys == KEYS
+    assert raw["status"] == 200
+    assert result.ok is True
+    assert result.diagnostics["get_params"] is True
+    assert result.diagnostics["keys_source"] == "get_params"
+    assert result.ticket
+    decoded = decode_minimal_sensor_json(result.ticket)
+    assert decoded["get_params"]["k"] == f"{KEYS.shuffle_key}~{KEYS.cipher_key}"
+    assert decoded["get_params"]["e"] == "encrypted-state-fixture"
 
 
 def test_mock_submit_to_bm_data_receives_decodable_sensor() -> None:

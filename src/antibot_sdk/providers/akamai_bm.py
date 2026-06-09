@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from http.cookies import SimpleCookie
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote
+from urllib.parse import unquote, urljoin
 
 import requests
 
@@ -107,6 +107,57 @@ class AkamaiAbckMnSolution:
         return ",".join(str(item.attempts) for item in self.rounds)
 
 
+@dataclass(frozen=True, slots=True)
+class AkamaiBmGetParams:
+    """State returned by Akamai `/_bm/get_params`.
+
+    Real bmak stores `k/t/e/a` in localStorage and later folds them into sensor
+    construction.  This dataclass keeps the raw fields plus split parts so the
+    SDK can replay controlled flows without browser localStorage.
+    """
+
+    k: str = ""
+    t: str = ""
+    e: str = ""
+    a: str = ""
+    raw: dict[str, Any] | None = None
+
+    @property
+    def key_parts(self) -> list[str]:
+        return [part for part in str(self.k).split("~") if part != ""]
+
+    @property
+    def time_parts(self) -> list[str]:
+        return [part for part in str(self.t).split("~") if part != ""]
+
+    @property
+    def action_parts(self) -> list[str]:
+        return [part for part in str(self.a).split("~") if part != ""]
+
+    @property
+    def transform_keys(self) -> AkamaiBmKeys | None:
+        ints: list[int] = []
+        for part in self.key_parts:
+            try:
+                ints.append(int(part))
+            except ValueError:
+                continue
+        if len(ints) < 2:
+            return None
+        return AkamaiBmKeys(shuffle_key=ints[-2], cipher_key=ints[-1])
+
+    def to_profile(self) -> dict[str, Any]:
+        return {
+            "k": self.k,
+            "t": self.t,
+            "e": self.e,
+            "a": self.a,
+            "key_parts": self.key_parts,
+            "time_parts": self.time_parts,
+            "action_parts": self.action_parts,
+        }
+
+
 def extract_bm_sz_keys(cookie_value: str) -> AkamaiBmKeys:
     """Extract `(shuffle_key, cipher_key)` from a `bm_sz` value or Cookie header."""
 
@@ -120,6 +171,49 @@ def extract_bm_sz_keys(cookie_value: str) -> AkamaiBmKeys:
     except ValueError as exc:
         raise ValueError("last two bm_sz components must be integer keys") from exc
     return AkamaiBmKeys(shuffle_key=shuffle_key, cipher_key=cipher_key)
+
+
+def parse_akamai_bm_get_params(data: str | dict[str, Any]) -> AkamaiBmGetParams:
+    if isinstance(data, str):
+        text = data.strip()
+        if text.startswith("@"):
+            text = Path(text[1:]).read_text(encoding="utf-8").strip()
+        parsed = json.loads(text)
+    else:
+        parsed = data
+    if not isinstance(parsed, dict):
+        raise ValueError("Akamai get_params must be a JSON object")
+    return AkamaiBmGetParams(
+        k=str(parsed.get("k") or ""),
+        t=str(parsed.get("t") or ""),
+        e=str(parsed.get("e") or ""),
+        a=str(parsed.get("a") or ""),
+        raw=dict(parsed),
+    )
+
+
+def fetch_akamai_bm_get_params(
+    get_params_url: str,
+    *,
+    cookies: dict[str, str] | None = None,
+    headers: dict[str, str] | None = None,
+    timeout: float = 10,
+    session: requests.Session | None = None,
+) -> tuple[AkamaiBmGetParams, dict[str, Any]]:
+    client = session or requests.Session()
+    resp = client.get(get_params_url, headers=headers or {}, cookies=cookies, timeout=timeout)
+    raw = {
+        "status": resp.status_code,
+        "url": resp.url,
+        "contentType": resp.headers.get("Content-Type", ""),
+        "bodyPrefix": resp.text[:200],
+    }
+    resp.raise_for_status()
+    try:
+        data = resp.json()
+    except ValueError as exc:
+        raise ValueError("Akamai get_params response must be JSON") from exc
+    return parse_akamai_bm_get_params(data), raw
 
 
 def parse_abck_mn_challenges(cookie_value: str) -> list[AkamaiAbckMnChallenge]:
@@ -477,6 +571,9 @@ class AkamaiBmSolver:
         profile: dict[str, Any] | None = None,
         profile_json: str | None = None,
         profile_file: str | None = None,
+        get_params_json: str | dict[str, Any] | None = None,
+        get_params_file: str | None = None,
+        get_params_url: str | None = None,
         solve_mn: bool = False,
         mn_start_ts_ms: int | None = None,
         mn_rounds: int = 10,
@@ -494,6 +591,7 @@ class AkamaiBmSolver:
             "submit": submit,
             "submit_url": submit_url,
             "solve_mn": solve_mn,
+            "get_params_url": get_params_url,
         }
         errors: list[str] = []
 
@@ -531,6 +629,38 @@ class AkamaiBmSolver:
                     }
                 )
             diagnostics["abck_present"] = bool(cookie_map.get("_abck"))
+            bm_params = self._load_or_fetch_get_params(
+                get_params_json=get_params_json,
+                get_params_file=get_params_file,
+                get_params_url=get_params_url,
+                page_url=page_url,
+                cookies=cookie_map or None,
+                headers=headers,
+                timeout_sec=timeout_sec,
+                raw=raw,
+            )
+            if bm_params is not None:
+                raw["getParams"] = bm_params.raw or bm_params.to_profile()
+                diagnostics.update(
+                    {
+                        "get_params": True,
+                        "get_params_k_parts": len(bm_params.key_parts),
+                        "get_params_t_parts": len(bm_params.time_parts),
+                        "get_params_has_e": bool(bm_params.e),
+                        "get_params_has_a": bool(bm_params.a),
+                    }
+                )
+                if keys is None and bm_params.transform_keys is not None:
+                    keys = bm_params.transform_keys
+                    diagnostics.update(
+                        {
+                            "shuffle_key": keys.shuffle_key,
+                            "cipher_key": keys.cipher_key,
+                            "keys_source": "get_params",
+                        }
+                    )
+            else:
+                diagnostics["get_params"] = False
             mn_solution: AkamaiAbckMnSolution | None = None
             if solve_mn:
                 challenges = parse_abck_mn_challenges(cookie_map.get("_abck") or abck or "")
@@ -605,12 +735,17 @@ class AkamaiBmSolver:
                     return finish(ok=False, verify_code="missing_bm_sz")
                 profile_obj = _load_profile(profile=profile, profile_json=profile_json, profile_file=profile_file)
                 if profile_obj is None:
+                    extra = {"get_params": bm_params.to_profile()} if bm_params is not None else None
                     profile_obj = build_minimal_sensor_profile(
                         page_url=page_url,
                         user_agent=user_agent,
                         bm_sz=cookie_map.get("bm_sz"),
                         abck=cookie_map.get("_abck"),
+                        extra=extra,
                     )
+                elif bm_params is not None:
+                    profile_obj = dict(profile_obj)
+                    profile_obj.setdefault("get_params", bm_params.to_profile())
                 if mn_solution is not None:
                     profile_obj = dict(profile_obj)
                     profile_obj.setdefault("mn_r", mn_solution.result)
@@ -656,6 +791,34 @@ class AkamaiBmSolver:
             raw["error"] = {"type": type(exc).__name__, "message": str(exc)}
             errors.append(str(exc))
             return finish(ok=False)
+
+    def _load_or_fetch_get_params(
+        self,
+        *,
+        get_params_json: str | dict[str, Any] | None,
+        get_params_file: str | None,
+        get_params_url: str | None,
+        page_url: str,
+        cookies: dict[str, str] | None,
+        headers: dict[str, str] | None,
+        timeout_sec: int,
+        raw: dict[str, Any],
+    ) -> AkamaiBmGetParams | None:
+        if get_params_file:
+            return parse_akamai_bm_get_params(Path(get_params_file).read_text(encoding="utf-8"))
+        if get_params_json is not None:
+            return parse_akamai_bm_get_params(get_params_json)
+        if not get_params_url:
+            return None
+        url = _derive_get_params_url(get_params_url, page_url=page_url)
+        params, response_raw = fetch_akamai_bm_get_params(
+            url,
+            cookies=cookies,
+            headers=headers,
+            timeout=timeout_sec,
+        )
+        raw["getParamsResponse"] = response_raw
+        return params
 
 
 def _akamai_shift_string(text: str, *, key: int, direction: int) -> str:
@@ -728,6 +891,17 @@ def _build_mn_result(
         + ",".join(metadata)
         + ";"
     )
+
+
+def _derive_get_params_url(value: str, *, page_url: str = "") -> str:
+    text = value.strip()
+    if text.startswith("http://") or text.startswith("https://"):
+        return text
+    if not page_url:
+        raise ValueError("relative get_params_url requires page_url")
+    if text.startswith("/"):
+        return urljoin(page_url, text)
+    return urljoin(page_url, f"/_bm/get_params?type={text}")
 
 
 def _load_text_arg(value: str | None, file_path: str | None = None) -> str | None:
@@ -852,6 +1026,7 @@ __all__ = [
     "AkamaiAbckMnRound",
     "AkamaiAbckMnSolution",
     "AkamaiBmKeys",
+    "AkamaiBmGetParams",
     "AkamaiBmSolver",
     "akamai_mn_hash_bytes",
     "akamai_mn_hash_hex",
@@ -867,7 +1042,9 @@ __all__ = [
     "decode_minimal_sensor_json",
     "encode_minimal_sensor_json",
     "extract_bm_sz_keys",
+    "fetch_akamai_bm_get_params",
     "parse_abck_mn_challenges",
+    "parse_akamai_bm_get_params",
     "solve_abck_mn_challenge",
     "submit_akamai_bm_sensor",
     "verify_abck_mn_solution",
