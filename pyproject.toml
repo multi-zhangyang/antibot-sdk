@@ -54,6 +54,7 @@ exclude = ["src/antibot_sdk/vendor/aliyun/node_modules/**"]
 
 [tool.ruff]
 line-length = 100
+exclude = ["src/antibot_sdk/vendor/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

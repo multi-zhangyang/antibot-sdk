@@ -134,6 +134,11 @@ def detect_provider_for_url(url: str | None) -> str:
         return "fcaptcha"
     if any(x in u or x in host for x in ("capybara-captcha", "capybaracaptcha", "/api/challenge", "/api/verify")):
         return "capybara"
+    if any(
+        x in u or x in host
+        for x in ("eduvulcan", "wasm-for-vulcan", "vulcan-captcha", "captcha-wrapper", "captcha-response")
+    ):
+        return "vulcan"
     if any(x in u or x in host for x in ("trycap.dev", "cap.js", "cap-widget", "capjs")):
         return "cap"
     if any(x in u or x in host for x in ("crypto-puzzle", "cryptopuzzle", "time-lock-puzzle", "rsw96")):
@@ -316,6 +321,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "payload-token-bound-sha256-hex-prefix-pow-solver",
                 "successFields": ["{id, solution, payload_token}", "verified=true"],
                 "endpoints": ["POST /api/challenge", "POST /api/verify"],
+            }
+        },
+        "vulcan": {
+            "chained_sha256_uint32_pow": {
+                "patterns": ["eduvulcan", "wasm-for-vulcan", "vulcan-captcha", "captcha-wrapper"],
+                "mode": "chained-sha256-uint32-target-pow-solver",
+                "successFields": ["captcha-response"],
+                "endpoints": ["HTML page containing div.captcha-wrapper"],
             }
         },
         "cap": {

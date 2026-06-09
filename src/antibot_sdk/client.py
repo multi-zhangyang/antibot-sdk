@@ -44,6 +44,7 @@ from .providers.tencent import TencentCaptchaSolver
 from .providers.tollbooth import TollboothSolver
 from .providers.trustcaptcha import TrustcaptchaSolver
 from .providers.turnstile import TurnstileSolver
+from .providers.vulcan import VulcanSolver
 from .providers.yourcaptcha import YourCaptchaSolver
 from .providers.yidun import YidunCaptchaSolver
 from .providers.wicketkeeper import WicketkeeperSolver
@@ -87,6 +88,7 @@ class AntibotClient:
         self.tencent = TencentCaptchaSolver()
         self.tollbooth = TollboothSolver()
         self.trustcaptcha = TrustcaptchaSolver()
+        self.vulcan = VulcanSolver()
         self.aliyun = AliyunCaptchaSolver()
         self.geetest = GeeTestCaptchaSolver()
         self.turnstile = TurnstileSolver()
@@ -195,6 +197,9 @@ class AntibotClient:
 
     async def solve_trustcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.trustcaptcha.solve(**kwargs)
+
+    async def solve_vulcan(self, **kwargs: Any) -> CaptchaResult:
+        return await self.vulcan.solve(**kwargs)
 
     async def solve_turnstile(self, **kwargs: Any) -> CaptchaResult:
         return await self.turnstile.solve(**kwargs)
@@ -638,6 +643,30 @@ class AntibotClient:
                 else:
                     capy_kwargs["base_url"] = target_url
             return await self.solve_capybara(**capy_kwargs)
+        if provider == "vulcan":
+            vulcan_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_html",
+                    "challenge_url",
+                    "start",
+                    "max_attempts_per_round",
+                    "workers",
+                    "timeout_sec",
+                    "response_field",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            vulcan_kwargs.setdefault("challenge_url", target_url)
+            return await self.solve_vulcan(**vulcan_kwargs)
         if provider == "cap":
             cap_kwargs = {
                 k: v

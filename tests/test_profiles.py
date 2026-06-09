@@ -39,6 +39,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://captcha.example/justnocaptcha/challenge") == "justnocaptcha"
     assert detect_provider_for_url("https://provider.example/v1/prosopo/provider/client/captcha/pow") == "procaptcha"
     assert detect_provider_for_url("https://capybaracaptcha.example/api/challenge") == "capybara"
+    assert detect_provider_for_url("https://captcha.example/eduvulcan/captcha-wrapper") == "vulcan"
     assert detect_provider_for_url("https://example.com/.tollbooth/verify") == "tollbooth"
     assert detect_provider_for_url("https://captcha.example/chpiopow/challenge") == "chpiopow"
     assert detect_provider_for_url("https://captcha.example/impost/challenge") == "impost"
@@ -69,6 +70,7 @@ def test_generic_provider_detection():
     assert "multi_puzzle_fnv_pow" in list_profiles()["justnocaptcha"]
     assert "prosopo_pow" in list_profiles()["procaptcha"]
     assert "payload_bound_pow" in list_profiles()["capybara"]
+    assert "chained_sha256_uint32_pow" in list_profiles()["vulcan"]
     assert "tollbooth_protocol" in list_profiles()["tollbooth"]
     assert "signals_bound_pow" in list_profiles()["fcaptcha"]
     assert "encrypted_behavior_pow" in list_profiles()["auro"]

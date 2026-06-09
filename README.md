@@ -2069,6 +2069,58 @@ antibot stress capybara \
 
 ---
 
+### 20.6 EduVulcan / WASM-for-Vulcan chained PoW
+
+EduVulcan 这类页面把 PoW 参数放在 `div.captcha-wrapper` 的 dataset 里，浏览器 worker/WASM 逐轮求 nonce，最后写入隐藏字段 `captcha-response`。SDK 复现的是底层 WASM 逻辑，不需要启动 headless。
+
+关键点：
+
+```text
+base = data-challenge
+difficulty = uint32 target from data-difficulty
+rounds = data-original-rounds || data-rounds
+
+for each round:
+  nonce = first decimal counter where uint32_be(sha256(base + nonce)[0:4]) < difficulty
+  base = base + nonce
+
+solution = nonce1 + ";" + nonce2 + ...
+submit body = {"captcha-response": solution}
+```
+
+SDK 当前支持：
+
+- 解析 challenge JSON、HTML `div.captcha-wrapper` 或 challenge URL；
+- 自动识别 `id/name="captcha-response"` 的真实提交字段名；
+- 逐轮精确复现 `find_single_nonce` 的“first decimal nonce”语义；
+- 单进程或多进程分段搜索，返回隐藏字段 submit body；
+- 不启动浏览器。
+
+命令示例：
+
+```bash
+antibot solve vulcan \
+  --challenge-url 'https://target.example/captcha-page' \
+  --timeout 60
+
+antibot solve vulcan \
+  --challenge-json '{"challenge":"vulcan-fixture","difficulty":1048576,"rounds":3}' \
+  --timeout 5
+
+antibot stress vulcan \
+  --challenge-json '{"challenge":"vulcan-fixture","difficulty":1048576,"rounds":3}' \
+  --runs 20 \
+  --concurrency 4
+```
+
+当前定位：
+
+- 这是 chained SHA-256 uint32-target PoW 协议 solver；
+- difficulty 越小平均搜索越慢；多轮会把上一轮 nonce 追加到下一轮 base；
+- SDK 只输出/填充表单 proof，不绕过业务侧登录、CSRF 或一次性 challenge 状态。
+
+---
+
 ### 21. P-Captcha QuadraticResidueProblem
 
 P-Captcha 比普通 hashcash 更有意思：服务端给出 Woodall prime `p` 下的一组二次剩余 `n = x² mod p`，浏览器 worker 用 Tonelli-Shanks 求模平方根并把答案串提交给服务端。SDK 当前把这条链路下沉成纯 Python 协议 solver。
@@ -2987,6 +3039,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - @strav/captcha / `/__captcha/pow` / `_captcha_answer` 相关 URL -> `stravcaptcha`
 - JustNoCaptcha / just-no-captcha / `justnocaptcha_solution` 相关 URL -> `justnocaptcha`
 - Capybara-Captcha / capybaracaptcha / `/api/challenge` / `/api/verify` 相关 URL -> `capybara`
+- EduVulcan / WASM-for-Vulcan / `captcha-wrapper` 相关 URL -> `vulcan`
 - mCaptcha / `/api/v1/pow/config` 相关 URL -> `mcaptcha`
 - Wicketkeeper / `/v0/challenge` 相关 URL -> `wicketkeeper`
 - yourcaptcha / `/api/captcha/challenge` / `/api/captcha/verify` 相关 URL -> `yourcaptcha`
@@ -3310,6 +3363,11 @@ antibot solve capybara --base-url 'https://worker.example' --submit --difficulty
 antibot solve capybara --challenge-json '{"challenge":{"id":"capybara-fixture-id","nonce":"capybara-nonce-fixture","type":"pow","difficulty":4},"payload_token":"capybara-fixture-id.capybara-nonce-fixture.4102444800.4.a0d6bad836b008a2b4b095c1084949e3440f615dacda515786aed9ec9e015ace"}' --timeout 5
 antibot stress capybara --challenge-json '{"challenge":{"id":"capybara-fixture-id","nonce":"capybara-nonce-fixture","type":"pow","difficulty":4},"payload_token":"capybara-fixture-id.capybara-nonce-fixture.4102444800.4.a0d6bad836b008a2b4b095c1084949e3440f615dacda515786aed9ec9e015ace"}' --runs 20 --concurrency 4
 
+# EduVulcan / WASM-for-Vulcan
+antibot solve vulcan --challenge-url 'https://target.example/captcha-page'
+antibot solve vulcan --challenge-json '{"challenge":"vulcan-fixture","difficulty":1048576,"rounds":3}' --timeout 5
+antibot stress vulcan --challenge-json '{"challenge":"vulcan-fixture","difficulty":1048576,"rounds":3}' --runs 20 --concurrency 4
+
 # mCaptcha
 antibot solve mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key'
 antibot stress mcaptcha --base-url 'https://captcha.example' --sitekey 'site-key' --runs 20
@@ -3489,6 +3547,7 @@ src/antibot_sdk/
     stravcaptcha.py         # @strav/captcha stateless HMAC token + hashcash PoW solver
     justnocaptcha.py        # JustNoCaptcha multi-puzzle FNV/fmix PoW protocol solver
     capybara.py             # Capybara-Captcha payload-token-bound SHA-256 PoW solver
+    vulcan.py               # EduVulcan chained SHA-256 uint32-target PoW solver
     lapti.py               # Lapti SHA3 secret-token-bound PoW solver
     mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
     wicketkeeper.py         # Wicketkeeper JWT PoW protocol solver
@@ -3537,6 +3596,7 @@ tests/
   test_hashguard.py
   test_justnocaptcha.py
   test_capybara.py
+  test_vulcan.py
   test_lapti.py
   test_yourcaptcha.py
   test_silentchallenge.py
@@ -3550,7 +3610,10 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 141 passed
+pytest: 145 passed
+ruff check src tests: passed
+uv build: success
+Vulcan fixture/html/CLI/stress: chained SHA256 uint32-target PoW，solution=1136;5242;945，4/4 stress 验证通过
 Swetrix fixture/mock/live/stress: /generate + SHA256(challenge:nonce) PoW + /verify + /validate 验证通过
 Crovly fixture/mock/stress: /challenge + fingerprint/environment/behavior + SHA256(nonce+counter) bit-PoW + /verify 验证通过
 HashGuard fixture/mock/stress: /pow/challenges + SHA256(challengeId:seed:nonce)<=target + /pow/verifications + /pow/assertions/introspect 验证通过
@@ -3564,7 +3627,6 @@ FCaptcha fixture/mock/stress: signalsHash-bound PoW、本地 /api/pow/challenge 
 PoW Bot Deterrent fixture/mock/stress: scrypt-WASM PoW、本地 /GetChallenges + /Verify 验证通过
 pow-reaction fixture/mock/live/stress: HS256 JWT + 多轮 SHA256(round.nonce) PoW + reactions submit 验证通过
 node -c bridge.js/site_profiles.js/runner.js: passed
-uv build: success
 watchdog smoke: ALIYUN_GOTO_WATCHDOG_MS=1 能写入 watchdog JSON
 geetest mock: initGeetest4/onSuccess/getValidate 链路通过
 geetest official slide: 单次 solve 成功提取 pass_token/lot_number/captcha_output/gen_time

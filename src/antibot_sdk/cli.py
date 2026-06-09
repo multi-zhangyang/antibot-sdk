@@ -140,6 +140,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "stravcaptcha",
             "justnocaptcha",
             "capybara",
+            "vulcan",
             "cap",
             "cryptopuzzle",
             "captxa",
@@ -665,6 +666,22 @@ async def amain(argv: list[str] | None = None) -> int:
     capy.add_argument("--output-dir")
     capy.add_argument("--user-agent")
     capy.add_argument("--raw", action="store_true")
+
+    vul = solve_sub.add_parser("vulcan")
+    vul_source = vul.add_mutually_exclusive_group(required=True)
+    vul_source.add_argument("--challenge-json", help="inline {challenge,difficulty,rounds} JSON, or @/path")
+    vul_source.add_argument("--challenge-file")
+    vul_source.add_argument("--challenge-html", help="HTML containing div.captcha-wrapper")
+    vul_source.add_argument("--challenge-url", help="GET endpoint returning Vulcan JSON or HTML")
+    vul.add_argument("--start", type=int, default=1)
+    vul.add_argument("--max-attempts-per-round", type=int, default=1_000_000_000)
+    vul.add_argument("--workers", type=int, default=1)
+    vul.add_argument("--timeout", type=int, default=60)
+    vul.add_argument("--response-field", default="captcha-response")
+    vul.add_argument("--proxy")
+    vul.add_argument("--output-dir")
+    vul.add_argument("--user-agent")
+    vul.add_argument("--raw", action="store_true")
 
     pc = solve_sub.add_parser("pcaptcha")
     pc_source = pc.add_mutually_exclusive_group(required=True)
@@ -1526,6 +1543,25 @@ async def amain(argv: list[str] | None = None) -> int:
     scapy.add_argument("--user-agent")
     scapy.add_argument("--full", action="store_true")
 
+    svul = stress_sub.add_parser("vulcan")
+    svul_source = svul.add_mutually_exclusive_group(required=True)
+    svul_source.add_argument("--challenge-json")
+    svul_source.add_argument("--challenge-file")
+    svul_source.add_argument("--challenge-html")
+    svul_source.add_argument("--challenge-url")
+    svul.add_argument("--runs", type=int, default=10)
+    svul.add_argument("--concurrency", type=int, default=2)
+    svul.add_argument("--timeout", type=int, default=60)
+    svul.add_argument("--start", type=int, default=1)
+    svul.add_argument("--max-attempts-per-round", type=int, default=1_000_000_000)
+    svul.add_argument("--workers", type=int, default=1)
+    svul.add_argument("--response-field", default="captcha-response")
+    svul.add_argument("--proxy")
+    svul.add_argument("--output-dir")
+    svul.add_argument("--output-json")
+    svul.add_argument("--user-agent")
+    svul.add_argument("--full", action="store_true")
+
     spc = stress_sub.add_parser("pcaptcha")
     spc.add_argument("--challenge-url", required=True)
     spc.add_argument("--validate-url")
@@ -1970,6 +2006,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "stravcaptcha",
             "justnocaptcha",
             "capybara",
+            "vulcan",
             "impost",
             "kerberus",
             "lapti",
@@ -2529,6 +2566,23 @@ async def amain(argv: list[str] | None = None) -> int:
             max_attempts=args.max_attempts,
             workers=args.workers,
             timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "vulcan":
+        ret = await client.solve_vulcan(
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_html=args.challenge_html,
+            challenge_url=args.challenge_url,
+            start=args.start,
+            max_attempts_per_round=args.max_attempts_per_round,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            response_field=args.response_field,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
             user_agent=args.user_agent,
@@ -3595,6 +3649,31 @@ async def amain(argv: list[str] | None = None) -> int:
                 max_attempts=args.max_attempts,
                 workers=args.workers,
                 timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "vulcan":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="vulcan",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_vulcan(
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_html=args.challenge_html,
+                challenge_url=args.challenge_url,
+                start=args.start,
+                max_attempts_per_round=args.max_attempts_per_round,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                response_field=args.response_field,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
                 user_agent=args.user_agent,
