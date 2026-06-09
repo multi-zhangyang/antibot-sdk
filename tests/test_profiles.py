@@ -36,6 +36,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://wargon2.example/api/v1/challenge") == "wargon2"
     assert detect_provider_for_url("https://gate.example/balooproxy/challenge?publicSalt=abc") == "balooproxy"
     assert detect_provider_for_url("https://gate.example/.basedflare/bot-check") == "basedflare"
+    assert detect_provider_for_url("https://gate.example/__pingoo/captcha/api/init") == "pingoo"
     assert detect_provider_for_url("https://captcha.example/crypto-puzzle/challenge") == "cryptopuzzle"
     assert detect_provider_for_url("https://captcha.example/challenge/simp") == "captxa"
     assert detect_provider_for_url("https://get.crovly.com/widget.js") == "crovly"
@@ -112,6 +113,7 @@ def test_generic_provider_detection():
     assert "argon2id_prefix_pow_fingerprint" in list_profiles()["wargon2"]
     assert "balooproxy_js_suffix_sha256_cookie" in list_profiles()["balooproxy"]
     assert "haproxy_pow_cookie" in list_profiles()["basedflare"]
+    assert "jwt_cookie_sha256_pow" in list_profiles()["pingoo"]
     assert "target_match_pow" in list_profiles()["chpiopow"]
     assert "argon2id_pow" in list_profiles()["impost"]
     assert "u128_score_pow" in list_profiles()["kerberus"]

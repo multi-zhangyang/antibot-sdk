@@ -149,6 +149,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "_basedflare_pow cookie / pow_response",
         "scope": "BasedFlare HAProxy edge PoW：解析 /.basedflare/bot-check JSON/HTML challenge，复现 sha256/argon2 Worker PoW，POST pow_response 换 _basedflare_pow clearance cookie；不启动浏览器。",
     },
+    "pingoo": {
+        "provider": "pingoo",
+        "name": "Pingoo Captcha",
+        "category": "solver",
+        "captcha_type": "jwt_cookie_sha256_pow",
+        "status": "alpha",
+        "output": "__pingoo_captcha_verified cookie / verify JSON body",
+        "scope": "Pingoo 反向代理 CAPTCHA：GET /__pingoo/captcha/api/init 领取 EdDSA JWT challenge cookie，复现 SHA256(challenge+nonce) 十六进制前缀 PoW，POST /api/verify 换 __pingoo_captcha_verified JWT cookie；不启动浏览器。",
+    },
     "friendlycaptcha": {
         "provider": "friendlycaptcha",
         "name": "FriendlyCaptcha",

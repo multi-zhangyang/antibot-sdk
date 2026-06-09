@@ -150,6 +150,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "wargon2",
             "balooproxy",
             "basedflare",
+            "pingoo",
             "aliyun",
             "tencent",
             "friendlycaptcha",
@@ -476,6 +477,24 @@ async def amain(argv: list[str] | None = None) -> int:
     bf.add_argument("--proxy")
     bf.add_argument("--output-dir")
     bf.add_argument("--raw", action="store_true")
+
+    pingo = solve_sub.add_parser("pingoo")
+    pingo.add_argument("--base-url", help="protected origin; infers /__pingoo/captcha/api/init")
+    pingo.add_argument("--init-url", help="explicit Pingoo init endpoint")
+    pingo.add_argument("--verify-url", help="explicit Pingoo verify endpoint")
+    pingo.add_argument("--challenge-json", help="inline {challenge,difficulty} JSON, or @/path")
+    pingo.add_argument("--challenge-file")
+    pingo.add_argument("--challenge-html", help="inline HTML, or @/path")
+    pingo.add_argument("--submit", action="store_true", help="POST verify JSON and capture __pingoo_captcha_verified")
+    pingo.add_argument("--start", type=int, default=1)
+    pingo.add_argument("--max-attempts", type=int, default=1_000_000)
+    pingo.add_argument("--workers", type=int, default=1)
+    pingo.add_argument("--chunk-size", type=int, default=50_000)
+    pingo.add_argument("--timeout", type=int, default=10)
+    pingo.add_argument("--proxy")
+    pingo.add_argument("--output-dir")
+    pingo.add_argument("--user-agent")
+    pingo.add_argument("--raw", action="store_true")
 
     shpw = solve_sub.add_parser("shapow")
     shpw.add_argument("--base-url", default="https://example.com")
@@ -1745,6 +1764,27 @@ async def amain(argv: list[str] | None = None) -> int:
     sbf.add_argument("--output-json")
     sbf.add_argument("--full", action="store_true")
 
+    spingo = stress_sub.add_parser("pingoo")
+    spingo.add_argument("--base-url")
+    spingo.add_argument("--init-url")
+    spingo.add_argument("--verify-url")
+    spingo.add_argument("--challenge-json")
+    spingo.add_argument("--challenge-file")
+    spingo.add_argument("--challenge-html")
+    spingo.add_argument("--submit", action="store_true")
+    spingo.add_argument("--start", type=int, default=1)
+    spingo.add_argument("--max-attempts", type=int, default=1_000_000)
+    spingo.add_argument("--workers", type=int, default=1)
+    spingo.add_argument("--chunk-size", type=int, default=50_000)
+    spingo.add_argument("--runs", type=int, default=10)
+    spingo.add_argument("--concurrency", type=int, default=2)
+    spingo.add_argument("--timeout", type=int, default=10)
+    spingo.add_argument("--proxy")
+    spingo.add_argument("--output-dir")
+    spingo.add_argument("--output-json")
+    spingo.add_argument("--user-agent")
+    spingo.add_argument("--full", action="store_true")
+
     sshpw = stress_sub.add_parser("shapow")
     sshpw.add_argument("--base-url", default="https://example.com")
     sshpw.add_argument("--page-url")
@@ -2925,6 +2965,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "wargon2",
             "balooproxy",
             "basedflare",
+            "pingoo",
         ):
             common.update({
                 "site_profile": args.site_profile,
@@ -3253,6 +3294,28 @@ async def amain(argv: list[str] | None = None) -> int:
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "pingoo":
+        ret = await client.solve_pingoo(
+            base_url=args.base_url,
+            init_url=args.init_url,
+            challenge_url=args.init_url,
+            verify_url=args.verify_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_html=args.challenge_html,
+            submit=args.submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            chunk_size=args.chunk_size,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+
     if args.cmd == "solve" and args.provider == "shapow":
         ret = await client.solve_shapow(
             base_url=args.base_url,
@@ -4706,6 +4769,36 @@ async def amain(argv: list[str] | None = None) -> int:
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+
+    if args.cmd == "stress" and args.provider == "pingoo":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="pingoo",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_pingoo(
+                base_url=args.base_url,
+                init_url=args.init_url,
+                challenge_url=args.init_url,
+                verify_url=args.verify_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_html=args.challenge_html,
+                submit=args.submit,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                chunk_size=args.chunk_size,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
             ),
         )
         emit_stress(ret, full=args.full)

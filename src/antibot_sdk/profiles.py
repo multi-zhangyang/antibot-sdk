@@ -147,6 +147,8 @@ def detect_provider_for_url(url: str | None) -> str:
         for x in ("basedflare", "haproxy-protection", "/.basedflare/bot-check", "_basedflare_pow", "_basedflare_captcha")
     ):
         return "basedflare"
+    if any(x in u or x in host for x in ("pingoo", "__pingoo/captcha", "__pingoo_captcha", "__pingoo_captcha_verified")):
+        return "pingoo"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
         return "gunslol"
     if any(x in u or x in host for x in ("h33.ai", "botshield", "h33_bot_token", "/v1/botshield/")):
@@ -401,6 +403,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "haproxy-edge-sha256-or-argon2-pow-cookie-solver",
                 "successFields": ["pow_response", "_basedflare_pow cookie", "302 redirect"],
                 "endpoints": ["GET /.basedflare/bot-check", "POST /.basedflare/bot-check"],
+            }
+        },
+        "pingoo": {
+            "jwt_cookie_sha256_pow": {
+                "patterns": ["Pingoo", "/__pingoo/captcha/api/init", "/__pingoo/captcha/api/verify", "__pingoo_captcha"],
+                "mode": "jwt-cookie-bound-sha256-prefix-pow",
+                "successFields": ["nonce", "hash", "__pingoo_captcha_verified cookie"],
+                "endpoints": ["GET /__pingoo/captcha/api/init", "POST /__pingoo/captcha/api/verify"],
             }
         },
         "friendlycaptcha": {

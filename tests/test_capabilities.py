@@ -28,6 +28,7 @@ def test_capability_matrix_product_boundary() -> None:
         "wargon2",
         "balooproxy",
         "basedflare",
+        "pingoo",
         "fcaptcha",
         "friendlycaptcha",
         "getpowcaptcha",
@@ -88,6 +89,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["wargon2"]["captcha_type"] == "argon2id_prefix_pow_fingerprint"
     assert solvers["balooproxy"]["captcha_type"] == "balooproxy_js_suffix_sha256_cookie"
     assert solvers["basedflare"]["captcha_type"] == "haproxy_pow_cookie"
+    assert solvers["pingoo"]["captcha_type"] == "jwt_cookie_sha256_pow"
     assert solvers["fcaptcha"]["captcha_type"] == "signals_bound_pow"
     assert solvers["friendlycaptcha"]["captcha_type"] == "proof_of_work"
     assert solvers["getpowcaptcha"]["captcha_type"] == "signals_bound_pow"
@@ -159,9 +161,12 @@ def test_new_protocol_solvers_are_top_level_sdk_exports() -> None:
     assert antibot_sdk.Wargon2Solver
     assert antibot_sdk.BalooProxySolver
     assert antibot_sdk.BasedFlareSolver
+    assert antibot_sdk.PingooSolver
     assert antibot_sdk.balooproxy_access_hash
     assert antibot_sdk.derive_balooproxy_stage2_challenge
     assert antibot_sdk.hex_suffix_by_index
     assert antibot_sdk.validate_balooproxy_suffix
     assert antibot_sdk.basedflare_checkdiff_lua
     assert antibot_sdk.solve_basedflare_pow
+    assert antibot_sdk.solve_pingoo_nonce
+    assert antibot_sdk.pingoo_hash_hex

@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / go-away js-pow-sha256 / GuardianWAF unsigned JS PoW / SHAPOW Nginx PoW / Anubis PoW / Auro AES-GCM 行为 PoW / AWS WAF encrypted telemetry PoW / Wargon2 Argon2id fingerprint PoW / balooProxy JS suffix cookie / BasedFlare HAProxy PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / NeoIRC resource/body-bound Hashcash / Hashptcha prefix hash-cracking task / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / php-anti-ddos stateless HMAC multi-PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Albireo serverless signed PoW / Powxy reverse-proxy PoW / go-away js-pow-sha256 / GuardianWAF unsigned JS PoW / SHAPOW Nginx PoW / Anubis PoW / Auro AES-GCM 行为 PoW / AWS WAF encrypted telemetry PoW / Wargon2 Argon2id fingerprint PoW / balooProxy JS suffix cookie / BasedFlare HAProxy PoW / Pingoo JWT PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / NeoIRC resource/body-bound Hashcash / Hashptcha prefix hash-cracking task / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / php-anti-ddos stateless HMAC multi-PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -25,6 +25,7 @@
 - Wargon2 Captcha：新增 Argon2id memory-hard 前缀 PoW + AES-GCM fingerprint solver，复现 WASM `salt+nonce` 链路，可提交 `/api/v1/verify`，不启动浏览器。
 - balooProxy / balooPow：新增 JS suffix cookie solver，复现 accessKey + OTP + BLAKE3 派生与 `SHA256(publicSalt+suffix)` 精确匹配，输出 `_2__bProxy_v` clearance cookie；不启动浏览器。
 - BasedFlare / haproxy-protection：新增 HAProxy 边缘 PoW 集成入口，面向 `/.basedflare/bot-check` 的 JSON/HTML challenge，输出 `pow_response` / `_basedflare_pow` cookie；不启动浏览器。
+- Pingoo Captcha：新增反向代理 JWT challenge cookie + SHA-256 前缀 PoW solver，GET `/__pingoo/captcha/api/init` 领取 challenge，POST `/api/verify` 换 `__pingoo_captcha_verified` cookie；不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
 - powCAPTCHA：新增 widget 协议 solver，合成 fingerprint/signals 调 `/challenges/create`，复现 `SHA256(signature+problem+nonce)` 多 problem 前导零 PoW，输出 `powcaptcha-response` token，不启动浏览器。
 - FCaptcha：新增 behavior/environment signals + `signalsHash` 绑定 SHA-256 PoW 协议 solver，补齐 `meta.challengeNonce`、canonical `signalsJson` 和最小提交耗时，可提交 `/api/verify` 换 token，不启动浏览器。
@@ -91,6 +92,7 @@
 | GuardianWAF JS Challenge | 协议 solver | `unsigned_js_pow_hmac_cookie` | alpha | `__gwaf_challenge` HMAC cookie / verify body |
 | SHAPOW Nginx PoW | 协议 solver | `nginx_ip_time_bound_pow` | alpha | `shapow-response` / IP whitelist |
 | BasedFlare / haproxy-protection | 协议 solver | `haproxy_pow_cookie` | alpha | `pow_response` / `_basedflare_pow` cookie |
+| Pingoo Captcha | 协议 solver | `jwt_cookie_sha256_pow` | alpha | `__pingoo_captcha_verified` cookie / verify body |
 | Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
 | Auro.Network | 协议 solver | `encrypted_behavior_pow` | alpha | validate body / Auro token |
 | FriendlyCaptcha | 协议 solver | `proof_of_work` | alpha | `frc-captcha-solution` payload |
@@ -1051,7 +1053,7 @@ antibot stress guardianwaf \
 
 ---
 
-### AWS WAF Challenge / Wargon2 / balooProxy / BasedFlare
+### AWS WAF Challenge / Wargon2 / balooProxy / BasedFlare / Pingoo
 
 这一组是本轮新增的协议层/内存硬化方向，定位是“能离线证明核心算法 + 本地 mock 可闭环”，不启动浏览器。
 
@@ -1059,6 +1061,7 @@ antibot stress guardianwaf \
 - `wargon2`：复现 femshift/wargon2-captcha 的 Argon2id 参数链路：`password = salt_b64 + nonce`，`salt = base64_decode(salt_b64)`，命中 `target` 十六进制前缀；同时合成反向 base64 + AES-GCM fingerprint，可直接提交 `/api/v1/verify`。
 - `balooproxy`：复现 balooProxy/balooPow 的 suffix challenge：`publicSalt + suffix` 的 SHA-256 必须等于 challenge，成功后输出 `_2__bProxy_v` cookie value；accessKey/OTP 派生 helper 已作为 SDK API 暴露。
 - `basedflare`：复现 BasedFlare/haproxy-protection 的 HAProxy edge PoW 路径：解析 `/.basedflare/bot-check` JSON/HTML challenge，兼容上游 Lua `checkdiff` 的非标准 nibble/bit 行为，支持 sha256 与 Argon2id worker PoW，POST `pow_response` 换 `_basedflare_pow` cookie；JSON 只暴露 `ceil(pd/8)` 时可用 `--difficulty-bits` 指定精确难度。
+- `pingoo`：复现 pingooio/pingoo 的 CAPTCHA flow：`/__pingoo/captcha/api/init` 返回 challenge 和 `__pingoo_captcha` EdDSA JWT cookie，客户端计算 `SHA256(challenge + nonce)` 十六进制前缀零，`POST /__pingoo/captcha/api/verify` 后拿 `__pingoo_captcha_verified` JWT cookie。该 token 由服务端签名并绑定 IP/User-Agent/Host，SDK 走协议提交而不是伪造签名。
 
 命令示例：
 
@@ -1081,6 +1084,10 @@ antibot solve basedflare \
   --base-url https://target.example/protected \
   --submit \
   --difficulty-bits 16
+
+antibot solve pingoo \
+  --base-url https://target.example/protected \
+  --submit
 ```
 
 压测示例：
@@ -1090,9 +1097,10 @@ antibot stress awswaf --challenge-json @awswaf-challenge.json --checksum 1a2b3c4
 antibot stress wargon2 --challenge-json @wargon2-challenge.json --runs 5 --concurrency 1 --timeout 30
 antibot stress balooproxy --challenge-json @balooproxy-challenge.json --runs 20 --concurrency 4
 antibot stress basedflare --challenge-json @basedflare-challenge.json --difficulty-bits 16 --runs 20 --concurrency 4
+antibot stress pingoo --challenge-json @pingoo-challenge.json --runs 20 --concurrency 4
 ```
 
-当前限制：AWS WAF 的 live `challenge.js` 混淆版本会变化，SDK 目前吃解析后的 JS/JSON fixture；balooProxy 已支持 GET 真实 challenge 页面、求 suffix、带 `_2__bProxy_v` cookie 二次请求的无浏览器闭环；BasedFlare 已支持无浏览器 GET/POST `bot-check` 闭环，若站点额外开启 hCaptcha/reCAPTCHA/BFCaptcha，当前只输出 PoW 部分。
+当前限制：AWS WAF 的 live `challenge.js` 混淆版本会变化，SDK 目前吃解析后的 JS/JSON fixture；balooProxy 已支持 GET 真实 challenge 页面、求 suffix、带 `_2__bProxy_v` cookie 二次请求的无浏览器闭环；BasedFlare 已支持无浏览器 GET/POST `bot-check` 闭环，若站点额外开启 hCaptcha/reCAPTCHA/BFCaptcha，当前只输出 PoW 部分；Pingoo 的 verified JWT 由服务端签名且绑定客户端，必须保持 init/verify 的 IP、UA、Host 一致。
 
 SDK 顶层也暴露这批 solver 和 helper，适合直接嵌到业务代码：
 

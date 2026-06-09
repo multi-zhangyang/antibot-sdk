@@ -14,6 +14,7 @@ from .providers.auro import AuroSolver
 from .providers.awswaf import AwsWafSolver
 from .providers.balooproxy import BalooProxySolver
 from .providers.basedflare import BasedFlareSolver
+from .providers.pingoo import PingooSolver
 from .providers.browser import BrowserAutomation
 from .providers.botcha import BotchaSolver
 from .providers.btx import BtxSolver
@@ -94,6 +95,7 @@ class AntibotClient:
         self.awswaf = AwsWafSolver()
         self.balooproxy = BalooProxySolver()
         self.basedflare = BasedFlareSolver()
+        self.pingoo = PingooSolver()
         self.fcaptcha = FCaptchaSolver()
         self.cryptopuzzle = CryptoPuzzleSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
@@ -207,6 +209,9 @@ class AntibotClient:
 
     async def solve_basedflare(self, **kwargs: Any) -> CaptchaResult:
         return await self.basedflare.solve(**kwargs)
+
+    async def solve_pingoo(self, **kwargs: Any) -> CaptchaResult:
+        return await self.pingoo.solve(**kwargs)
 
     async def solve_cryptopuzzle(self, **kwargs: Any) -> CaptchaResult:
         return await self.cryptopuzzle.solve(**kwargs)
@@ -832,6 +837,35 @@ class AntibotClient:
             basedflare_kwargs.setdefault("base_url", target_url)
             basedflare_kwargs.setdefault("submit", True)
             return await self.solve_basedflare(**basedflare_kwargs)
+        if provider == "pingoo":
+            pingoo_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "challenge_url",
+                    "init_url",
+                    "verify_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_html",
+                    "submit",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "chunk_size",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            pingoo_kwargs.setdefault("base_url", target_url)
+            pingoo_kwargs.setdefault("submit", True)
+            return await self.solve_pingoo(**pingoo_kwargs)
         if provider == "friendlycaptcha":
             frc_kwargs = {
                 k: v
