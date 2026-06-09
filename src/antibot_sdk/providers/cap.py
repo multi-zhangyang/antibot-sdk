@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
+import hmac
 import json
 import time
 from concurrent.futures import ProcessPoolExecutor, TimeoutError as FuturesTimeout, as_completed
@@ -12,6 +14,7 @@ from typing import Any, Iterable
 from urllib.parse import urljoin
 
 import requests
+from Crypto.Cipher import AES
 
 from ..models import CaptchaResult
 from ..proxy import parse_proxy, redacted_proxy
@@ -44,6 +47,12 @@ class CapRswChallenge:
 
 
 @dataclass(slots=True)
+class CapInstrumentationChallenge:
+    blob: str | None = None
+    protocol: str = "instrumentation"
+
+
+@dataclass(slots=True)
 class CapUnsupportedChallenge:
     protocol: str
     payload: dict[str, Any] | None = None
@@ -52,17 +61,22 @@ class CapUnsupportedChallenge:
 @dataclass(slots=True)
 class CapSolution:
     token: str | None
-    challenges: list[CapChallenge | CapRswChallenge]
+    challenges: list[CapChallenge | CapRswChallenge | CapInstrumentationChallenge]
     solutions: list[int] | list[dict[str, Any]]
     format: int = 1
     took_ms: int = 0
     checked: int = 0
+    instrumentation: dict[str, Any] | None = None
 
     @property
     def submit_body(self) -> dict[str, Any]:
         if self.token is None:
-            return {"solutions": self.solutions}
-        return {"token": self.token, "solutions": self.solutions}
+            body: dict[str, Any] = {"solutions": self.solutions}
+        else:
+            body = {"token": self.token, "solutions": self.solutions}
+        if self.instrumentation is not None:
+            body["instr"] = self.instrumentation
+        return body
 
     def submit_body_json(self) -> str:
         return json.dumps(self.submit_body, ensure_ascii=False, separators=(",", ":"))
@@ -154,6 +168,151 @@ def cap_pow_matches(hash_bytes: bytes, target: str) -> bool:
 
 def verify_cap_solution(salt: str, target: str, nonce: int | str) -> bool:
     return cap_pow_matches(cap_hash_bytes(salt, nonce), target)
+
+
+def build_cap_instr_from_meta(meta: dict[str, Any], *, now_ms: int | None = None) -> dict[str, Any]:
+    """Build a Cap instrumentation result from server-side metadata.
+
+    Cap's upstream verifier only checks `payload.i` plus exact equality between
+    `payload.state[vars[i]]` and `expectedVals[i]`.  When the encrypted metadata
+    is available in a local/self-hosted flow, we can construct the verifier-ready
+    payload without launching a browser iframe.
+    """
+
+    parsed = parse_cap_instrumentation_meta(meta)
+    ts = int(now_ms if now_ms is not None else time.time() * 1000)
+    return {
+        "i": parsed["id"],
+        "state": {
+            str(var_name): parsed["expectedVals"][idx]
+            for idx, var_name in enumerate(parsed["vars"])
+        },
+        "ts": ts,
+    }
+
+
+def parse_cap_instrumentation_meta(value: Any) -> dict[str, Any]:
+    """Normalize `{id, vars, expectedVals}` from direct or nested Cap metadata."""
+
+    if isinstance(value, str):
+        value = _load_json_arg(value)
+    if not isinstance(value, dict):
+        raise ValueError("Cap instrumentation meta must be a JSON object")
+    if isinstance(value.get("instrMeta"), dict):
+        value = value["instrMeta"]
+    elif isinstance(value.get("meta"), dict):
+        value = value["meta"]
+    elif isinstance(value.get("challengeMeta"), dict):
+        value = value["challengeMeta"]
+
+    challenge_id = value.get("id") or value.get("i")
+    vars_ = value.get("vars")
+    expected_vals = value.get("expectedVals")
+    if expected_vals is None:
+        expected_vals = value.get("expected_values")
+    if not challenge_id:
+        raise ValueError("Cap instrumentation meta requires id")
+    if not isinstance(vars_, list) or not isinstance(expected_vals, list):
+        raise ValueError("Cap instrumentation meta requires vars and expectedVals arrays")
+    if len(vars_) != len(expected_vals):
+        raise ValueError("Cap instrumentation vars and expectedVals length mismatch")
+    return {
+        "id": str(challenge_id),
+        "vars": [str(v) for v in vars_],
+        "expectedVals": [int(v) for v in expected_vals],
+        **({"expires": value["expires"]} if value.get("expires") is not None else {}),
+        **(
+            {"blockAutomatedBrowsers": bool(value["blockAutomatedBrowsers"])}
+            if value.get("blockAutomatedBrowsers") is not None
+            else {}
+        ),
+    }
+
+
+def verify_cap_instrumentation_result(meta: dict[str, Any], payload: dict[str, Any]) -> bool:
+    parsed = parse_cap_instrumentation_meta(meta)
+    if not isinstance(payload, dict) or payload.get("i") != parsed["id"]:
+        return False
+    state = payload.get("state")
+    if not isinstance(state, dict):
+        return False
+    return all(state.get(var_name) == parsed["expectedVals"][idx] for idx, var_name in enumerate(parsed["vars"]))
+
+
+def cap_jwt_verify_payload(token: str, secret: str | bytes) -> dict[str, Any] | None:
+    """Verify Cap HS256 JWT and return its JSON payload."""
+
+    if not token or not isinstance(token, str):
+        return None
+    first_dot = token.find(".")
+    last_dot = token.rfind(".")
+    if first_dot < 1 or last_dot == first_dot or token.find(".", first_dot + 1) != last_dot:
+        return None
+    sig_input = token[:last_dot].encode("utf-8")
+    expected = hmac.new(_secret_bytes(secret), sig_input, hashlib.sha256).digest()
+    try:
+        actual = _b64url_decode(token[last_dot + 1 :])
+    except Exception:
+        return None
+    if not hmac.compare_digest(expected, actual):
+        return None
+    try:
+        return json.loads(_b64url_decode(token[first_dot + 1 : last_dot]).decode("utf-8"))
+    except Exception:
+        return None
+
+
+def decrypt_cap_gcm(blob: str, secret: str | bytes, *, info: str = "cap:enc-v1") -> dict[str, Any] | None:
+    """Decrypt Cap's AES-256-GCM metadata blob.
+
+    Upstream derives the AES key as `HMAC-SHA256(secret, info)` and encodes
+    `iv || tag || ciphertext` with base64url.
+    """
+
+    try:
+        buf = _b64url_decode(str(blob))
+        if len(buf) < 28:
+            return None
+        iv, tag, ciphertext = buf[:12], buf[12:28], buf[28:]
+        key = hmac.new(_secret_bytes(secret), info.encode("utf-8"), hashlib.sha256).digest()
+        cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
+        plaintext = cipher.decrypt_and_verify(ciphertext, tag)
+        data = json.loads(plaintext.decode("utf-8"))
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def cap_instrumentation_meta_from_token(
+    token: str,
+    secret: str | bytes,
+    *,
+    format: int = 1,
+) -> dict[str, Any] | list[dict[str, Any]] | None:
+    """Extract/decrypt Cap instrumentation metadata from v1 `ei` or v2 `ev`."""
+
+    payload = cap_jwt_verify_payload(token, secret)
+    if not payload:
+        return None
+    if format == 2 or payload.get("f") == 2:
+        decrypted = decrypt_cap_gcm(str(payload.get("ev") or ""), secret, info="cap:fmt2-v1")
+        if not decrypted or not isinstance(decrypted.get("expected"), list):
+            return None
+        metas: list[dict[str, Any]] = []
+        for expected in decrypted["expected"]:
+            if isinstance(expected, dict) and expected.get("protocol") == "instrumentation":
+                meta = expected.get("instrMeta")
+                if isinstance(meta, dict):
+                    metas.append(parse_cap_instrumentation_meta(meta))
+        return metas
+
+    encrypted = payload.get("ei")
+    if not encrypted:
+        return None
+    decrypted = decrypt_cap_gcm(str(encrypted), secret)
+    if not decrypted:
+        return None
+    return parse_cap_instrumentation_meta(decrypted)
 
 
 def cap_rsw_solution_hex(
@@ -332,14 +491,16 @@ def solve_cap_seeded(
 
 
 def solve_cap_format2_challenges(
-    challenges: Iterable[CapChallenge | CapRswChallenge],
+    challenges: Iterable[CapChallenge | CapRswChallenge | CapInstrumentationChallenge],
     *,
     start: int = 0,
     max_attempts_per_challenge: int = DEFAULT_MAX_ATTEMPTS_PER_CHALLENGE,
     workers: int = 1,
     timeout_sec: int | float | None = None,
+    instrumentation_solutions: dict[int, dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]] | None, dict[str, Any]]:
     items = list(challenges)
+    instrumentation_solutions = instrumentation_solutions or {}
     if all(isinstance(ch, CapChallenge) and ch.protocol == "sha256-pow" for ch in items):
         nonces, diag = solve_cap_challenges(
             items,
@@ -378,6 +539,11 @@ def solve_cap_format2_challenges(
             if y_hex is None:
                 return None, _cap_diag(started, checked_total, idx, diag.get("error") or "timeout")
             solutions.append({"y": y_hex})
+        elif isinstance(ch, CapInstrumentationChallenge):
+            instr_solution = instrumentation_solutions.get(idx)
+            if instr_solution is None:
+                return None, _cap_diag(started, checked_total, len(solutions), "instrumentation_required")
+            solutions.append(_normalize_cap_format2_instr_solution(instr_solution))
         else:
             protocol = getattr(ch, "protocol", "unknown")
             return None, _cap_diag(started, checked_total, len(solutions), f"unsupported:{protocol}")
@@ -386,7 +552,12 @@ def solve_cap_format2_challenges(
 
 def parse_cap_challenge_response(
     data: Any,
-) -> tuple[str | None, int, list[CapChallenge | CapRswChallenge | CapUnsupportedChallenge], bool]:
+) -> tuple[
+    str | None,
+    int,
+    list[CapChallenge | CapRswChallenge | CapInstrumentationChallenge | CapUnsupportedChallenge],
+    bool,
+]:
     """Return (token, format, challenges, has_unsupported_protocol)."""
 
     if isinstance(data, list):
@@ -402,7 +573,9 @@ def parse_cap_challenge_response(
         entries = data.get("challenges")
         if not isinstance(entries, list):
             raise ValueError("Cap format=2 requires challenges list")
-        challenges: list[CapChallenge | CapRswChallenge | CapUnsupportedChallenge] = []
+        challenges: list[
+            CapChallenge | CapRswChallenge | CapInstrumentationChallenge | CapUnsupportedChallenge
+        ] = []
         unsupported = False
         for entry in entries:
             if not isinstance(entry, dict):
@@ -411,6 +584,8 @@ def parse_cap_challenge_response(
             if proto != "sha256-pow":
                 if proto == "rsw":
                     challenges.append(_coerce_rsw_challenge(entry))
+                elif proto == "instrumentation":
+                    challenges.append(_coerce_instrumentation_challenge(entry))
                 else:
                     unsupported = True
                     payload = entry.get("payload") if isinstance(entry.get("payload"), dict) else {}
@@ -500,6 +675,28 @@ def _coerce_rsw_challenge(value: CapRswChallenge | dict[str, Any]) -> CapRswChal
     )
 
 
+def _coerce_instrumentation_challenge(
+    value: CapInstrumentationChallenge | dict[str, Any],
+) -> CapInstrumentationChallenge:
+    if isinstance(value, CapInstrumentationChallenge):
+        return value
+    if not isinstance(value, dict):
+        raise ValueError(f"invalid Cap instrumentation challenge item: {value!r}")
+    payload = value.get("payload") if isinstance(value.get("payload"), dict) else value
+    blob = payload.get("blob") or payload.get("instrumentation")
+    return CapInstrumentationChallenge(blob=str(blob) if blob is not None else None)
+
+
+def _normalize_cap_format2_instr_solution(value: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError("Cap format-2 instrumentation solution must be an object")
+    if "instr" in value or value.get("blocked") is True or value.get("timeout") is True:
+        return dict(value)
+    if "i" in value and "state" in value:
+        return {"instr": value}
+    raise ValueError("Cap format-2 instrumentation solution requires instr, blocked/timeout, or i/state")
+
+
 def _normalize_hex(value: Any, name: str) -> str:
     if isinstance(value, int):
         if value < 0:
@@ -554,6 +751,20 @@ def _is_hex(value: str) -> bool:
     return all(ch in "0123456789abcdefABCDEF" for ch in value)
 
 
+def _secret_bytes(secret: str | bytes) -> bytes:
+    return secret if isinstance(secret, bytes) else str(secret).encode("utf-8")
+
+
+def _b64url_decode(value: str) -> bytes:
+    text = str(value)
+    text += "=" * (-len(text) % 4)
+    return base64.urlsafe_b64decode(text.encode("ascii"))
+
+
+def _b64url_encode(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
 def _requests_proxies(proxy_server: str | None) -> dict[str, str] | None:
     cfg = parse_proxy(proxy_server) if proxy_server else None
     if not cfg:
@@ -593,17 +804,183 @@ def _redact_cap_response(data: Any) -> Any:
         token = out.get("token")
         if isinstance(token, str) and len(token) > 24:
             out["token"] = token[:12] + "..." + token[-8:]
+        instrumentation = out.get("instrumentation")
+        if isinstance(instrumentation, str) and len(instrumentation) > 48:
+            out["instrumentation"] = instrumentation[:20] + "..." + instrumentation[-12:]
         return out
     return data
+
+
+def _prepare_cap_instrumentation(
+    *,
+    data: Any,
+    token: str | None,
+    fmt: int,
+    challenges: list[CapChallenge | CapRswChallenge | CapInstrumentationChallenge],
+    instr_json: Any,
+    instr_file: str | None,
+    secret: str | None,
+) -> tuple[dict[str, Any] | None, dict[int, dict[str, Any]], dict[str, Any]]:
+    provided = _load_optional_json_arg(instr_json, instr_file)
+    instrumentation_indexes = [
+        idx for idx, ch in enumerate(challenges) if isinstance(ch, CapInstrumentationChallenge)
+    ]
+    top_level_required = isinstance(data, dict) and bool(data.get("instrumentation"))
+    required = top_level_required or bool(instrumentation_indexes)
+    diag: dict[str, Any] = {
+        "instrumentation_required": required,
+        "instrumentation_count": len(instrumentation_indexes) + int(top_level_required),
+        "instrumentation_indexes": instrumentation_indexes,
+        "instrumentation_satisfied": not required,
+    }
+    if not required and provided is None and not secret:
+        return None, {}, diag
+
+    top_instr: dict[str, Any] | None = None
+    by_index: dict[int, dict[str, Any]] = {}
+    mode: str | None = None
+
+    if fmt == 2:
+        if provided is not None:
+            by_index.update(_cap_format2_instr_from_provided(provided, challenges))
+            mode = "provided"
+        if secret and token and not _cap_all_instr_indexes_satisfied(instrumentation_indexes, by_index):
+            metas = cap_instrumentation_meta_from_token(token, secret, format=2)
+            if isinstance(metas, list):
+                for idx, meta in zip(instrumentation_indexes, metas, strict=False):
+                    by_index.setdefault(idx, {"instr": build_cap_instr_from_meta(meta)})
+                if metas:
+                    mode = "encrypted-meta" if mode is None else f"{mode}+encrypted-meta"
+                    diag["instrumentation_secret_usable"] = True
+            else:
+                diag["instrumentation_secret_usable"] = False
+        satisfied = _cap_all_instr_indexes_satisfied(instrumentation_indexes, by_index)
+        diag["instrumentation_satisfied"] = satisfied
+        if mode:
+            diag["instrumentation_mode"] = mode
+        if required and not satisfied:
+            diag["instrumentation_error"] = (
+                "Cap format-2 instrumentation requires --secret, --instr-json, or --instr-file"
+            )
+        return None, by_index, diag
+
+    if provided is not None:
+        top_instr = _cap_v1_instr_from_provided(provided)
+        mode = "provided"
+    if top_instr is None and secret and token:
+        meta = cap_instrumentation_meta_from_token(token, secret, format=1)
+        if isinstance(meta, dict):
+            top_instr = build_cap_instr_from_meta(meta)
+            mode = "encrypted-meta" if mode is None else f"{mode}+encrypted-meta"
+            diag["instrumentation_secret_usable"] = True
+        else:
+            diag["instrumentation_secret_usable"] = False
+
+    satisfied = (not required) or top_instr is not None
+    diag["instrumentation_satisfied"] = satisfied
+    if mode:
+        diag["instrumentation_mode"] = mode
+    if required and not satisfied:
+        diag["instrumentation_error"] = (
+            "Cap instrumentation requires --secret, --instr-json, or --instr-file"
+        )
+    return top_instr, by_index, diag
+
+
+def _load_optional_json_arg(value: Any, file_path: str | None) -> Any:
+    if file_path:
+        return json.loads(Path(file_path).read_text(encoding="utf-8"))
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return _load_json_arg(value)
+    return value
+
+
+def _cap_all_instr_indexes_satisfied(indexes: list[int], by_index: dict[int, dict[str, Any]]) -> bool:
+    return all(idx in by_index for idx in indexes)
+
+
+def _cap_v1_instr_from_provided(value: Any) -> dict[str, Any]:
+    if isinstance(value, str):
+        value = _load_json_arg(value)
+    if not isinstance(value, dict):
+        raise ValueError("Cap v1 instrumentation input must be an object")
+    if isinstance(value.get("instr"), dict):
+        value = value["instr"]
+    elif isinstance(value.get("instrumentation"), dict):
+        value = value["instrumentation"]
+    if "i" in value and isinstance(value.get("state"), dict):
+        return dict(value)
+    return build_cap_instr_from_meta(value)
+
+
+def _cap_format2_instr_from_provided(
+    value: Any,
+    challenges: list[CapChallenge | CapRswChallenge | CapInstrumentationChallenge],
+) -> dict[int, dict[str, Any]]:
+    if isinstance(value, str):
+        value = _load_json_arg(value)
+    indexes = [idx for idx, ch in enumerate(challenges) if isinstance(ch, CapInstrumentationChallenge)]
+    if not indexes:
+        return {}
+
+    if isinstance(value, dict) and isinstance(value.get("solutions"), list):
+        out: dict[int, dict[str, Any]] = {}
+        for idx in indexes:
+            if idx < len(value["solutions"]) and value["solutions"][idx] is not None:
+                out[idx] = _normalize_cap_format2_instr_solution_from_any(value["solutions"][idx])
+        return out
+
+    if isinstance(value, dict) and isinstance(value.get("instrumentation"), (dict, list)):
+        value = value["instrumentation"]
+
+    if isinstance(value, list):
+        out = {}
+        if len(value) == len(challenges):
+            for idx in indexes:
+                if value[idx] is not None:
+                    out[idx] = _normalize_cap_format2_instr_solution_from_any(value[idx])
+        else:
+            for idx, item in zip(indexes, value, strict=False):
+                if item is not None:
+                    out[idx] = _normalize_cap_format2_instr_solution_from_any(item)
+        return out
+
+    if isinstance(value, dict):
+        numeric_items = {
+            int(k): v
+            for k, v in value.items()
+            if isinstance(k, str) and k.isdigit() and isinstance(v, dict)
+        }
+        if numeric_items:
+            return {
+                idx: _normalize_cap_format2_instr_solution_from_any(item)
+                for idx, item in numeric_items.items()
+                if idx in indexes
+            }
+        return {indexes[0]: _normalize_cap_format2_instr_solution_from_any(value)}
+
+    raise ValueError("Cap format-2 instrumentation input must be an object or list")
+
+
+def _normalize_cap_format2_instr_solution_from_any(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError("Cap format-2 instrumentation solution must be an object")
+    if "instr" in value or value.get("blocked") is True or value.get("timeout") is True:
+        return _normalize_cap_format2_instr_solution(value)
+    if "i" in value and isinstance(value.get("state"), dict):
+        return {"instr": dict(value)}
+    return {"instr": build_cap_instr_from_meta(value)}
 
 
 class CapSolver:
     """Cap/@cap.js proof-of-work protocol solver.
 
     This provider mirrors Cap v1 seeded SHA-256 PoW, format-2 `sha256-pow`,
-    and format-2 `rsw` time-lock puzzles. It deliberately does not launch a
-    browser and marks instrumentation-only challenges unsupported instead of
-    pretending to solve browser telemetry.
+    format-2 `rsw` time-lock puzzles, and verifier-compatible instrumentation
+    payloads when metadata is supplied directly or decryptable with a local
+    server secret. It deliberately does not launch a browser.
     """
 
     async def solve(self, **kwargs: Any) -> CaptchaResult:
@@ -622,6 +999,9 @@ class CapSolver:
         api_endpoint: str | None = None,
         redeem_url: str | None = None,
         redeem: bool = False,
+        instr_json: Any = None,
+        instr_file: str | None = None,
+        secret: str | None = None,
         start: int = 0,
         max_attempts_per_challenge: int = DEFAULT_MAX_ATTEMPTS_PER_CHALLENGE,
         workers: int = 1,
@@ -643,6 +1023,7 @@ class CapSolver:
             "browser": "not_used",
             "workers": workers,
             "max_attempts_per_challenge": max_attempts_per_challenge,
+            "instrumentation_mode": None,
         }
         output_root: Path | None = None
         if output_dir:
@@ -691,12 +1072,6 @@ class CapSolver:
                 headers=headers,
                 raw=raw,
             )
-            if isinstance(data, dict) and data.get("instrumentation"):
-                errors.append("Cap instrumentation challenge is not supported by protocol-only solver")
-                diagnostics["unsupported"] = "instrumentation"
-                raw["challenge"] = _redact_cap_response(data)
-                return finish(ok=False)
-
             parsed_token, fmt, parsed_challenges, unsupported = parse_cap_challenge_response(data)
             if unsupported:
                 unsupported_protocols = sorted(
@@ -704,7 +1079,7 @@ class CapSolver:
                         ch.protocol
                         for ch in parsed_challenges
                         if isinstance(ch, CapUnsupportedChallenge)
-                        or ch.protocol not in {"sha256-pow", "rsw"}
+                        or ch.protocol not in {"sha256-pow", "rsw", "instrumentation"}
                     }
                 )
                 errors.append(f"unsupported Cap format-2 protocols: {', '.join(unsupported_protocols)}")
@@ -712,7 +1087,11 @@ class CapSolver:
                 raw["challenge"] = _redact_cap_response(data)
                 return finish(ok=False)
 
-            challenges = [ch for ch in parsed_challenges if isinstance(ch, (CapChallenge, CapRswChallenge))]
+            challenges = [
+                ch
+                for ch in parsed_challenges
+                if isinstance(ch, (CapChallenge, CapRswChallenge, CapInstrumentationChallenge))
+            ]
             protocols = [ch.protocol for ch in challenges]
             raw["challenge"] = _redact_cap_response(data)
             diagnostics.update(
@@ -727,6 +1106,22 @@ class CapSolver:
                     "token_prefix": parsed_token[:12] if parsed_token else None,
                 }
             )
+            instr_top, instr_by_index, instr_diag = _prepare_cap_instrumentation(
+                data=data,
+                token=parsed_token,
+                fmt=fmt,
+                challenges=challenges,
+                instr_json=instr_json,
+                instr_file=instr_file,
+                secret=secret,
+            )
+            diagnostics.update(instr_diag)
+            if instr_diag.get("instrumentation_required") and not instr_diag.get(
+                "instrumentation_satisfied"
+            ):
+                errors.append(str(instr_diag.get("instrumentation_error") or "instrumentation_required"))
+                return finish(ok=False)
+
             solve_started = time.monotonic()
             if fmt == 2:
                 fmt2_solutions, solve_diag = solve_cap_format2_challenges(
@@ -735,6 +1130,7 @@ class CapSolver:
                     max_attempts_per_challenge=max_attempts_per_challenge,
                     workers=workers,
                     timeout_sec=timeout_sec,
+                    instrumentation_solutions=instr_by_index,
                 )
                 nonces = [
                     int(sol["nonce"])
@@ -771,6 +1167,7 @@ class CapSolver:
                 format=fmt,
                 took_ms=int((time.monotonic() - solve_started) * 1000),
                 checked=int(solve_diag.get("checked", 0)),
+                instrumentation=instr_top if fmt != 2 else None,
             )
             raw["solution"] = {
                 "format": fmt,
@@ -778,6 +1175,10 @@ class CapSolver:
                 "checked": solution.checked,
                 "tookMs": solution.took_ms,
             }
+            if instr_top is not None:
+                raw["solution"]["instr"] = instr_top
+            if instr_by_index:
+                raw["solution"]["instrumentationIndexes"] = sorted(instr_by_index)
             raw["submitBody"] = solution.submit_body
             diagnostics.update(
                 {

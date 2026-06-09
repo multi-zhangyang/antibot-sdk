@@ -406,6 +406,9 @@ async def amain(argv: list[str] | None = None) -> int:
     cap.add_argument("--output-dir")
     cap.add_argument("--redeem-url")
     cap.add_argument("--redeem", action="store_true", help="POST solved body to /redeem and return final Cap token")
+    cap.add_argument("--instr-json", help="Cap instrumentation payload/meta JSON, or @/path")
+    cap.add_argument("--instr-file", help="Cap instrumentation payload/meta JSON file")
+    cap.add_argument("--secret", help="self-hosted Cap secret for decrypting encrypted instrumentation metadata")
     cap.add_argument("--raw", action="store_true")
 
     cpz = solve_sub.add_parser("cryptopuzzle")
@@ -1335,6 +1338,9 @@ async def amain(argv: list[str] | None = None) -> int:
     scap.add_argument("--proxy")
     scap.add_argument("--redeem-url")
     scap.add_argument("--redeem", action="store_true")
+    scap.add_argument("--instr-json")
+    scap.add_argument("--instr-file")
+    scap.add_argument("--secret")
     scap.add_argument("--output-dir")
     scap.add_argument("--output-json")
     scap.add_argument("--full", action="store_true")
@@ -2533,6 +2539,9 @@ async def amain(argv: list[str] | None = None) -> int:
             api_endpoint=args.api_endpoint,
             redeem_url=args.redeem_url,
             redeem=args.redeem,
+            instr_json=args.instr_json,
+            instr_file=args.instr_file,
+            secret=args.secret,
             start=args.start,
             max_attempts_per_challenge=args.max_attempts_per_challenge,
             workers=args.workers,
@@ -3633,6 +3642,9 @@ async def amain(argv: list[str] | None = None) -> int:
                 api_endpoint=args.api_endpoint,
                 redeem_url=args.redeem_url,
                 redeem=args.redeem,
+                instr_json=args.instr_json,
+                instr_file=args.instr_file,
+                secret=args.secret,
                 max_attempts_per_challenge=args.max_attempts_per_challenge,
                 workers=args.workers,
                 timeout_sec=args.timeout,

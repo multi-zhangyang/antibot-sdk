@@ -24,7 +24,7 @@
 - Capybara-Captcha：新增 Cloudflare Worker/KV 风格 payload-token-bound PoW 协议 solver，获取 `id/nonce/difficulty/payload_token`，复现 `SHA256(nonce+solution)` 十六进制前缀零搜索，可选校验 `INSTANCE_ID+TOKEN_SECRET` 签名并提交 `/api/verify`，不启动浏览器。
 - PrivateCaptcha：新增 compute puzzle 协议 solver，解析 `puzzle.signature`，复现 blake2b-256 threshold 多解 PoW 与 solutions metadata，输出 `private-captcha-solution` payload，不启动浏览器。
 - Portcullis：新增 Argon2id + SHA-256 双阶段 PoW 协议 solver，解析 signed challenge，计算内存硬化 base hash 后搜索 nonce，可提交 `/api/v1/verify` 换 `captcha_token`，不启动浏览器。
-- Cap / @cap.js：升级 SHA-256 PoW + RSW time-lock 协议 solver，支持 v1 seeded challenge、format-2 `sha256-pow` 和 `rsw`，可输出 `/redeem` body 或直接换取 Cap token，不启动浏览器。
+- Cap / @cap.js：升级 SHA-256 PoW + RSW time-lock + instrumentation 协议 solver，支持 v1 seeded challenge、format-2 `sha256-pow`/`rsw`，自持 secret 或显式 instr 时可构造 verifier-ready instrumentation，不启动浏览器。
 - crypto-puzzle：新增 RSW time-lock puzzle solver，解析 archive，顺序 repeated-squaring 恢复 AES-GCM/PBKDF2 secret，解出 message/token，可提交 verify，不启动浏览器。
 - Captxa：新增 simple mode browser metrics + JA4-bound opaque token + SHA-256 PoW 协议 solver，补低风险环境字段，复现 `SHA256(pow32||nonce_le64)` leading-zero，可提交 `/solve/simp` 换 `X-Captcha-Token`，不启动浏览器。
 - Swetrix CAPTCHA：新增 privacy CAPTCHA 协议 solver，解析 `/generate` 的 `challenge+difficulty`，复现 `SHA256(challenge+":"+nonce)` 前导十六进制零 PoW，可提交 `/verify` 换 token，并可选 `/validate` 服务端校验，不启动浏览器。
@@ -75,7 +75,7 @@
 | FCaptcha | 协议 solver | `signals_bound_pow` | alpha | verify body / FCaptcha token |
 | PrivateCaptcha | 协议 solver | `compute_pow` | alpha | `private-captcha-solution` payload |
 | Portcullis | 协议 solver | `argon2_pow` | alpha | verify body / `captcha_token` |
-| Cap / @cap.js | 协议 solver | `proof_of_work` | alpha | `/redeem` body / Cap token |
+| Cap / @cap.js | 协议 solver | `proof_of_work` | alpha | `/redeem` body / Cap token / `instr` |
 | crypto-puzzle | 协议 solver | `rsw_time_lock_puzzle` | alpha | decrypted message/token |
 | Captxa | 协议 solver | `ja4_bound_pow` | alpha | solve body / `X-Captcha-Token` |
 | Swetrix CAPTCHA | 协议 solver | `swetrix_pow` | alpha | verify body / Swetrix token |
@@ -1184,17 +1184,18 @@ async with AntibotClient() as client:
 
 ### 15. Cap / @cap.js PoW
 
-Cap 是 self-hosted CAPTCHA 方向里比较适合 SDK 化的一类：老链路是 SHA-256 proof-of-work，新链路加入了 format-2 RSW time-lock puzzle。SDK 当前只做协议层可验证的部分，不启动浏览器。
+Cap 是 self-hosted CAPTCHA 方向里比较适合 SDK 化的一类：老链路是 SHA-256 proof-of-work，新链路加入了 format-2 RSW time-lock puzzle 和 instrumentation 探针。SDK 当前只做协议层可验证的部分，不启动浏览器。
 
 支持两种主流形态：
 
 - v1 seeded challenge：服务端返回 `token` 和 `challenge: {c, s, d}`，SDK 按 Cap PRNG 生成每个 `salt/target` 并搜索 nonce。
 - format-2 `sha256-pow`：服务端直接返回 `challenges: [{protocol:"sha256-pow", payload:{salt,target}}]`，SDK 逐个求解并输出 `{nonce}`。
 - format-2 `rsw`：服务端返回 `payload:{N,x,t}`，SDK 执行顺序型 modular squaring：`y = x; repeat t: y = y*y mod N`，输出 `{y}`。
+- instrumentation：如果你有 self-hosted Cap secret，SDK 会验证 JWT、解密 `ei/ev` 里的 AES-GCM metadata，并构造 `instr={i,state,ts}` 或 format-2 `{instr}`；也可以用 `--instr-json/--instr-file` 显式传入 instr/meta。
 
 输出有两种：
 
-- 不 redeem：`ticket` 是可直接 POST 给业务 `/redeem` 的 JSON body：`{"token":"...","solutions":[...]}`。
+- 不 redeem：`ticket` 是可直接 POST 给业务 `/redeem` 的 JSON body：`{"token":"...","solutions":[...],"instr":{...}}`。
 - 设置 `--api-endpoint` 或 `--redeem`：自动 POST `/redeem`，`ticket` 返回最终 Cap token。
 
 命令示例：
@@ -1219,6 +1220,22 @@ antibot solve cap \
 ```bash
 antibot solve cap \
   --challenge-json '{"token":"...","challenge":{"c":50,"s":32,"d":4}}'
+```
+
+自持服务端 secret，解 Cap instrumentation：
+
+```bash
+antibot solve cap \
+  --api-endpoint 'https://target.example/cap/' \
+  --secret 'local-cap-secret'
+```
+
+没有 secret 但已有 instrumentation meta / instr：
+
+```bash
+antibot solve cap \
+  --challenge-json '{"token":"...","format":2,"challenges":[{"protocol":"instrumentation","payload":{"blob":"..."}}]}' \
+  --instr-json '{"id":"instr-id","vars":["a"],"expectedVals":[123]}'
 ```
 
 压测：
@@ -1247,7 +1264,7 @@ async with AntibotClient() as client:
 当前定位：
 
 - 支持 Cap v1 seeded SHA-256 PoW、format-2 `sha256-pow` 与 format-2 `rsw` time-lock puzzle。
-- format-2 的 `instrumentation` 不伪装成已解决；遇到时会明确返回 unsupported diagnostics。
+- 支持 instrumentation 的两条可验证路线：`--secret` 解密 metadata，或 `--instr-json/--instr-file` 直接提供 meta/instr；无 secret 且无 instr 时明确返回 `instrumentation_required`。
 - 默认单 worker，适合 VPS；高 `d` 或高 `c` 时再显式调 `--workers` 和 `--timeout`。
 
 ---
@@ -3541,9 +3558,11 @@ antibot stress portcullis --base-url 'https://captcha.example' --sitekey 'pk_tes
 
 # Cap / @cap.js
 antibot solve cap --api-endpoint 'https://target.example/cap/'
+antibot solve cap --api-endpoint 'https://target.example/cap/' --secret 'local-cap-secret'
 antibot solve cap --token 'challenge token' --c 50 --s 32 --d 4
 antibot stress cap --api-endpoint 'https://target.example/cap/' --runs 50 --concurrency 5
 antibot solve cap --challenge-json '{"token":"format-two-rsw-token","format":2,"challenges":[{"protocol":"rsw","payload":{"N":"5b","x":"05","t":10}}]}'
+antibot solve cap --challenge-json '{"token":"x","format":2,"challenges":[{"protocol":"instrumentation","payload":{"blob":"..."}}]}' --instr-json '{"id":"instr-id","vars":["a"],"expectedVals":[1]}'
 
 # chpio/pow-captcha
 antibot solve chpiopow --challenge-json '{"magic":"2104f639-ba1b-48f3-9443-889128163f5a","challenges":[["AQI=","AwQF"]],"difficultyBits":18}' --max-attempts-per-challenge 100000
@@ -3784,7 +3803,7 @@ src/antibot_sdk/
     fcaptcha.py             # FCaptcha behavior/environment signalsHash-bound PoW solver
     privatecaptcha.py       # PrivateCaptcha blake2b compute PoW protocol solver
     portcullis.py           # Portcullis Argon2id + SHA-256 PoW protocol solver
-    cap.py                  # Cap/@cap.js SHA-256 PoW protocol solver
+    cap.py                  # Cap/@cap.js SHA-256/RSW/instrumentation protocol solver
     cryptopuzzle.py         # crypto-puzzle RSW time-lock archive solver
     captxa.py               # Captxa browser metrics + JA4-bound SHA-256 PoW solver
     swetrix.py              # Swetrix challenge:nonce SHA-256 PoW protocol solver
@@ -4004,11 +4023,15 @@ Cap PRNG/FNV 与 upstream core/src/prng.js 交叉校验。
 官方 core generateChallenge/validateChallenge v1：Python solve body 被 validateChallenge 接受。
 官方 core format-2 sha256-pow：Python solutions=[{nonce:...}] 被 validateChallenge 接受。
 官方 core/src/rsw.js 与 docs/guide/rsw.md：确认 RSW client solve = repeated modular squaring，widget submit `{y}`。
+官方 instrumentation verifier：确认只校验 `i` 与 `state[vars[i]] == expectedVals[i]`；SDK 可从 self-hosted secret 解密 `ei/ev`，无浏览器构造 verifier-ready `instr`。
 本地 v1 seeded challenge + /redeem：ok=true，成功返回 Cap token。
 本地 format-2 sha256-pow + /redeem：ok=true，成功返回 Cap token。
 本地 format-2 rsw + sha256-pow + /redeem：ok=true，成功返回 Cap token，fixture `{N=0x5b,x=0x05,t=10}` -> `y=4f`。
+本地 v1 instrumentation + encrypted `ei` + /redeem：ok=true，成功返回 Cap token。
+本地 format-2 instrumentation + encrypted `ev` + /redeem：ok=true，成功返回 Cap token。
 本地 Cap RSW fixture stress 20 轮/concurrency=4：20/20。
-unsupported 协议回归：format-2 instrumentation 明确返回 unsupported_protocols。
+缺少 instrumentation meta/instr 回归：明确返回 `instrumentation_required`。
+unsupported 协议回归：未知 format-2 protocol 明确返回 unsupported_protocols。
 ```
 
 chpio/pow-captcha：

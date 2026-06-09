@@ -174,7 +174,7 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "captcha_type": "proof_of_work",
         "status": "alpha",
         "output": "redeem body / Cap token",
-        "scope": "Cap v1 seeded PoW、format-2 sha256-pow 与 format-2 RSW time-lock：本地 nonce 搜索或顺序 modular squaring，可输出 /redeem body 或直接 redeem token；不启动浏览器。",
+        "scope": "Cap v1 seeded PoW、format-2 sha256-pow/RSW 与 instrumentation payload：本地 nonce 搜索、顺序 modular squaring；自持 secret 或显式 instr 时可构造 verifier-ready instrumentation，不启动浏览器。",
     },
     "cryptopuzzle": {
         "provider": "cryptopuzzle",
