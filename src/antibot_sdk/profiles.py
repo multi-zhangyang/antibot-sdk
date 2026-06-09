@@ -119,6 +119,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "auro"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
         return "gunslol"
+    if any(x in u or x in host for x in ("h33.ai", "botshield", "h33_bot_token", "/v1/botshield/")):
+        return "h33botshield"
     if any(x in u or x in host for x in ("hashguard", "/pow/challenges", "/pow/verifications", "/pow/assertions/introspect")):
         return "hashguard"
     if any(
@@ -302,6 +304,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "behavior-environment-signals-hash-bound-pow-solver",
                 "successFields": ["token", "success"],
                 "endpoints": ["/api/pow/challenge", "/api/verify", "/api/score"],
+            }
+        },
+        "h33botshield": {
+            "botshield_pow": {
+                "patterns": ["h33.ai", "botshield", "h33_bot_token", "/v1/botshield/"],
+                "mode": "post-quantum-header-sha256-bit-pow-token-solver",
+                "successFields": ["h33_bot_token", "session_token", "verified"],
+                "endpoints": ["/v1/botshield/challenge", "/v1/botshield/solve"],
             }
         },
         "trustcaptcha": {

@@ -104,6 +104,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "{seal, _oo} / validated token",
         "scope": "guns.lol _gs_sets seal PoW：解析 _2xa 空位模板，枚举十六进制 seal 使 SHA256(seal+_n+_org_ts)=o09，再生成 BLAKE3 _oo 标签；不启动浏览器。",
     },
+    "h33botshield": {
+        "provider": "h33botshield",
+        "name": "H33 BotShield",
+        "category": "solver",
+        "captcha_type": "botshield_pow",
+        "status": "alpha",
+        "output": "h33_bot_token / session_token",
+        "scope": "H33 BotShield：复现公开 widget 的 /v1/botshield/challenge + SHA256(nonce+counter) leading-zero-bit PoW + /v1/botshield/solve，保留 x-h33 post-quantum receipt headers；不启动浏览器。",
+    },
     "hashguard": {
         "provider": "hashguard",
         "name": "HashGuard",

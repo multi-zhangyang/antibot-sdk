@@ -138,6 +138,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "getpowcaptcha",
             "fcaptcha",
             "gunslol",
+            "h33botshield",
             "hashguard",
             "trustcaptcha",
             "stravcaptcha",
@@ -394,6 +395,24 @@ async def amain(argv: list[str] | None = None) -> int:
     gpc.add_argument("--proxy")
     gpc.add_argument("--output-dir")
     gpc.add_argument("--raw", action="store_true")
+
+    h33 = solve_sub.add_parser("h33botshield")
+    h33_source = h33.add_mutually_exclusive_group(required=False)
+    h33_source.add_argument("--base-url", default="https://api.h33.ai", help="H33 API origin; infers /v1/botshield/*")
+    h33_source.add_argument("--challenge-json", help="inline challenge JSON, or @/path")
+    h33_source.add_argument("--challenge-file")
+    h33_source.add_argument("--challenge-url", help="POST endpoint returning BotShield challenge JSON")
+    h33.add_argument("--solve-url")
+    h33.add_argument("--challenge-body-json", help="inline POST body JSON, or @/path; default {}")
+    h33.add_argument("--challenge-body-file")
+    h33.add_argument("--submit", action="store_true", help="POST solution to /v1/botshield/solve and return h33_bot_token")
+    h33.add_argument("--start", type=int, default=0)
+    h33.add_argument("--max-attempts", type=int, default=25_000_000)
+    h33.add_argument("--workers", type=int, default=1)
+    h33.add_argument("--timeout", type=int, default=60)
+    h33.add_argument("--proxy")
+    h33.add_argument("--output-dir")
+    h33.add_argument("--raw", action="store_true")
 
     fc = solve_sub.add_parser("fcaptcha")
     fc_source = fc.add_mutually_exclusive_group(required=True)
@@ -1355,6 +1374,27 @@ async def amain(argv: list[str] | None = None) -> int:
     sgpc.add_argument("--output-dir")
     sgpc.add_argument("--output-json")
     sgpc.add_argument("--full", action="store_true")
+
+    sh33 = stress_sub.add_parser("h33botshield")
+    sh33_source = sh33.add_mutually_exclusive_group(required=False)
+    sh33_source.add_argument("--base-url", default="https://api.h33.ai")
+    sh33_source.add_argument("--challenge-json")
+    sh33_source.add_argument("--challenge-file")
+    sh33_source.add_argument("--challenge-url")
+    sh33.add_argument("--solve-url")
+    sh33.add_argument("--challenge-body-json")
+    sh33.add_argument("--challenge-body-file")
+    sh33.add_argument("--submit", action="store_true")
+    sh33.add_argument("--runs", type=int, default=10)
+    sh33.add_argument("--concurrency", type=int, default=2)
+    sh33.add_argument("--timeout", type=int, default=60)
+    sh33.add_argument("--start", type=int, default=0)
+    sh33.add_argument("--max-attempts", type=int, default=25_000_000)
+    sh33.add_argument("--workers", type=int, default=1)
+    sh33.add_argument("--proxy")
+    sh33.add_argument("--output-dir")
+    sh33.add_argument("--output-json")
+    sh33.add_argument("--full", action="store_true")
 
     sfc = stress_sub.add_parser("fcaptcha")
     sfc_source = sfc.add_mutually_exclusive_group(required=True)
@@ -2588,6 +2628,25 @@ async def amain(argv: list[str] | None = None) -> int:
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "h33botshield":
+        ret = await client.solve_h33botshield(
+            base_url=args.base_url,
+            challenge_url=args.challenge_url,
+            solve_url=args.solve_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_body_json=args.challenge_body_json,
+            challenge_body_file=args.challenge_body_file,
+            submit=args.submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
     if args.cmd == "solve" and args.provider == "fcaptcha":
         ret = await client.solve_fcaptcha(
             base_url=args.base_url,
@@ -3706,6 +3765,33 @@ async def amain(argv: list[str] | None = None) -> int:
                 fingerprint_file=args.fingerprint_file,
                 gzip_create=not args.no_gzip_create,
                 max_attempts_per_problem=args.max_attempts_per_problem,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "h33botshield":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="h33botshield",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_h33botshield(
+                base_url=args.base_url,
+                challenge_url=args.challenge_url,
+                solve_url=args.solve_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_body_json=args.challenge_body_json,
+                challenge_body_file=args.challenge_body_file,
+                submit=args.submit,
+                start=args.start,
+                max_attempts=args.max_attempts,
                 workers=args.workers,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,

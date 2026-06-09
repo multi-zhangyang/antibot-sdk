@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -36,6 +36,7 @@
 - Lapti PoW Captcha：新增 SHA3-512 secret-token 绑定 PoW solver，请求 `/handshake/{data}` 得到 `token=SHA3(data+SECRET)` 与 `complexity`，复现 worker 的 `SHA3(token+nonce)` 前若干字节为零，可提交 `/action/{data}/{nonce}`，不启动浏览器。
 - PaulDotSH/pow-captcha：新增 bcrypt exact/prefix PoW solver，复现 `bcrypt::verify` 与 `bcrypt::hash_with_salt(salt[0:16])` 两条链路，输出 `CaptchaServerInfo` 风格 JSON，不启动浏览器。
 - guns.lol：新增 `_gs_sets` seal PoW solver，解析 `_2xa` 空位模板，枚举十六进制 seal 使 `SHA256(seal+_n+_org_ts)=o09`，再生成 BLAKE3 `_oo` 提交标签，不启动浏览器。
+- H33 BotShield：新增公开 widget 协议 solver，POST `/v1/botshield/challenge`，复现 `SHA256(nonce+counter)` leading-zero-bit PoW，提交 `/v1/botshield/solve` 换 `h33_bot_token`，并保留 `x-h33-*` post-quantum receipt headers，不启动浏览器。
 - HashGuard：新增 target-threshold PoW + JWT proof token 协议 solver，复现 `SHA256(challengeId:seed:nonce) <= target`，提交 `/pow/verifications` 换 proofToken，并可选 `/pow/assertions/introspect`，不启动浏览器。
 - mCaptcha：新增 SHA-256 PoW 协议 solver，复现 Rust/JS 的 `bincode(String)+u128 score` 规则，获取 `/api/v1/pow/config` 后本地找 nonce，可提交 `/api/v1/pow/verify` 换 token，不启动浏览器。
 - Wicketkeeper：新增 EdDSA-JWT PoW 协议 solver，获取 `/v0/challenge` 后计算 `SHA256(challenge+nonce)` 前导零，可提交 `/v0/siteverify` 换 success JWT，不启动浏览器。
@@ -88,6 +89,7 @@
 | Lapti | 协议 solver | `sha3_token_pow` | alpha | `data+nonce` / protected action result |
 | PaulDotSH/pow-captcha | 协议 solver | `bcrypt_pow` | alpha | `CaptchaServerInfo` JSON / validated token |
 | guns.lol | 协议 solver | `seal_pow_blake3` | alpha | `{seal, _oo}` / validated token |
+| H33 BotShield | 协议 solver | `botshield_pow` | alpha | `h33_bot_token` / session token |
 | HashGuard | 协议 solver | `jwt_proof_pow` | alpha | proofToken JWT / introspection result |
 | TrustCaptcha | 协议 solver | `fingerprint_multi_pow` | alpha | `tc-verification-token` / submit body |
 | @strav/captcha | 协议 solver | `stateless_hmac_pow` | alpha | `_captcha/_captcha_answer` submit body |
@@ -1855,6 +1857,44 @@ async with AntibotClient() as client:
 
 ---
 
+
+### 20.0.1 H33 BotShield post-quantum header + SHA-256 bit PoW
+
+H33 BotShield 不是图片验证码，而是公开 JS widget 在页面加载后自动领取 challenge、完成 SHA-256 bit-PoW，再换取 `h33_bot_token` cookie/session token。它的响应头还带 `x-h33-substrate / x-h33-receipt / x-h33-algorithms`，用于服务端侧的 post-quantum receipt/attestation 语义；SDK 当前保留这些 header 作为 evidence，不启动浏览器。
+
+公开 widget 链路：
+
+```text
+GET https://api.h33.ai/v1/botshield/script.js
+POST /v1/botshield/challenge -> {challenge_id, nonce, difficulty, algorithm, expires_at}
+hash = SHA256(nonce + String(counter))
+valid iff hash has difficulty leading zero bits
+POST /v1/botshield/solve {challenge_id, nonce, solution}
+<- {verified:true, session_token, valid_until, difficulty_solved}
+```
+
+命令示例：
+
+```bash
+antibot solve h33botshield --submit --timeout 20
+
+antibot solve h33botshield \
+  --challenge-json '{"challenge_id":"h33-fixture-1","nonce":"h33-fixture-nonce","difficulty":12,"algorithm":"sha256"}' \
+  --max-attempts 20000
+
+antibot stress h33botshield \
+  --challenge-json '{"challenge_id":"h33-fixture-1","nonce":"h33-fixture-nonce","difficulty":12,"algorithm":"sha256"}' \
+  --runs 20 \
+  --concurrency 4
+```
+
+当前定位：
+
+- 这是 BotShield 协议 solver，不是文字/图片/滑块验证码。
+- live 默认 difficulty=16，VPS 上通常毫秒到百毫秒级。
+- `--submit` 会真实调用 `/v1/botshield/solve` 并返回 session token；不传 `--submit` 时只输出 solve body。
+
+---
 ### 20.1 HashGuard target-threshold PoW + JWT proofToken
 
 HashGuard 的客户端链路是典型的“挑战签发 → 本地阈值 PoW → proofToken JWT”协议：
@@ -3315,6 +3355,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - Lapti / lapti-pow-captcha / `/handshake/` / `/action/` 相关 URL -> `lapti`
 - PaulDotSH / bcrypt_pow / paulpow 相关 URL -> `paulpow`
 - guns.lol / `_gs_sets` / `_2xa` 相关 URL -> `gunslol`
+- H33 BotShield / `api.h33.ai` / `/v1/botshield/` / `h33_bot_token` 相关 URL -> `h33botshield`
 - HashGuard / `/pow/challenges` / `/pow/verifications` 相关 URL -> `hashguard`
 - TrustCaptcha / TrustComponent / `/v2/verifications` 相关 URL -> `trustcaptcha`
 - @strav/captcha / `/__captcha/pow` / `_captcha_answer` 相关 URL -> `stravcaptcha`
@@ -3586,6 +3627,11 @@ antibot stress auro --challenge-json '{"prefix":"prefix-","difficulty":3}' --no-
 antibot solve friendlycaptcha --puzzle-url 'https://api.friendlycaptcha.com/api/v1/puzzle' --sitekey 'FCxxxxx'
 antibot stress friendlycaptcha --puzzle-url 'https://api.friendlycaptcha.com/api/v1/puzzle' --sitekey 'FCxxxxx' --runs 20
 
+# H33 BotShield
+antibot solve h33botshield --submit --timeout 20
+antibot solve h33botshield --challenge-json '{"challenge_id":"h33-fixture-1","nonce":"h33-fixture-nonce","difficulty":12,"algorithm":"sha256"}' --max-attempts 20000
+antibot stress h33botshield --challenge-json '{"challenge_id":"h33-fixture-1","nonce":"h33-fixture-nonce","difficulty":12,"algorithm":"sha256"}' --runs 20 --concurrency 4
+
 # powCAPTCHA
 antibot solve getpowcaptcha --app-id 'app_xxx'
 antibot solve getpowcaptcha --challenge-json '{"id":"gpc-fixture-1","signature":"sig-fixture","challenges":[{"problem":"p0","difficulty":2},{"problem":"p1","difficulty":3}]}' --timeout 5
@@ -3767,7 +3813,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / FCaptcha / TrustCaptcha / @strav/captcha / Cap / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / H33 BotShield / FCaptcha / TrustCaptcha / @strav/captcha / Cap / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -3855,6 +3901,7 @@ src/antibot_sdk/
     swetrix.py              # Swetrix challenge:nonce SHA-256 PoW protocol solver
     crovly.py               # Crovly fingerprint/behavior-bound SHA-256 bit PoW solver
     chpiopow.py             # chpio/pow-captcha signed target-match PoW protocol solver
+    h33botshield.py        # H33 BotShield challenge/solve SHA-256 bit PoW token solver
     hashguard.py            # HashGuard target-threshold SHA-256 PoW + JWT proof-token solver
     trustcaptcha.py         # TrustCaptcha fingerprint/integrity + multi-task SHA-256 PoW solver
     stravcaptcha.py         # @strav/captcha stateless HMAC token + hashcash PoW solver
@@ -3926,7 +3973,7 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 169 passed
+pytest: 171 passed
 ruff check src tests: passed
 uv build: success
 Vulcan fixture/html/CLI/stress: chained SHA256 uint32-target PoW，solution=1136;5242;945，4/4 stress 验证通过
@@ -3943,6 +3990,16 @@ Capybara-Captcha fixture/mock/stress: payload_token 绑定 + SHA256(nonce+soluti
 Lapti fixture/mock/stress: SHA3(data+SECRET) token + SHA3(token+nonce) byte-zero PoW + /action submit 验证通过
 Captxa fixture/mock/stress: browser metrics + JA4-bound opaque token + SHA-256 PoW simple mode 验证通过
 FCaptcha fixture/mock/stress: signalsHash-bound PoW、本地 /api/pow/challenge + /api/verify 验证通过
+H33 BotShield live/script/mock/CLI：确认 script.js challenge/solve 链路、x-h33 post-quantum receipt headers、SHA256(nonce+counter) leading-zero-bit PoW；live submit ok=true，成功返回 h33_bot_token。
+
+H33 BotShield：
+
+```text
+公开 script.js：确认 POST /v1/botshield/challenge 与 /v1/botshield/solve。
+响应头保留 x-h33-substrate / x-h33-receipt / x-h33-algorithms=ML-DSA-65,FALCON-512,SPHINCS+-SHA2-128f。
+PoW = SHA256(nonce+counter) leading-zero-bit，fixture difficulty=12 -> solution=9893。
+live api.h33.ai submit：ok=true，成功返回 session_token / h33_bot_token。
+```
 powCAPTCHA widget.js 逆向确认 /challenges/create + gzip JSON + fingerprint/signals；PoW = SHA256(signature+problem+nonce) hex-prefix；本地 mock create + verify：ok=true，成功输出 powcaptcha-response token；fixture nonce [2,209] 验证通过。
 PoW Bot Deterrent fixture/mock/stress: scrypt-WASM PoW、本地 /GetChallenges + /Verify 验证通过
 pow-reaction fixture/mock/live/stress: HS256 JWT + 多轮 SHA256(round.nonce) PoW + reactions submit 验证通过

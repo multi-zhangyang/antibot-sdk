@@ -23,6 +23,7 @@ from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.getpowcaptcha import GetPowCaptchaSolver
 from .providers.gunslol import GunsLolSolver
+from .providers.h33botshield import H33BotShieldSolver
 from .providers.hashguard import HashGuardSolver
 from .providers.hcaptcha import HCaptchaSolver
 from .providers.justnocaptcha import JustNoCaptchaSolver
@@ -78,6 +79,7 @@ class AntibotClient:
         self.friendlycaptcha = FriendlyCaptchaSolver()
         self.getpowcaptcha = GetPowCaptchaSolver()
         self.gunslol = GunsLolSolver()
+        self.h33botshield = H33BotShieldSolver()
         self.mcaptcha = MCaptchaSolver()
         self.paulpow = PaulPowSolver()
         self.pcaptcha = PCaptchaSolver()
@@ -171,6 +173,9 @@ class AntibotClient:
 
     async def solve_fcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.fcaptcha.solve(**kwargs)
+
+    async def solve_h33botshield(self, **kwargs: Any) -> CaptchaResult:
+        return await self.h33botshield.solve(**kwargs)
 
     async def solve_mcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.mcaptcha.solve(**kwargs)
@@ -540,6 +545,42 @@ class AntibotClient:
             if not gl_kwargs.get("challenge_url") and not gl_kwargs.get("page_url"):
                 gl_kwargs["page_url"] = target_url
             return await self.solve_gunslol(**gl_kwargs)
+        if provider == "h33botshield":
+            h33_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "challenge_url",
+                    "solve_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_body_json",
+                    "challenge_body_file",
+                    "submit",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not h33_kwargs.get("base_url") and not h33_kwargs.get("challenge_url"):
+                if target_lower.rstrip("/").endswith("/v1/botshield/challenge"):
+                    h33_kwargs["challenge_url"] = target_url
+                    h33_kwargs["base_url"] = target_url[: target_lower.rindex("/v1/botshield/challenge")]
+                elif target_lower.rstrip("/").endswith("/v1/botshield/solve"):
+                    h33_kwargs["solve_url"] = target_url
+                    h33_kwargs["base_url"] = target_url[: target_lower.rindex("/v1/botshield/solve")]
+                else:
+                    h33_kwargs["base_url"] = target_url
+            h33_kwargs.setdefault("submit", True)
+            return await self.solve_h33botshield(**h33_kwargs)
         if provider == "hashguard":
             hg_kwargs = {
                 k: v
