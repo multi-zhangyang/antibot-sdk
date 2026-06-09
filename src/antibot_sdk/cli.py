@@ -139,6 +139,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "trustcaptcha",
             "stravcaptcha",
             "justnocaptcha",
+            "capybara",
             "cap",
             "cryptopuzzle",
             "captxa",
@@ -621,6 +622,28 @@ async def amain(argv: list[str] | None = None) -> int:
     jnc.add_argument("--output-dir")
     jnc.add_argument("--user-agent")
     jnc.add_argument("--raw", action="store_true")
+
+    capy = solve_sub.add_parser("capybara")
+    capy_source = capy.add_mutually_exclusive_group(required=True)
+    capy_source.add_argument("--base-url", help="Capybara Worker origin; infers /api/challenge and /api/verify")
+    capy_source.add_argument("--challenge-json", help="inline challenge response JSON, payload_token, or @/path")
+    capy_source.add_argument("--challenge-file")
+    capy_source.add_argument("--challenge-url", help="POST /api/challenge endpoint")
+    capy_source.add_argument("--payload-token", help="payload_token containing id/nonce/exp/difficulty/signature")
+    capy.add_argument("--verify-url", help="POST /api/verify endpoint")
+    capy.add_argument("--submit", action="store_true")
+    capy.add_argument("--difficulty", type=int, default=3)
+    capy.add_argument("--duration-sec", type=int, default=30)
+    capy.add_argument("--secret", help="optional TOKEN_SECRET for local payload_token signature verification")
+    capy.add_argument("--instance-id", default="guest")
+    capy.add_argument("--start", type=int, default=0)
+    capy.add_argument("--max-attempts", type=int, default=100_000_000)
+    capy.add_argument("--workers", type=int, default=1)
+    capy.add_argument("--timeout", type=int, default=60)
+    capy.add_argument("--proxy")
+    capy.add_argument("--output-dir")
+    capy.add_argument("--user-agent")
+    capy.add_argument("--raw", action="store_true")
 
     pc = solve_sub.add_parser("pcaptcha")
     pc_source = pc.add_mutually_exclusive_group(required=True)
@@ -1434,6 +1457,31 @@ async def amain(argv: list[str] | None = None) -> int:
     sjnc.add_argument("--user-agent")
     sjnc.add_argument("--full", action="store_true")
 
+    scapy = stress_sub.add_parser("capybara")
+    scapy_source = scapy.add_mutually_exclusive_group(required=True)
+    scapy_source.add_argument("--base-url")
+    scapy_source.add_argument("--challenge-json")
+    scapy_source.add_argument("--challenge-file")
+    scapy_source.add_argument("--challenge-url")
+    scapy_source.add_argument("--payload-token")
+    scapy.add_argument("--verify-url")
+    scapy.add_argument("--submit", action="store_true")
+    scapy.add_argument("--difficulty", type=int, default=3)
+    scapy.add_argument("--duration-sec", type=int, default=30)
+    scapy.add_argument("--secret")
+    scapy.add_argument("--instance-id", default="guest")
+    scapy.add_argument("--runs", type=int, default=10)
+    scapy.add_argument("--concurrency", type=int, default=2)
+    scapy.add_argument("--timeout", type=int, default=60)
+    scapy.add_argument("--start", type=int, default=0)
+    scapy.add_argument("--max-attempts", type=int, default=100_000_000)
+    scapy.add_argument("--workers", type=int, default=1)
+    scapy.add_argument("--proxy")
+    scapy.add_argument("--output-dir")
+    scapy.add_argument("--output-json")
+    scapy.add_argument("--user-agent")
+    scapy.add_argument("--full", action="store_true")
+
     spc = stress_sub.add_parser("pcaptcha")
     spc.add_argument("--challenge-url", required=True)
     spc.add_argument("--validate-url")
@@ -1877,6 +1925,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "trustcaptcha",
             "stravcaptcha",
             "justnocaptcha",
+            "capybara",
             "impost",
             "kerberus",
             "mcaptcha",
@@ -2391,6 +2440,29 @@ async def amain(argv: list[str] | None = None) -> int:
             timeout_sec=args.timeout,
             challenge_field=args.challenge_field,
             response_field=args.response_field,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "capybara":
+        ret = await client.solve_capybara(
+            base_url=args.base_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            payload_token=args.payload_token,
+            submit=args.submit,
+            difficulty=args.difficulty,
+            duration_sec=args.duration_sec,
+            secret=args.secret,
+            instance_id=args.instance_id,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
             user_agent=args.user_agent,
@@ -3397,6 +3469,37 @@ async def amain(argv: list[str] | None = None) -> int:
                 timeout_sec=args.timeout,
                 challenge_field=args.challenge_field,
                 response_field=args.response_field,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "capybara":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="capybara",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_capybara(
+                base_url=args.base_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                payload_token=args.payload_token,
+                submit=args.submit,
+                difficulty=args.difficulty,
+                duration_sec=args.duration_sec,
+                secret=args.secret,
+                instance_id=args.instance_id,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
                 user_agent=args.user_agent,

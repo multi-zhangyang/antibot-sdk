@@ -24,6 +24,7 @@ def test_capability_matrix_product_boundary() -> None:
         "trustcaptcha",
         "stravcaptcha",
         "justnocaptcha",
+        "capybara",
         "cap",
         "cryptopuzzle",
         "captxa",
@@ -61,6 +62,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["trustcaptcha"]["captcha_type"] == "fingerprint_multi_pow"
     assert solvers["stravcaptcha"]["captcha_type"] == "stateless_hmac_pow"
     assert solvers["justnocaptcha"]["captcha_type"] == "multi_puzzle_fnv_pow"
+    assert solvers["capybara"]["captcha_type"] == "payload_bound_pow"
     assert solvers["cap"]["captcha_type"] == "proof_of_work"
     assert solvers["cryptopuzzle"]["captcha_type"] == "rsw_time_lock_puzzle"
     assert solvers["captxa"]["captcha_type"] == "ja4_bound_pow"

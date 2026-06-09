@@ -11,6 +11,7 @@ from .providers.anubis import AnubisSolver
 from .providers.auro import AuroSolver
 from .providers.browser import BrowserAutomation
 from .providers.cap import CapSolver
+from .providers.capybara import CapybaraSolver
 from .providers.captxa import CaptxaSolver
 from .providers.chpiopow import ChpioPowSolver
 from .providers.crovly import CrovlySolver
@@ -55,6 +56,7 @@ class AntibotClient:
         self.browser_binary = browser_binary
         self.browser = BrowserAutomation()
         self.cap = CapSolver()
+        self.capybara = CapybaraSolver()
         self.captxa = CaptxaSolver()
         self.chpiopow = ChpioPowSolver()
         self.crovly = CrovlySolver()
@@ -116,6 +118,9 @@ class AntibotClient:
 
     async def solve_cap(self, **kwargs: Any) -> CaptchaResult:
         return await self.cap.solve(**kwargs)
+
+    async def solve_capybara(self, **kwargs: Any) -> CaptchaResult:
+        return await self.capybara.solve(**kwargs)
 
     async def solve_captxa(self, **kwargs: Any) -> CaptchaResult:
         return await self.captxa.solve(**kwargs)
@@ -556,6 +561,43 @@ class AntibotClient:
             }
             jnc_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_justnocaptcha(**jnc_kwargs)
+        if provider == "capybara":
+            capy_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "payload_token",
+                    "submit",
+                    "difficulty",
+                    "duration_sec",
+                    "secret",
+                    "instance_id",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            if not capy_kwargs.get("base_url") and not capy_kwargs.get("challenge_url"):
+                if target_url.rstrip("/").endswith("/api/challenge"):
+                    capy_kwargs["challenge_url"] = target_url
+                elif target_url.rstrip("/").endswith("/api/verify"):
+                    capy_kwargs["verify_url"] = target_url
+                    capy_kwargs["base_url"] = target_url.rsplit("/api/verify", 1)[0]
+                else:
+                    capy_kwargs["base_url"] = target_url
+            return await self.solve_capybara(**capy_kwargs)
         if provider == "cap":
             cap_kwargs = {
                 k: v

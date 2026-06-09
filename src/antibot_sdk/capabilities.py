@@ -122,6 +122,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "challenge/solution submit body",
         "scope": "JustNoCaptcha 多 puzzle PoW：解析 difficulty+puzzles+challengeHash，复现 JS FNV1a/fmix hashInt，逐 puzzle 搜索定长十进制 solution，可选 challengeSalt 校验 challenge 完整性；不启动浏览器。",
     },
+    "capybara": {
+        "provider": "capybara",
+        "name": "Capybara-Captcha",
+        "category": "solver",
+        "captcha_type": "payload_bound_pow",
+        "status": "alpha",
+        "output": "{id, solution, payload_token} verify body",
+        "scope": "Capybara-Captcha Worker 协议 solver：请求 /api/challenge 获取 id/nonce/difficulty/payload_token，复现 SHA256(nonce+solution) 十六进制前缀零 PoW，可选校验 payload_token 的 INSTANCE_ID+secret 签名并提交 /api/verify；不启动浏览器。",
+    },
     "cap": {
         "provider": "cap",
         "name": "Cap / @cap.js",
