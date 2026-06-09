@@ -10,9 +10,10 @@ def test_capability_matrix_keeps_human_verification_boundary() -> None:
     solvers = {item["provider"]: item for item in caps["solvers"]}
     browser_flows = {item["provider"]: item for item in caps["browser_flows"]}
 
-    assert set(solvers) == {"aliyun", "tencent"}
+    assert set(solvers) == {"aliyun", "tencent", "geetest"}
     assert solvers["tencent"]["captcha_type"] == "slider"
     assert solvers["aliyun"]["captcha_type"] == "slider"
+    assert solvers["geetest"]["captcha_type"] == "geetest_v4"
     assert set(browser_flows) == {"cloudflare"}
     assert browser_flows["cloudflare"]["category"] == "browser_flow"
     assert caps["flow_observers"] == caps["browser_flows"]
@@ -51,10 +52,11 @@ def test_top_level_sdk_exports_core_human_verification_api() -> None:
     assert antibot_sdk.BrowserAutomation
     assert antibot_sdk.AliyunCaptchaSolver
     assert antibot_sdk.TencentCaptchaSolver
+    assert antibot_sdk.GeetestV4Solver
     assert antibot_sdk.RunnerConfig
     assert antibot_sdk.run_once
     assert antibot_sdk.list_capabilities
     assert antibot_sdk.parse_proxy
     caps = list_capabilities()
-    assert {item["provider"] for item in caps["solvers"]} == {"aliyun", "tencent"}
+    assert {item["provider"] for item in caps["solvers"]} == {"aliyun", "tencent", "geetest"}
     assert {item["provider"] for item in caps["browser_flows"]} == {"cloudflare"}

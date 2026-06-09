@@ -102,6 +102,11 @@ def detect_provider_for_url(url: str | None) -> str:
         return "aliyun"
     if any(x in u or x in host for x in ("tencent", "gtimg", "qcloud", "tcaptcha", "turing.captcha")):
         return "tencent"
+    if any(
+        x in u or x in host
+        for x in ("geetest", "gcaptcha4", "gt4.geetest", "static.geetest.com/v4")
+    ):
+        return "geetest"
     if any(x in u or x in host for x in ("cloudflare", "cf-challenge", "cf_clearance", "cdn-cgi", "turnstile")):
         return "cloudflare"
     return "unknown"
@@ -118,4 +123,18 @@ def list_profiles() -> dict[str, dict[str, Any]]:
         },
         "aliyun": {name: asdict(profile) for name, profile in ALIYUN_SITE_PROFILES.items()},
         "tencent": {name: profile.to_dict() for name, profile in TENCENT_PROFILES.items()},
+        "geetest": {
+            "v4_demo": {
+                "target_url": "https://www.geetest.com/en/adaptive-captcha-demo",
+                "captcha_type": "geetest_v4_ai",
+                "headless": "true",
+                "runtime_hosts": ("gcaptcha4.geetest.com", "static.geetest.com/v4", "gt4.geetest.com"),
+            },
+            "v4_slide_demo": {
+                "target_url": "https://gt4.geetest.com/demov4/slide-popup-zh.html",
+                "captcha_type": "geetest_v4_slide",
+                "headless": "true",
+                "click_selector": "#btn",
+            },
+        },
     }

@@ -1,6 +1,6 @@
 # antibot-sdk
 
-人机验证 SDK，提供 Cloudflare 浏览器验证流、腾讯滑块、阿里云滑块的 Python API 与 CLI。
+人机验证 SDK，提供 Cloudflare 浏览器验证流、腾讯滑块、阿里云滑块、GeeTest v4 的 Python API 与 CLI。
 
 ## 功能
 
@@ -9,6 +9,7 @@
 | Cloudflare | 浏览器验证流 | `solve_cloudflare()` / `open()` | `antibot run` / `antibot solve cloudflare` |
 | Tencent Captcha | 滑块验证码 | `solve_tencent()` | `antibot solve tencent` |
 | Aliyun Captcha V3 | 滑块验证码 | `solve_aliyun()` | `antibot solve aliyun` |
+| GeeTest v4 | 人机验证 | `solve_geetest()` | `antibot solve geetest` |
 
 ## 安装
 
@@ -62,11 +63,30 @@ uv run antibot solve aliyun \
   --raw
 ```
 
+### GeeTest v4
+
+```bash
+uv run antibot solve geetest \
+  --target-url 'https://www.geetest.com/en/adaptive-captcha-demo' \
+  --headless true \
+  --timeout 60 \
+  --raw
+```
+
+```bash
+uv run antibot solve geetest \
+  --target-url 'https://gt4.geetest.com/demov4/slide-popup-zh.html' \
+  --click-selector '#btn' \
+  --timeout 75 \
+  --raw
+```
+
 ### 自动路由
 
 ```bash
 uv run antibot auto 'https://cloud.tencent.com/product/captcha' --raw
 uv run antibot auto 'https://qoder.com/users/sign-up' --raw
+uv run antibot auto 'https://www.geetest.com/en/adaptive-captcha-demo' --raw
 uv run antibot auto 'https://example.com' --provider cloudflare --raw
 ```
 
@@ -151,6 +171,24 @@ async def main():
             timeout_sec=180,
         )
         print(ret.ok, ret.verify_code, ret.artifacts)
+
+asyncio.run(main())
+```
+
+### GeeTest v4
+
+```python
+import asyncio
+from antibot_sdk import AntibotClient
+
+async def main():
+    async with AntibotClient() as client:
+        ret = await client.solve_geetest(
+            target_url="https://www.geetest.com/en/adaptive-captcha-demo",
+            headless=True,
+            timeout_sec=60,
+        )
+        print(ret.ok, ret.ticket, ret.verify_code)
 
 asyncio.run(main())
 ```

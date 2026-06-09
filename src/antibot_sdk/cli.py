@@ -13,6 +13,7 @@ from .client import AntibotClient
 from .profiles import detect_provider_for_url, list_profiles
 from .providers.aliyun import AliyunCaptchaSolver, discover_chrome
 from .providers.browser import BrowserAutomation
+from .providers.geetest import DEFAULT_GEETEST_DEMO_URL, GeetestV4Solver
 from .stress import run_stress
 
 
@@ -67,7 +68,11 @@ def _compact_raw(raw: Any) -> Any:
         "candidate": raw.get("candidate"),
         "error": raw.get("error"),
         "state": raw.get("state"),
+        "target_url": raw.get("target_url"),
         "final_url": raw.get("final_url"),
+        "title": raw.get("title"),
+        "solution": raw.get("solution"),
+        "events": raw.get("events"),
     }
     return {key: value for key, value in keep.items() if value not in (None, "", [], {})}
 
@@ -150,6 +155,24 @@ def _add_cloudflare_args(parser: argparse.ArgumentParser, *, positional_url: boo
     parser.add_argument("--raw", action="store_true")
 
 
+def _add_geetest_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--target-url", default=DEFAULT_GEETEST_DEMO_URL)
+    parser.add_argument("--headless", default="true", choices=["auto", "true", "false", "1", "0", "yes", "no"])
+    parser.add_argument("--browser-binary")
+    parser.add_argument("--proxy")
+    parser.add_argument("--timeout", type=int, default=60)
+    parser.add_argument("--wait-after-load-ms", type=int, default=2500)
+    parser.add_argument("--click-selector", "--trigger", dest="click_selector", action="append", default=[])
+    parser.add_argument("--slide-attempts", type=int, default=3)
+    parser.add_argument("--no-slide-solve", action="store_true")
+    parser.add_argument("--output-dir")
+    parser.add_argument("--save-html", action="store_true")
+    parser.add_argument("--screenshot")
+    parser.add_argument("--output-json")
+    parser.add_argument("--raw-events", action="store_true")
+    parser.add_argument("--raw", action="store_true")
+
+
 def _cloudflare_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "mode": args.mode,
@@ -178,6 +201,30 @@ def _cloudflare_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def _geetest_kwargs(
+    args: argparse.Namespace,
+    *,
+    target_url: str | None = None,
+    browser_binary: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "target_url": target_url or getattr(args, "target_url", None) or DEFAULT_GEETEST_DEMO_URL,
+        "headless": _headless_bool(getattr(args, "headless", None)),
+        "browser_binary": browser_binary or getattr(args, "browser_binary", None),
+        "proxy_server": getattr(args, "proxy", None),
+        "timeout_sec": getattr(args, "timeout", None) or 60,
+        "wait_after_load_ms": getattr(args, "wait_after_load_ms", 2500),
+        "click_selectors": getattr(args, "click_selector", None) or None,
+        "slide_max_attempts": getattr(args, "slide_attempts", 3),
+        "slide_solve": not bool(getattr(args, "no_slide_solve", False)),
+        "output_dir": getattr(args, "output_dir", None),
+        "save_html": bool(getattr(args, "save_html", False)),
+        "screenshot": getattr(args, "screenshot", None),
+        "output_json": getattr(args, "output_json", None),
+        "raw_events": bool(getattr(args, "raw_events", False)),
+    }
+
+
 async def amain(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="antibot")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -191,8 +238,9 @@ async def amain(argv: list[str] | None = None) -> int:
     _add_cloudflare_args(run, positional_url=True)
 
     auto = sub.add_parser("auto")
-    auto.add_argument("url")
-    auto.add_argument("--provider", default="auto", choices=["auto", "aliyun", "tencent", "cloudflare"])
+    auto.add_argument("url", nargs="?")
+    auto.add_argument("--target-url")
+    auto.add_argument("--provider", default="auto", choices=["auto", "aliyun", "tencent", "cloudflare", "geetest"])
     auto.add_argument("--proxy")
     auto.add_argument("--timeout", type=int)
     auto.add_argument("--raw", action="store_true")
@@ -200,12 +248,23 @@ async def amain(argv: list[str] | None = None) -> int:
     auto.add_argument("--appid")
     auto.add_argument("--headless", default="auto")
     auto.add_argument("--chrome-path")
+    auto.add_argument("--browser-binary")
+    auto.add_argument("--wait-after-load-ms", type=int, default=2500)
+    auto.add_argument("--click-selector", "--trigger", dest="click_selector", action="append", default=[])
+    auto.add_argument("--slide-attempts", type=int, default=3)
+    auto.add_argument("--no-slide-solve", action="store_true")
+    auto.add_argument("--output-dir")
+    auto.add_argument("--save-html", action="store_true")
+    auto.add_argument("--screenshot")
+    auto.add_argument("--output-json")
+    auto.add_argument("--raw-events", action="store_true")
 
     solve = sub.add_parser("solve")
     solve_sub = solve.add_subparsers(dest="provider", required=True)
     _add_tencent_args(solve_sub.add_parser("tencent"))
     _add_aliyun_args(solve_sub.add_parser("aliyun"))
     _add_cloudflare_args(solve_sub.add_parser("cloudflare"))
+    _add_geetest_args(solve_sub.add_parser("geetest"))
 
     stress = sub.add_parser("stress")
     stress_sub = stress.add_subparsers(dest="provider", required=True)
@@ -255,10 +314,15 @@ async def amain(argv: list[str] | None = None) -> int:
             return 0 if ret.ok else 2
 
         if args.cmd == "auto":
-            provider = detect_provider_for_url(args.url) if args.provider == "auto" else args.provider
+            target_url = args.target_url or args.url
+            if args.provider == "geetest" and not target_url:
+                target_url = DEFAULT_GEETEST_DEMO_URL
+            if not target_url:
+                parser.error("auto requires url or --target-url")
+            provider = detect_provider_for_url(target_url) if args.provider == "auto" else args.provider
             if provider == "aliyun":
                 ret = await client.solve_aliyun(
-                    target_url=args.url,
+                    target_url=target_url,
                     chrome_path=args.chrome_path,
                     headless=_headless_any(args.headless),
                     proxy_server=args.proxy,
@@ -267,7 +331,7 @@ async def amain(argv: list[str] | None = None) -> int:
                 )
             elif provider == "tencent":
                 ret = await client.solve_tencent(
-                    target_url=args.url,
+                    target_url=target_url,
                     profile=args.profile or "cloud_product",
                     appid=args.appid,
                     headless=_headless_bool(args.headless),
@@ -276,21 +340,34 @@ async def amain(argv: list[str] | None = None) -> int:
                 )
             elif provider == "cloudflare":
                 ret = await client.solve_cloudflare(
-                    target_url=args.url,
+                    target_url=target_url,
                     mode="auto",
                     headless=str(args.headless),
-                    browser_binary=args.chrome_path,
+                    browser_binary=args.browser_binary or args.chrome_path,
                     proxy=args.proxy,
                     max_wait=args.timeout or 90,
                 )
+            elif provider == "geetest":
+                ret = await GeetestV4Solver().solve(
+                    **_geetest_kwargs(
+                        args,
+                        target_url=target_url,
+                        browser_binary=args.browser_binary or args.chrome_path,
+                    )
+                )
             else:
-                ret = await client.solve_auto(args.url, provider=provider)
-            emit(ret, include_raw=args.raw)
+                ret = await client.solve_auto(target_url, provider=provider)
+            emit(ret, include_raw=args.raw or getattr(args, "raw_events", False))
             return 0 if ret.ok else 2
 
         if args.cmd == "solve" and args.provider == "cloudflare":
             ret = await client.solve_cloudflare(args.target_url, **_cloudflare_kwargs(args))
             emit(ret, include_raw=args.raw)
+            return 0 if ret.ok else 2
+
+        if args.cmd == "solve" and args.provider == "geetest":
+            ret = await GeetestV4Solver().solve(**_geetest_kwargs(args))
+            emit(ret, include_raw=args.raw or args.raw_events)
             return 0 if ret.ok else 2
 
         if args.cmd == "solve" and args.provider == "tencent":

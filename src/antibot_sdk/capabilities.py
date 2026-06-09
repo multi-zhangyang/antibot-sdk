@@ -30,6 +30,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "VerifyResult / VerifyCode / artifacts",
         "scope": "阿里云滑块验证码：Node/Puppeteer runner、DOM hook、缺口定位、轨迹与失败策略。",
     },
+    "geetest": {
+        "provider": "geetest",
+        "name": "GeeTest v4",
+        "category": "solver",
+        "captcha_type": "geetest_v4",
+        "status": "active",
+        "output": "pass_token / lot_number / captcha_output / flow events",
+        "scope": "GeeTest v4：Playwright 驱动真实页面，hook initGeetest4，捕获 gcaptcha4 load/verify，滑块模式抓取 bg/slice 并用 CV 缺口匹配生成拖拽轨迹。",
+    },
 }
 
 
