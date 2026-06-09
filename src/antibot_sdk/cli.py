@@ -128,6 +128,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "auto",
             "ajcaptcha",
             "activehashcash",
+            "btx",
             "altcha",
             "anubis",
             "auro",
@@ -263,6 +264,25 @@ async def amain(argv: list[str] | None = None) -> int:
     ah.add_argument("--output-dir")
     ah.add_argument("--user-agent")
     ah.add_argument("--raw", action="store_true")
+
+    btx = solve_sub.add_parser("btx")
+    btx_source = btx.add_mutually_exclusive_group(required=True)
+    btx_source.add_argument("--challenge-json", help="inline BTX challenge JSON, or @/path")
+    btx_source.add_argument("--challenge-file")
+    btx_source.add_argument("--challenge-url", help="endpoint returning X-BTX-Challenge or challenge JSON")
+    btx.add_argument("--submit-url", help="retry target; sends X-BTX-* proof headers")
+    btx.add_argument("--submit", action="store_true")
+    btx.add_argument("--submit-method", default="POST", choices=["GET", "POST", "PUT", "PATCH"])
+    btx.add_argument("--submit-json", help="optional JSON body for retry request, or @/path")
+    btx.add_argument("--response-field", default="btx_proof")
+    btx.add_argument("--nonce-start")
+    btx.add_argument("--max-attempts", type=int, default=1_000_000)
+    btx.add_argument("--workers", type=int, default=1)
+    btx.add_argument("--timeout", type=int, default=60)
+    btx.add_argument("--proxy")
+    btx.add_argument("--output-dir")
+    btx.add_argument("--user-agent")
+    btx.add_argument("--raw", action="store_true")
 
     alt = solve_sub.add_parser("altcha")
     alt_source = alt.add_mutually_exclusive_group(required=True)
@@ -1177,6 +1197,28 @@ async def amain(argv: list[str] | None = None) -> int:
     sah.add_argument("--output-json")
     sah.add_argument("--user-agent")
     sah.add_argument("--full", action="store_true")
+
+    sbtx = stress_sub.add_parser("btx")
+    sbtx_source = sbtx.add_mutually_exclusive_group(required=True)
+    sbtx_source.add_argument("--challenge-json")
+    sbtx_source.add_argument("--challenge-file")
+    sbtx_source.add_argument("--challenge-url")
+    sbtx.add_argument("--submit-url")
+    sbtx.add_argument("--submit", action="store_true")
+    sbtx.add_argument("--submit-method", default="POST", choices=["GET", "POST", "PUT", "PATCH"])
+    sbtx.add_argument("--submit-json")
+    sbtx.add_argument("--response-field", default="btx_proof")
+    sbtx.add_argument("--nonce-start")
+    sbtx.add_argument("--runs", type=int, default=10)
+    sbtx.add_argument("--concurrency", type=int, default=2)
+    sbtx.add_argument("--timeout", type=int, default=60)
+    sbtx.add_argument("--max-attempts", type=int, default=1_000_000)
+    sbtx.add_argument("--workers", type=int, default=1)
+    sbtx.add_argument("--proxy")
+    sbtx.add_argument("--output-dir")
+    sbtx.add_argument("--output-json")
+    sbtx.add_argument("--user-agent")
+    sbtx.add_argument("--full", action="store_true")
 
     salt = stress_sub.add_parser("altcha")
     salt.add_argument("--challenge-url", required=True)
@@ -2138,6 +2180,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "recaptcha",
             "turnstile",
             "activehashcash",
+            "btx",
             "cap",
             "cryptopuzzle",
             "captxa",
@@ -2285,6 +2328,26 @@ async def amain(argv: list[str] | None = None) -> int:
             rand=args.rand,
             response_field=args.response_field,
             start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "btx":
+        ret = await client.solve_btx(
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            submit_url=args.submit_url,
+            submit=args.submit,
+            submit_method=args.submit_method,
+            submit_json=args.submit_json,
+            response_field=args.response_field,
+            nonce_start=args.nonce_start,
             max_attempts=args.max_attempts,
             workers=args.workers,
             timeout_sec=args.timeout,
@@ -3307,6 +3370,34 @@ async def amain(argv: list[str] | None = None) -> int:
                 rand=args.rand,
                 response_field=args.response_field,
                 start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "btx":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="btx",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_btx(
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                submit_url=args.submit_url,
+                submit=args.submit,
+                submit_method=args.submit_method,
+                submit_json=args.submit_json,
+                response_field=args.response_field,
+                nonce_start=args.nonce_start,
                 max_attempts=args.max_attempts,
                 workers=args.workers,
                 timeout_sec=args.timeout,

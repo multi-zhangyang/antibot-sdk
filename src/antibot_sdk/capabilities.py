@@ -140,6 +140,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "{id, solution, payload_token} verify body",
         "scope": "Capybara-Captcha Worker 协议 solver：请求 /api/challenge 获取 id/nonce/difficulty/payload_token，复现 SHA256(nonce+solution) 十六进制前缀零 PoW，可选校验 payload_token 的 INSTANCE_ID+secret 签名并提交 /api/verify；不启动浏览器。",
     },
+    "btx": {
+        "provider": "btx",
+        "name": "BTX MatMul Service Challenge",
+        "category": "solver",
+        "captcha_type": "matmul_service_pow",
+        "status": "prototype",
+        "output": "X-BTX proof headers / challenge proof JSON",
+        "scope": "BTX service-challenge：复现 M31 有限域矩阵、noise rank、header sigma、block transcript SHA-256d 与 digest_le <= target 的 MatMul PoW；纯 Python 原型默认限制小/中维度，不启动浏览器。",
+    },
     "vulcan": {
         "provider": "vulcan",
         "name": "EduVulcan / WASM-for-Vulcan",

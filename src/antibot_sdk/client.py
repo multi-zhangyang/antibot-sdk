@@ -11,6 +11,7 @@ from .providers.altcha import AltchaSolver
 from .providers.anubis import AnubisSolver
 from .providers.auro import AuroSolver
 from .providers.browser import BrowserAutomation
+from .providers.btx import BtxSolver
 from .providers.cap import CapSolver
 from .providers.capybara import CapybaraSolver
 from .providers.captxa import CaptxaSolver
@@ -61,6 +62,7 @@ class AntibotClient:
         self.browser_binary = browser_binary
         self.browser = BrowserAutomation()
         self.activehashcash = ActiveHashcashSolver()
+        self.btx = BtxSolver()
         self.cap = CapSolver()
         self.capybara = CapybaraSolver()
         self.captxa = CaptxaSolver()
@@ -122,6 +124,9 @@ class AntibotClient:
 
     async def solve_activehashcash(self, **kwargs: Any) -> CaptchaResult:
         return await self.activehashcash.solve(**kwargs)
+
+    async def solve_btx(self, **kwargs: Any) -> CaptchaResult:
+        return await self.btx.solve(**kwargs)
 
     async def solve_aliyun(self, **kwargs: Any) -> CaptchaResult:
         return await self.aliyun.solve(**kwargs)
@@ -288,6 +293,35 @@ class AntibotClient:
             }
             ah_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_activehashcash(**ah_kwargs)
+        if provider == "btx":
+            btx_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "submit_url",
+                    "submit",
+                    "submit_method",
+                    "submit_json",
+                    "response_field",
+                    "nonce_start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            btx_kwargs.setdefault("challenge_url", target_url)
+            if btx_kwargs.get("submit") and not btx_kwargs.get("submit_url"):
+                btx_kwargs["submit_url"] = target_url
+            return await self.solve_btx(**btx_kwargs)
         if provider == "ajcaptcha":
             aj_kwargs = {
                 k: v

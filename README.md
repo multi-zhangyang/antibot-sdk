@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -45,6 +45,7 @@
 - PoW Bot Deterrent：新增 scrypt-WASM PoW 协议 solver，解析 base64 JSON challenge，复现 `scrypt(nonce_bytes, preimage_bytes, N/r/p/klen)` 与尾部阈值比较，可提交 `/Verify`，不启动浏览器。
 - POWChallenge / powchallenge-server：新增 Argon2id memory-hard PoW 协议 solver，解析 `GET /challenge` 的 `req_id/challenge/difficulty`，复现 `t=1,m=19456KiB,p=1` 前导零 bit 校验，可提交 `/verify`，不启动浏览器。
 - PowForge CAPTCHA：新增 signed salt + SHA-256 PoW token solver，获取 `/api/challenge` 的 `salt/difficulty/signature/id`，复现 worker 的 `SHA256(salt+nonce)` leading-zero bit，提交 `/api/verify` 换 `pf_token`，可选 `/api/token/verify`，不启动浏览器。
+- BTX MatMul service-challenge：新增 M31 有限域矩阵 PoW 原型，复现 header sigma、noise rank、block transcript SHA-256d 与 `digest_le <= target`，输出 `X-BTX-*` proof headers；纯 Python 默认小/中维度，不启动浏览器。
 - pow-reaction：新增 JWT 签名多轮 PoW 协议 solver，解析 HS256 challenge、clientId/context 绑定和 rounds，复现 `SHA256(round+"."+nonce)` 前导零 bit，可提交 reactions endpoint，不启动浏览器。
 - Prosopo Procaptcha PoW：新增纯协议 PoW solver，复现 `@prosopo/util` 的 `SHA256(nonce+challenge)` 前导十六进制零搜索，可构造 signed timestamp submit body 并提交 provider endpoint，不启动浏览器。
 - Tollbooth / libcaptcha：新增 SHA-256 与 SHA256-Balloon memory-hard PoW solver，同时支持 navigator-attestation 的 HTTP poll 稀疏 signals token flow，输出 verify form / clearance token，不启动浏览器。
@@ -97,6 +98,7 @@
 | PoW Bot Deterrent | 协议 solver | `scrypt_pow` | alpha | nonce / validated OK |
 | POWChallenge / powchallenge-server | 协议 solver | `argon2id_memory_pow` | alpha | verify body / validated message |
 | PowForge CAPTCHA | 协议 solver | `signed_sha256_pow_token` | alpha | `pf_token` / validated token |
+| BTX MatMul Service Challenge | 协议 solver | `matmul_service_pow` | prototype | `X-BTX-*` proof headers / proof JSON |
 | pow-reaction | 协议 solver | `signed_multi_round_pow` | alpha | `{challenge, solutions, reaction}` / success |
 | Prosopo Procaptcha PoW | 协议 solver | `prosopo_pow` | alpha | submit body / `verified=true` |
 | Tollbooth / libcaptcha | 协议 solver | `tollbooth_protocol` | alpha | verify form / clearance token |
@@ -2543,7 +2545,69 @@ antibot stress powforge \
 
 ---
 
-### 22.4 pow-reaction JWT signed multi-round PoW
+### 22.4 BTX MatMul service-challenge PoW
+
+BTX 这一类不是普通 Hashcash，而是 **链锚定 header + M31 有限域 MatMul + noise rank + transcript hash** 的 admission challenge。SDK 当前做的是纯协议层原型：解析 `X-BTX-Challenge` 或 challenge JSON，本地复现 official pure-JS solver 的关键路径，输出重试请求需要的 `X-BTX-*` proof headers。
+
+关键点：
+
+```text
+challenge.challenge.header_context -> serialize 150-byte header
+sigma = reverse(SHA256(SHA256(header)))
+
+A = FromSeed(seed_a, n)
+B = FromSeed(seed_b, n)
+for nonce64 in [nonce64_start, ...):
+  noise = Generate(sigma, n, r)
+  A' = A + E_L·E_R
+  B' = B + F_L·F_R
+  transcript = CanonicalMatMul(A', B', b, sigma)
+  pass iff uint256_le(transcript_hash) <= uint256_be(target)
+
+submit headers:
+X-BTX-Challenge
+X-BTX-Challenge-Id
+X-BTX-Proof-Nonce
+X-BTX-Proof-Digest
+```
+
+SDK 当前支持：
+
+- 解析 402 响应里的 `X-BTX-Challenge`、JSON body、inline JSON 或文件；
+- 复现 M31 field oracle、noise seed、block compression vector 和 SHA-256d transcript；
+- 输出 proof JSON、hidden field body、Express middleware 兼容的 `X-BTX-*` headers；
+- 可选 `--submit-url --submit` 对 retry target 做闭环；
+- 不启动浏览器，适合 VPS/headless 受限环境。
+
+命令示例：
+
+```bash
+antibot solve btx \
+  --challenge-url 'https://target.example/gated-api' \
+  --submit-url 'https://target.example/gated-api' \
+  --submit
+
+antibot solve btx \
+  --challenge-json @/tmp/btx-challenge.json \
+  --max-attempts 100000 \
+  --timeout 30
+
+antibot stress btx \
+  --challenge-json @/tmp/btx-challenge.json \
+  --runs 10 \
+  --concurrency 2 \
+  --timeout 30
+```
+
+当前定位：
+
+- 这是高难协议原型，已用 btxd/official SDK golden vectors 校验小维度链路；
+- 默认纯 Python 限制 `n<=128,r<=32`，避免 VPS 上被生产级 `n=512+` 矩阵打爆内存/CPU；
+- 后续更适合接 Rust/WASM/WebGPU 内核，把生产维度性能补齐。
+
+---
+
+### 22.5 pow-reaction JWT signed multi-round PoW
 
 `pow-reaction` 是一个把“反刷 reaction/表单动作”做成 PoW captcha 的 Svelte 组件。它的关键不在图像，而在 **签名 challenge + clientId/context 绑定 + 多轮 PoW + redeem 防重放**：
 
@@ -2607,7 +2671,7 @@ antibot solve powreaction \
 
 ---
 
-### 22.5 Prosopo Procaptcha PoW
+### 22.6 Prosopo Procaptcha PoW
 
 Prosopo Procaptcha 的 PoW 模式不是图片识别，核心在 provider 签发 challenge、用户对 timestamp 签名、客户端搜索 nonce 后提交。当前 SDK 复现公开 npm 包里的 PoW 算法和 HTTP body 结构：
 
@@ -2661,7 +2725,7 @@ antibot solve procaptcha \
 
 ---
 
-### 22.6 Tollbooth / libcaptcha SHA256-Balloon + Navigator Attestation
+### 22.7 Tollbooth / libcaptcha SHA256-Balloon + Navigator Attestation
 
 Tollbooth 是 libcaptcha 在 2026 发布的 Python bot-challenge middleware。它比普通 hashcash 更有意思：默认 challenge handler 是 `SHA256Balloon`，用 memory-hard balloon hashing 搜索 nonce；另一个 `NavigatorAttestation` handler 走多轮 HTTP poll/WebSocket，服务端给每轮 nonce 和 checks，客户端提交 browser signals，最后服务端签发 token。
 
@@ -3210,6 +3274,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - PoW Bot Deterrent / `/GetChallenges?difficultyLevel=` 相关 URL -> `powbot`
 - POWChallenge / powchallenge-server 相关 URL -> `powchallenge`
 - PowForge / `captcha.powforge.dev` / `pf_token` 相关 URL -> `powforge`
+- BTX / `matmulservicechallenge` / `X-BTX-Challenge` / `matmul_service_challenge` 相关 URL -> `btx`
 - pow-reaction / `/reactions/challenge` 相关 URL -> `powreaction`
 - Prosopo / Procaptcha / `/v1/prosopo/provider/client/captcha/pow` 相关 URL -> `procaptcha`
 - Tollbooth / libcaptcha / `/.tollbooth/verify` / `sha256-balloon` 相关 URL -> `tollbooth`
@@ -3440,6 +3505,11 @@ antibot stress ajcaptcha --base-url 'http://127.0.0.1:18080' --runs 50 --concurr
 antibot solve activehashcash --challenge-url 'https://target.example/session/new'
 antibot solve activehashcash --challenge-json '{"resource":"active.example","bits":12,"date":"260609","rand":"ActiveHashcash01"}' --timeout 5
 antibot stress activehashcash --challenge-json '{"resource":"active.example","bits":12,"date":"260609","rand":"ActiveHashcash01"}' --runs 20 --concurrency 4
+
+# BTX MatMul service-challenge
+antibot solve btx --challenge-url 'https://target.example/gated-api' --submit-url 'https://target.example/gated-api' --submit
+antibot solve btx --challenge-json @/tmp/btx-challenge.json --max-attempts 100000 --timeout 30
+antibot stress btx --challenge-json @/tmp/btx-challenge.json --runs 10 --concurrency 2
 
 # ALTCHA
 antibot solve altcha --challenge-url 'https://target.example/altcha/challenge'

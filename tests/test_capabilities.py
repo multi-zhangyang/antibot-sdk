@@ -26,6 +26,7 @@ def test_capability_matrix_product_boundary() -> None:
         "stravcaptcha",
         "justnocaptcha",
         "capybara",
+        "btx",
         "vulcan",
         "spow",
         "cap",
@@ -69,6 +70,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["stravcaptcha"]["captcha_type"] == "stateless_hmac_pow"
     assert solvers["justnocaptcha"]["captcha_type"] == "multi_puzzle_fnv_pow"
     assert solvers["capybara"]["captcha_type"] == "payload_bound_pow"
+    assert solvers["btx"]["captcha_type"] == "matmul_service_pow"
     assert solvers["vulcan"]["captcha_type"] == "chained_sha256_uint32_pow"
     assert solvers["spow"]["captcha_type"] == "signed_hashcash_pow"
     assert solvers["cap"]["captcha_type"] == "proof_of_work"

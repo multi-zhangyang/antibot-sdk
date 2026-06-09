@@ -136,6 +136,11 @@ def detect_provider_for_url(url: str | None) -> str:
         return "fcaptcha"
     if any(x in u or x in host for x in ("powforge", "captcha.powforge.dev", "pf_token")):
         return "powforge"
+    if any(
+        x in u or x in host
+        for x in ("btx", "matmulservicechallenge", "x-btx-challenge", "matmul_service_challenge")
+    ):
+        return "btx"
     if any(x in u or x in host for x in ("capybara-captcha", "capybaracaptcha", "/api/challenge", "/api/verify")):
         return "capybara"
     if any(
@@ -335,6 +340,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "signed-salt-sha256-leading-zero-bit-pow-token-solver",
                 "successFields": ["pf_token", "valid=true", "token"],
                 "endpoints": ["GET /api/challenge", "POST /api/verify", "POST /api/token/verify"],
+            }
+        },
+        "btx": {
+            "matmul_service_pow": {
+                "patterns": ["X-BTX-Challenge", "matmul_service_challenge_v1", "BTX MatMul"],
+                "mode": "m31-matmul-transcript-sha256d-service-challenge-solver",
+                "successFields": ["X-BTX-Proof-Nonce", "X-BTX-Proof-Digest"],
+                "endpoints": ["HTTP 402 with X-BTX-Challenge", "retry target accepting X-BTX proof headers"],
             }
         },
         "capybara": {
