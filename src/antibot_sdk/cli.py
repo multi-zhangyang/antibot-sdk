@@ -129,6 +129,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "ajcaptcha",
             "activehashcash",
             "botcha",
+            "donatello",
             "btx",
             "altcha",
             "anubis",
@@ -431,6 +432,22 @@ async def amain(argv: list[str] | None = None) -> int:
     botcha.add_argument("--proxy")
     botcha.add_argument("--output-dir")
     botcha.add_argument("--raw", action="store_true")
+
+    dona = solve_sub.add_parser("donatello")
+    dona.add_argument("--base-url", default="http://127.0.0.1:8080")
+    dona.add_argument("--page-url", help="page that embeds const challenge_id; defaults to base-url")
+    dona.add_argument("--challenge-id")
+    dona.add_argument("--challenge-json", help="inline challenge JSON, or @/path")
+    dona.add_argument("--challenge-file")
+    dona.add_argument("--challenge-url")
+    dona.add_argument("--verify-url")
+    dona.add_argument("--submit", action="store_true", help="POST solved body to /challenge")
+    dona.add_argument("--canvas-size", type=int, default=20)
+    dona.add_argument("--copy-mismatch", action="store_true")
+    dona.add_argument("--timeout", type=int, default=10)
+    dona.add_argument("--proxy")
+    dona.add_argument("--output-dir")
+    dona.add_argument("--raw", action="store_true")
 
     fc = solve_sub.add_parser("fcaptcha")
     fc_source = fc.add_mutually_exclusive_group(required=True)
@@ -1433,6 +1450,25 @@ async def amain(argv: list[str] | None = None) -> int:
     sbotcha.add_argument("--output-dir")
     sbotcha.add_argument("--output-json")
     sbotcha.add_argument("--full", action="store_true")
+
+    sdona = stress_sub.add_parser("donatello")
+    sdona.add_argument("--base-url", default="http://127.0.0.1:8080")
+    sdona.add_argument("--page-url")
+    sdona.add_argument("--challenge-id")
+    sdona.add_argument("--challenge-json")
+    sdona.add_argument("--challenge-file")
+    sdona.add_argument("--challenge-url")
+    sdona.add_argument("--verify-url")
+    sdona.add_argument("--submit", action="store_true")
+    sdona.add_argument("--canvas-size", type=int, default=20)
+    sdona.add_argument("--copy-mismatch", action="store_true")
+    sdona.add_argument("--runs", type=int, default=10)
+    sdona.add_argument("--concurrency", type=int, default=2)
+    sdona.add_argument("--timeout", type=int, default=10)
+    sdona.add_argument("--proxy")
+    sdona.add_argument("--output-dir")
+    sdona.add_argument("--output-json")
+    sdona.add_argument("--full", action="store_true")
 
     sfc = stress_sub.add_parser("fcaptcha")
     sfc_source = sfc.add_mutually_exclusive_group(required=True)
@@ -2704,6 +2740,24 @@ async def amain(argv: list[str] | None = None) -> int:
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "donatello":
+        ret = await client.solve_donatello(
+            base_url=args.base_url,
+            page_url=args.page_url,
+            challenge_id=args.challenge_id,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            submit=args.submit,
+            canvas_size=args.canvas_size,
+            copy_mismatch=args.copy_mismatch,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
     if args.cmd == "solve" and args.provider == "fcaptcha":
         ret = await client.solve_fcaptcha(
             base_url=args.base_url,
@@ -3877,6 +3931,32 @@ async def amain(argv: list[str] | None = None) -> int:
                 submit=args.submit,
                 difficulty=args.difficulty,
                 rtt_adjust=args.rtt_adjust,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "donatello":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="donatello",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_donatello(
+                base_url=args.base_url,
+                page_url=args.page_url,
+                challenge_id=args.challenge_id,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                submit=args.submit,
+                canvas_size=args.canvas_size,
+                copy_mismatch=args.copy_mismatch,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,

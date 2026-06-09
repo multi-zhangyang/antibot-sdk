@@ -29,6 +29,7 @@ def test_capability_matrix_product_boundary() -> None:
         "justnocaptcha",
         "capybara",
         "botcha",
+        "donatello",
         "btx",
         "vulcan",
         "spow",
@@ -76,6 +77,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["justnocaptcha"]["captcha_type"] == "multi_puzzle_fnv_pow"
     assert solvers["capybara"]["captcha_type"] == "payload_bound_pow"
     assert solvers["botcha"]["captcha_type"] == "ai_speed_challenge"
+    assert solvers["donatello"]["captcha_type"] == "canvas_fingerprint_challenge"
     assert solvers["btx"]["captcha_type"] == "matmul_service_pow"
     assert solvers["vulcan"]["captcha_type"] == "chained_sha256_uint32_pow"
     assert solvers["spow"]["captcha_type"] == "signed_hashcash_pow"

@@ -37,6 +37,8 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://captcha.powforge.dev/api/challenge") == "powforge"
     assert detect_provider_for_url("https://botcha.ai/v1/token?app_id=app_x") == "botcha"
     assert detect_provider_for_url("https://botcha.ai/api/speed-challenge") == "botcha"
+    assert detect_provider_for_url("https://litebrowsers.github.io/donatello/") == "donatello"
+    assert detect_provider_for_url("https://captcha.example/donatello/challenge?id=x") == "donatello"
     assert detect_provider_for_url("https://gate.example/matmulservicechallenge") == "btx"
     assert detect_provider_for_url("https://pow-reaction.pages.dev/demo/reactions/challenge") == "powreaction"
     assert detect_provider_for_url("https://hashguard.example/v1/pow/challenges") == "hashguard"
@@ -75,6 +77,7 @@ def test_generic_provider_detection():
     assert "argon2id_memory_pow" in list_profiles()["powchallenge"]
     assert "signed_sha256_pow_token" in list_profiles()["powforge"]
     assert "ai_speed_challenge" in list_profiles()["botcha"]
+    assert "canvas_fingerprint_challenge" in list_profiles()["donatello"]
     assert "matmul_service_pow" in list_profiles()["btx"]
     assert "signed_multi_round_pow" in list_profiles()["powreaction"]
     assert "jwt_proof_pow" in list_profiles()["hashguard"]

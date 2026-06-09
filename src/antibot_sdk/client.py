@@ -18,6 +18,7 @@ from .providers.capybara import CapybaraSolver
 from .providers.captxa import CaptxaSolver
 from .providers.chpiopow import ChpioPowSolver
 from .providers.crovly import CrovlySolver
+from .providers.donatello import DonatelloSolver
 from .providers.fcaptcha import FCaptchaSolver
 from .providers.cryptopuzzle import CryptoPuzzleSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
@@ -72,6 +73,7 @@ class AntibotClient:
         self.captxa = CaptxaSolver()
         self.chpiopow = ChpioPowSolver()
         self.crovly = CrovlySolver()
+        self.donatello = DonatelloSolver()
         self.ajcaptcha = AJCaptchaSolver()
         self.altcha = AltchaSolver()
         self.anubis = AnubisSolver()
@@ -154,6 +156,9 @@ class AntibotClient:
 
     async def solve_crovly(self, **kwargs: Any) -> CaptchaResult:
         return await self.crovly.solve(**kwargs)
+
+    async def solve_donatello(self, **kwargs: Any) -> CaptchaResult:
+        return await self.donatello.solve(**kwargs)
 
     async def solve_botcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.botcha.solve(**kwargs)
@@ -354,6 +359,39 @@ class AntibotClient:
                     botcha_kwargs["base_url"] = target_url
             botcha_kwargs.setdefault("submit", True)
             return await self.solve_botcha(**botcha_kwargs)
+        if provider == "donatello":
+            donatello_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "page_url",
+                    "challenge_id",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "submit",
+                    "canvas_size",
+                    "copy_mismatch",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not donatello_kwargs.get("base_url") and not donatello_kwargs.get("page_url"):
+                if "/challenge" in target_lower:
+                    donatello_kwargs["challenge_url"] = target_url
+                    donatello_kwargs["base_url"] = target_url[: target_lower.index("/challenge")]
+                else:
+                    donatello_kwargs["page_url"] = target_url
+                    donatello_kwargs["base_url"] = target_url
+            donatello_kwargs.setdefault("submit", True)
+            return await self.solve_donatello(**donatello_kwargs)
         if provider == "btx":
             btx_kwargs = {
                 k: v

@@ -176,6 +176,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "answers / access_token / badge",
         "scope": "BOTCHA AI-agent challenge：GET /v1/token 或 /api/speed-challenge 下发 sha256_first8 任务，直接计算多题答案并 POST /v1/token/verify 换 JWT；兼容 /api/challenge prime+salt puzzle，不启动浏览器。",
     },
+    "donatello": {
+        "provider": "donatello",
+        "name": "Donatello",
+        "category": "solver",
+        "captcha_type": "canvas_fingerprint_challenge",
+        "status": "alpha",
+        "output": "totalHash1 / totalHash2 / metrics2 / verified status",
+        "scope": "Donatello canvas/subpixel challenge：GET / 领取 challenge_id，GET /challenge?id=... 下发 first_task/second_task，离线复现 chessboard+rectangle+line RGBA channel SHA-256 与 alpha metrics，POST /challenge；同时暴露 reference POST 未强校验 totalHash 的协议缺口，不启动浏览器。",
+    },
     "vulcan": {
         "provider": "vulcan",
         "name": "EduVulcan / WASM-for-Vulcan",

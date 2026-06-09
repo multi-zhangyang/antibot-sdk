@@ -145,6 +145,8 @@ def detect_provider_for_url(url: str | None) -> str:
         for x in ("botcha.ai", "dupe-com/botcha", "/v1/token/verify", "/api/speed-challenge", "x-botcha-landing-token")
     ):
         return "botcha"
+    if any(x in u or x in host for x in ("donatello", "litebrowsers.github.io/donatello", "canvas_fingerprint_challenge", "challenge_id")):
+        return "donatello"
     if any(
         x in u or x in host
         for x in ("btx", "matmulservicechallenge", "x-btx-challenge", "matmul_service_challenge")
@@ -381,6 +383,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "sha256-first8-speed-token-flow-solver",
                 "successFields": ["answers", "access_token", "badge"],
                 "endpoints": ["/v1/token", "/v1/token/verify", "/api/speed-challenge", "/api/challenge"],
+            }
+        },
+        "donatello": {
+            "canvas_fingerprint_challenge": {
+                "patterns": ["donatello", "challenge_id", "/challenge?id=", "first_task", "second_task"],
+                "mode": "canvas-rgba-channel-hash-metrics-protocol-solver",
+                "successFields": ["totalHash1", "totalHash2", "metrics2", "status=ok"],
+                "endpoints": ["GET /", "GET /challenge?id=...", "POST /challenge"],
             }
         },
         "capybara": {

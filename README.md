@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / Donatello canvas fingerprint challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -49,6 +49,7 @@
 - PowForge CAPTCHA：新增 signed salt + SHA-256 PoW token solver，获取 `/api/challenge` 的 `salt/difficulty/signature/id`，复现 worker 的 `SHA256(salt+nonce)` leading-zero bit，提交 `/api/verify` 换 `pf_token`，可选 `/api/token/verify`，不启动浏览器。
 - BTX MatMul service-challenge：新增 M31 有限域矩阵 PoW 原型，复现 header sigma、noise rank、block transcript SHA-256d 与 `digest_le <= target`，输出 `X-BTX-*` proof headers；纯 Python 默认小/中维度，不启动浏览器。
 - BOTCHA：新增 AI-agent speed challenge 协议 solver，复现 `sha256_first8` 任务、`/v1/token -> /v1/token/verify` JWT flow，并兼容 `/api/challenge` prime+salt puzzle；不启动浏览器。
+- Donatello：新增 canvas/subpixel fingerprint challenge 协议 solver，解析 `challenge_id`、复现 `first_task` 的 chessboard/rectangle/line RGBA channel SHA-256、生成 `totalHash1/totalHash2/metrics2`，并记录 reference POST 未强校验 hash 的协议缺口；不启动浏览器。
 - pow-reaction：新增 JWT 签名多轮 PoW 协议 solver，解析 HS256 challenge、clientId/context 绑定和 rounds，复现 `SHA256(round+"."+nonce)` 前导零 bit，可提交 reactions endpoint，不启动浏览器。
 - Prosopo Procaptcha PoW：新增纯协议 PoW solver，复现 `@prosopo/util` 的 `SHA256(nonce+challenge)` 前导十六进制零搜索，可构造 signed timestamp submit body 并提交 provider endpoint，不启动浏览器。
 - Tollbooth / libcaptcha：新增 SHA-256 与 SHA256-Balloon memory-hard PoW solver，同时支持 navigator-attestation 的 HTTP poll 稀疏 signals token flow，输出 verify form / clearance token，不启动浏览器。
@@ -105,6 +106,7 @@
 | PowForge CAPTCHA | 协议 solver | `signed_sha256_pow_token` | alpha | `pf_token` / validated token |
 | BTX MatMul Service Challenge | 协议 solver | `matmul_service_pow` | prototype | `X-BTX-*` proof headers / proof JSON |
 | BOTCHA | 协议 solver | `ai_speed_challenge` | alpha | answers / access_token / badge |
+| Donatello | 协议 solver | `canvas_fingerprint_challenge` | alpha | `totalHash1/totalHash2/metrics2` / `status=ok` |
 | pow-reaction | 协议 solver | `signed_multi_round_pow` | alpha | `{challenge, solutions, reaction}` / success |
 | Prosopo Procaptcha PoW | 协议 solver | `prosopo_pow` | alpha | submit body / `verified=true` |
 | Tollbooth / libcaptcha | 协议 solver | `tollbooth_protocol` | alpha | verify form / clearance token |
@@ -2747,6 +2749,52 @@ antibot stress botcha \
 
 ---
 
+### 22.4.2 Donatello canvas/subpixel fingerprint challenge
+
+Donatello 是一个受 Picasso 思路启发的 canvas rendering/subpixel challenge。页面先嵌入 `challenge_id`，再调用 `/challenge?id=...` 获取两段任务：
+
+```text
+GET /                         -> HTML: const challenge_id = "..."
+GET /challenge?id=<id>        -> {id, first_task, second_task}
+POST /challenge               -> {id,totalHash1,totalHash2,metrics2,copyMismatch}
+
+first_task grammar:
+X:grid:color1:color2           # chessboard gradient
+R:color:w:h:x:y                # rectangle
+L:color:x1:y1:x2:y2:thickness  # axis-aligned line
+
+channel_hash = SHA256(channel_bytes)
+totalHash1 = SHA256(redHash + greenHash + blueHash + alphaHash)
+metrics2 = alpha-channel mean/std/bins/gradient compact vector
+```
+
+SDK 做了两层处理：
+
+- 正向复现：离线 rasterize `X/R/L`，计算 RGBA 四通道 SHA-256 和 second-task alpha metrics，不启动浏览器；
+- 协议审计：reference server 的 `POST /challenge` 当前只记录 `totalHash1/totalHash2/metrics2`，并不会拒绝错误 hash；只要 `copyMismatch=false`，错误 `totalHash1` 也能得到 `status=ok`。SDK 默认仍提交正确 `totalHash1`，同时把该 validation gap 写入 diagnostics。
+
+命令示例：
+
+```bash
+antibot solve donatello --base-url 'http://127.0.0.1:8080' --submit --timeout 5
+
+antibot solve donatello \
+  --challenge-json '{"id":"donatello-fixture","first_task":"X:2:000000:FFFFFF;R:FF0000:4:4:2:2;L:00FF00:0:10:20:10:2","second_task":"R:FFFFFF:3:3:1:1;L:FF0000:5:0:5:20:2;C:00FF00:3:12:12"}'
+
+antibot stress donatello \
+  --challenge-json '{"id":"donatello-fixture","first_task":"X:2:000000:FFFFFF;R:FF0000:4:4:2:2;L:00FF00:0:10:20:10:2","second_task":"R:FFFFFF:3:3:1:1;L:FF0000:5:0:5:20:2;C:00FF00:3:12:12"}' \
+  --runs 20 \
+  --concurrency 4
+```
+
+当前定位：
+
+- 这是 canvas 环境 challenge 的协议层 solver/审计器，不靠 headless canvas；
+- first task 的 chessboard/rectangle/axis-aligned line 路径和 reference Go/JS worker 对齐；
+- second task 中 circle/triangle/ellipse 在 reference server 仅记录 fingerprint，SDK 用 deterministic no-AA rasterizer 生成稳定 metrics；若未来服务端强校验浏览器抗锯齿 fingerprint，需要再接真实 canvas/Skia oracle。
+
+---
+
 ### 22.5 pow-reaction JWT signed multi-round PoW
 
 `pow-reaction` 是一个把“反刷 reaction/表单动作”做成 PoW captcha 的 Svelte 组件。它的关键不在图像，而在 **签名 challenge + clientId/context 绑定 + 多轮 PoW + redeem 防重放**：
@@ -3418,6 +3466,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - PowForge / `captcha.powforge.dev` / `pf_token` 相关 URL -> `powforge`
 - BTX / `matmulservicechallenge` / `X-BTX-Challenge` / `matmul_service_challenge` 相关 URL -> `btx`
 - BOTCHA / `botcha.ai` / `/v1/token` / `/v1/token/verify` / `/api/speed-challenge` -> `botcha`
+- Donatello / `donatello` / `challenge_id` / `/challenge?id=` / `first_task` / `second_task` -> `donatello`
 - pow-reaction / `/reactions/challenge` 相关 URL -> `powreaction`
 - Prosopo / Procaptcha / `/v1/prosopo/provider/client/captcha/pow` 相关 URL -> `procaptcha`
 - Tollbooth / libcaptcha / `/.tollbooth/verify` / `sha256-balloon` 相关 URL -> `tollbooth`
@@ -3660,6 +3709,11 @@ antibot solve botcha --mode standard --difficulty easy --submit --timeout 10
 antibot solve botcha --mode token --app-id 'app_xxx' --submit
 antibot stress botcha --challenge-json '{"id":"botcha-speed-fixture","problems":[{"num":123456,"operation":"sha256_first8"},{"num":789012,"operation":"sha256_first8"},{"num":42,"operation":"sha256_first8"}],"timeLimit":"500ms"}' --runs 20 --concurrency 4
 
+# Donatello canvas/subpixel challenge
+antibot solve donatello --base-url 'http://127.0.0.1:8080' --submit --timeout 5
+antibot solve donatello --challenge-json '{"id":"donatello-fixture","first_task":"X:2:000000:FFFFFF;R:FF0000:4:4:2:2;L:00FF00:0:10:20:10:2","second_task":"R:FFFFFF:3:3:1:1;L:FF0000:5:0:5:20:2;C:00FF00:3:12:12"}'
+antibot stress donatello --challenge-json '{"id":"donatello-fixture","first_task":"X:2:000000:FFFFFF;R:FF0000:4:4:2:2;L:00FF00:0:10:20:10:2","second_task":"R:FFFFFF:3:3:1:1;L:FF0000:5:0:5:20:2;C:00FF00:3:12:12"}' --runs 20 --concurrency 4
+
 # ALTCHA
 antibot solve altcha --challenge-url 'https://target.example/altcha/challenge'
 antibot stress altcha --challenge-url 'https://target.example/altcha/challenge' --runs 50 --concurrency 5
@@ -3864,7 +3918,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / H33 BotShield / BOTCHA / FCaptcha / TrustCaptcha / @strav/captcha / Cap / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / H33 BotShield / BOTCHA / Donatello / FCaptcha / TrustCaptcha / @strav/captcha / Cap / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -3875,6 +3929,7 @@ altcha_run.json
 anubis_run.json
 friendlycaptcha_run.json
 botcha_run.json
+donatello_run.json
 fcaptcha_run.json
 cap_run.json
 lapti_run.json
@@ -3955,6 +4010,7 @@ src/antibot_sdk/
     chpiopow.py             # chpio/pow-captcha signed target-match PoW protocol solver
     h33botshield.py        # H33 BotShield challenge/solve SHA-256 bit PoW token solver
     botcha.py              # BOTCHA sha256_first8 speed/token flow + prime puzzle solver
+    donatello.py          # Donatello canvas/subpixel fingerprint hash + metrics solver
     hashguard.py            # HashGuard target-threshold SHA-256 PoW + JWT proof-token solver
     trustcaptcha.py         # TrustCaptcha fingerprint/integrity + multi-task SHA-256 PoW solver
     stravcaptcha.py         # @strav/captcha stateless HMAC token + hashcash PoW solver
@@ -4010,6 +4066,7 @@ tests/
   test_tollbooth.py
   test_hashguard.py
   test_botcha.py
+  test_donatello.py
   test_justnocaptcha.py
   test_capybara.py
   test_vulcan.py
@@ -4027,7 +4084,7 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 175 passed
+pytest: 179 passed
 ruff check src tests: passed
 uv build: success
 Vulcan fixture/html/CLI/stress: chained SHA256 uint32-target PoW，solution=1136;5242;945，4/4 stress 验证通过
@@ -4046,6 +4103,7 @@ Captxa fixture/mock/stress: browser metrics + JA4-bound opaque token + SHA-256 P
 FCaptcha fixture/mock/stress: signalsHash-bound PoW、本地 /api/pow/challenge + /api/verify 验证通过
 H33 BotShield live/script/mock/CLI：确认 script.js challenge/solve 链路、x-h33 post-quantum receipt headers、SHA256(nonce+counter) leading-zero-bit PoW；live submit ok=true，成功返回 h33_bot_token。
 BOTCHA source/live/CLI/stress：dupe-com/botcha packages/go/challenge.go + src/challenges/speed.ts 交叉确认 sha256_first8；/api/speed-challenge live submit ok=true；/api/challenge live prime+salt submit ok=true；fixture answers [8d969eef,29be3ceb,73475cb4] 验证通过。
+Donatello source/local/CLI/stress：Litebrowsers/donatello cmd/resources/internal tasks 交叉确认 challenge_id -> /challenge -> POST 链路；fixture totalHash1=3c92c1f19799b1a31651a4b9315c62a61b7a998598559fedfa776d78990ae8fc；本地 Go server submit ok=true；错误 hash + copyMismatch=false 仍 status=ok，确认 validation gap。
 
 H33 BotShield：
 
@@ -4065,6 +4123,18 @@ legacy /api/challenge：确认 first_N_primes concat + salt 后取 SHA256 前 16
 /api/challenge live submit：ok=true，solveTime≈265。
 fixture answers：123456 -> 8d969eef，789012 -> 29be3ceb，42 -> 73475cb4。
 /v1/token：无 app_id 会 401 APP_REGISTRATION_REQUIRED；本地 mock token flow 已验证 access_token 输出。
+```
+
+Donatello：
+
+```text
+Litebrowsers/donatello cmd/donatello/main.go：GET / 创建 challenge_id，GET /challenge?id=... 返回 first_task/second_task，POST /challenge 记录 totalHash1/totalHash2/metrics2。
+resources/index.html + predictor.worker.js：确认 totalHash1 = SHA256(rHash+gHash+bHash+aHash)，metrics2 来自 second_task alpha channel。
+internal/tasks/canvas_matrix.go：确认 server oracle 只绘制 Chessboard / Rectangle / Line；first_task 由 chessboard + even primitives 组成。
+fixture：first_task totalHash1=3c92c1f19799b1a31651a4b9315c62a61b7a998598559fedfa776d78990ae8fc。
+CLI fixture stress：10/10 ok。
+本地 Go server（PORT=18082, CHALLENGE_EXPIRATION=5s）：antibot solve donatello --submit -> ok=true, status=ok。
+协议缺口：对新 challenge 提交 totalHash1=000...000、totalHash2=000...000、metrics2=[]、copyMismatch=false，仍返回 HTTP 200 {status: ok, noise_detected:false}。
 ```
 powCAPTCHA widget.js 逆向确认 /challenges/create + gzip JSON + fingerprint/signals；PoW = SHA256(signature+problem+nonce) hex-prefix；本地 mock create + verify：ok=true，成功输出 powcaptcha-response token；fixture nonce [2,209] 验证通过。
 PoW Bot Deterrent fixture/mock/stress: scrypt-WASM PoW、本地 /GetChallenges + /Verify 验证通过
