@@ -134,6 +134,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "friendlycaptcha"
     if any(x in u or x in host for x in ("fcaptcha", "/api/pow/challenge")):
         return "fcaptcha"
+    if any(x in u or x in host for x in ("powforge", "captcha.powforge.dev", "pf_token")):
+        return "powforge"
     if any(x in u or x in host for x in ("capybara-captcha", "capybaracaptcha", "/api/challenge", "/api/verify")):
         return "capybara"
     if any(
@@ -325,6 +327,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "target-threshold-sha256-pow-plus-jwt-proof-token-solver",
                 "successFields": ["proofToken", "valid=true"],
                 "endpoints": ["POST /pow/challenges", "POST /pow/verifications", "POST /pow/assertions/introspect"],
+            }
+        },
+        "powforge": {
+            "signed_sha256_pow_token": {
+                "patterns": ["powforge", "captcha.powforge.dev", "pf_token"],
+                "mode": "signed-salt-sha256-leading-zero-bit-pow-token-solver",
+                "successFields": ["pf_token", "valid=true", "token"],
+                "endpoints": ["GET /api/challenge", "POST /api/verify", "POST /api/token/verify"],
             }
         },
         "capybara": {

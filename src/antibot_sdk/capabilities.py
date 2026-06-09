@@ -284,6 +284,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "verify body / validated message",
         "scope": "powchallenge-server Argon2id memory-hard PoW：解析 GET /challenge 的 req_id+challenge+difficulty，复现 t=1,m=19456KiB,p=1 的 Argon2id 前导零 bit，输出 /verify body；不启动浏览器。",
     },
+    "powforge": {
+        "provider": "powforge",
+        "name": "PowForge CAPTCHA",
+        "category": "solver",
+        "captcha_type": "signed_sha256_pow_token",
+        "status": "alpha",
+        "output": "pf_token / validated token",
+        "scope": "PowForge CAPTCHA 协议 solver：获取 /api/challenge 的 salt/difficulty/signature/id，复现 worker 的 SHA256(salt+nonce) leading-zero bit 搜索，提交 /api/verify 换 signed token，可选 /api/token/verify；不启动浏览器。",
+    },
     "powreaction": {
         "provider": "powreaction",
         "name": "pow-reaction",

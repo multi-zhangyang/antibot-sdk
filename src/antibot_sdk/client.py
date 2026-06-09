@@ -33,6 +33,7 @@ from .providers.pcaptcha import PCaptchaSolver
 from .providers.powcaptcha import PowCaptchaSolver
 from .providers.powbot import PowBotSolver
 from .providers.powchallenge import PowChallengeSolver
+from .providers.powforge import PowForgeSolver
 from .providers.procaptcha import ProcaptchaSolver
 from .providers.privatecaptcha import PrivateCaptchaSolver
 from .providers.portcullis import PortcullisSolver
@@ -79,6 +80,7 @@ class AntibotClient:
         self.powcaptcha = PowCaptchaSolver()
         self.powbot = PowBotSolver()
         self.powchallenge = PowChallengeSolver()
+        self.powforge = PowForgeSolver()
         self.powreaction = PowReactionSolver()
         self.procaptcha = ProcaptchaSolver()
         self.privatecaptcha = PrivateCaptchaSolver()
@@ -177,6 +179,9 @@ class AntibotClient:
 
     async def solve_powchallenge(self, **kwargs: Any) -> CaptchaResult:
         return await self.powchallenge.solve(**kwargs)
+
+    async def solve_powforge(self, **kwargs: Any) -> CaptchaResult:
+        return await self.powforge.solve(**kwargs)
 
     async def solve_powreaction(self, **kwargs: Any) -> CaptchaResult:
         return await self.powreaction.solve(**kwargs)
@@ -1135,6 +1140,45 @@ class AntibotClient:
                 else:
                     pc_kwargs["base_url"] = target_url
             return await self.solve_powchallenge(**pc_kwargs)
+        if provider == "powforge":
+            pf_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "challenge_url",
+                    "verify_url",
+                    "token_verify_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "salt",
+                    "difficulty",
+                    "response_field",
+                    "submit",
+                    "token_verify",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not pf_kwargs.get("base_url") and not pf_kwargs.get("challenge_url"):
+                if target_lower.rstrip("/").endswith("/api/challenge"):
+                    pf_kwargs["challenge_url"] = target_url
+                    pf_kwargs["base_url"] = target_url[: target_lower.rindex("/api/challenge")]
+                elif target_lower.rstrip("/").endswith("/api/verify"):
+                    pf_kwargs["verify_url"] = target_url
+                    pf_kwargs["base_url"] = target_url[: target_lower.rindex("/api/verify")]
+                else:
+                    pf_kwargs["base_url"] = target_url
+            return await self.solve_powforge(**pf_kwargs)
         if provider == "powreaction":
             pr_kwargs = {
                 k: v

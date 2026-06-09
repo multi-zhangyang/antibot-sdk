@@ -157,6 +157,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "powcaptcha",
             "powbot",
             "powchallenge",
+            "powforge",
             "powreaction",
             "procaptcha",
             "tollbooth",
@@ -913,6 +914,28 @@ async def amain(argv: list[str] | None = None) -> int:
     port.add_argument("--proxy")
     port.add_argument("--output-dir")
     port.add_argument("--raw", action="store_true")
+
+    pf = solve_sub.add_parser("powforge")
+    pf_source = pf.add_mutually_exclusive_group(required=False)
+    pf_source.add_argument("--base-url", default=None, help="PowForge server root; infers /api/{challenge,verify,token/verify}")
+    pf_source.add_argument("--challenge-url", help="PowForge /api/challenge endpoint")
+    pf_source.add_argument("--challenge-json", help="inline challenge JSON, or @/path")
+    pf_source.add_argument("--challenge-file")
+    pf_source.add_argument("--salt", help="inline salt/challenge prefix")
+    pf.add_argument("--verify-url", help="PowForge /api/verify endpoint")
+    pf.add_argument("--token-verify-url", help="PowForge /api/token/verify endpoint")
+    pf.add_argument("--difficulty", type=int)
+    pf.add_argument("--response-field", default="pf_token")
+    pf.add_argument("--no-submit", action="store_true", help="only solve locally; do not POST /api/verify")
+    pf.add_argument("--token-verify", action="store_true", help="POST returned token to /api/token/verify")
+    pf.add_argument("--start", type=int, default=1)
+    pf.add_argument("--max-attempts", type=int, default=100_000_000)
+    pf.add_argument("--workers", type=int, default=1)
+    pf.add_argument("--timeout", type=int, default=60)
+    pf.add_argument("--proxy")
+    pf.add_argument("--output-dir")
+    pf.add_argument("--user-agent")
+    pf.add_argument("--raw", action="store_true")
 
     swe = solve_sub.add_parser("swetrix")
     swe.add_argument("--pid", "--project-id", dest="pid", help="Swetrix CAPTCHA project id; POST /generate")
@@ -1861,6 +1884,31 @@ async def amain(argv: list[str] | None = None) -> int:
     sport.add_argument("--output-json")
     sport.add_argument("--full", action="store_true")
 
+    spf = stress_sub.add_parser("powforge")
+    spf_source = spf.add_mutually_exclusive_group(required=False)
+    spf_source.add_argument("--base-url", default=None)
+    spf_source.add_argument("--challenge-url")
+    spf_source.add_argument("--challenge-json")
+    spf_source.add_argument("--challenge-file")
+    spf_source.add_argument("--salt")
+    spf.add_argument("--verify-url")
+    spf.add_argument("--token-verify-url")
+    spf.add_argument("--difficulty", type=int)
+    spf.add_argument("--response-field", default="pf_token")
+    spf.add_argument("--no-submit", action="store_true")
+    spf.add_argument("--token-verify", action="store_true")
+    spf.add_argument("--runs", type=int, default=10)
+    spf.add_argument("--concurrency", type=int, default=2)
+    spf.add_argument("--timeout", type=int, default=60)
+    spf.add_argument("--start", type=int, default=1)
+    spf.add_argument("--max-attempts", type=int, default=100_000_000)
+    spf.add_argument("--workers", type=int, default=1)
+    spf.add_argument("--proxy")
+    spf.add_argument("--output-dir")
+    spf.add_argument("--output-json")
+    spf.add_argument("--user-agent")
+    spf.add_argument("--full", action="store_true")
+
     sswe = stress_sub.add_parser("swetrix")
     sswe.add_argument("--pid", "--project-id", dest="pid")
     sswe.add_argument("--api-url", default="https://api.swetrixcaptcha.com/v1/captcha")
@@ -2114,6 +2162,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "powcaptcha",
             "powbot",
             "powchallenge",
+            "powforge",
             "powreaction",
             "procaptcha",
             "tollbooth",
@@ -2924,6 +2973,29 @@ async def amain(argv: list[str] | None = None) -> int:
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "powforge":
+        ret = await client.solve_powforge(
+            base_url=args.base_url,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            token_verify_url=args.token_verify_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            salt=args.salt,
+            difficulty=args.difficulty,
+            response_field=args.response_field,
+            submit=not args.no_submit,
+            token_verify=args.token_verify,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -4141,6 +4213,37 @@ async def amain(argv: list[str] | None = None) -> int:
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "powforge":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="powforge",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_powforge(
+                base_url=args.base_url,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                token_verify_url=args.token_verify_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                salt=args.salt,
+                difficulty=args.difficulty,
+                response_field=args.response_field,
+                submit=not args.no_submit,
+                token_verify=args.token_verify,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
             ),
         )
         emit_stress(ret, full=args.full)
