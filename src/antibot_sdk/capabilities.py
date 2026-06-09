@@ -221,6 +221,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "X-Is-Human header JSON / submitted response",
         "scope": "Vercel BotID：从 BotID c.js/简化脚本或 JSON context 提取 key/seed/signature/version，合成低风险 WebGL/browser fingerprint，并复现 PBKDF2-SHA256 + AES-256-GCM 生成 X-Is-Human header；raw 混淆脚本可走 Node VM 最小浏览器环境补全并直接执行 V_C callback，不启动浏览器；可选向受保护接口提交 X-Is-Human/X-Path/X-Method 做协议闭环。",
     },
+    "hcaptcha_hsw": {
+        "provider": "hcaptcha_hsw",
+        "name": "hCaptcha HSW",
+        "category": "solver",
+        "captcha_type": "hcaptcha_hsw_n_experimental",
+        "status": "experimental",
+        "output": "HSW n / proof primitive",
+        "scope": "hCaptcha HSW experimental：用 Node VM 补最小浏览器/WebAssembly/WebCrypto 环境，执行本地或显式获取的 HSW JS/WASM glue，调用 hsw(req) 生成 n/proof；不启动浏览器，不做图像任务，不宣称完整 hCaptcha 绕过。",
+    },
     "friendlycaptcha": {
         "provider": "friendlycaptcha",
         "name": "FriendlyCaptcha",

@@ -174,6 +174,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "perimeterx"
     if any(x in u or x in host for x in ("vercel-botid", "botid", "x-is-human", "/_vercel/botid", "/botid/")):
         return "vercel_botid"
+    if any(x in u or x in host for x in ("hcaptcha-hsw", "hsw.js", "/hsw", "hsl.js")):
+        return "hcaptcha_hsw"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
         return "gunslol"
     if any(x in u or x in host for x in ("h33.ai", "botshield", "h33_bot_token", "/v1/botshield/")):
@@ -834,6 +836,14 @@ def list_profiles() -> dict[str, Any]:
                 "patterns": ["hcaptcha", "h-captcha", "js.hcaptcha.com"],
                 "mode": "browser-hook-observer",
                 "successFields": ["h-captcha-response", "callback token"],
+            }
+        },
+        "hcaptcha_hsw": {
+            "hcaptcha_hsw_n_experimental": {
+                "patterns": ["hCaptcha HSW", "hsw.js", "hsl.js", "checksiteconfig", "getcaptcha n"],
+                "mode": "browserless-node-vm-hsw-function-evaluator",
+                "successFields": ["n", "proof", "HSW payload"],
+                "endpoints": ["GET HSW JS when explicitly allowed", "caller supplies req/checksiteconfig context"],
             }
         },
         "recaptcha": {

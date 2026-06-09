@@ -208,6 +208,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "geetest",
             "yidun",
             "hcaptcha",
+            "hcaptcha_hsw",
             "recaptcha",
             "turnstile",
             "cloudflare",
@@ -661,6 +662,30 @@ async def amain(argv: list[str] | None = None) -> int:
     botid.add_argument("--timeout", type=int, default=15)
     botid.add_argument("--proxy")
     botid.add_argument("--raw", action="store_true")
+
+    hsw = solve_sub.add_parser("hcaptcha_hsw")
+    hsw_source = hsw.add_mutually_exclusive_group(required=True)
+    hsw_source.add_argument("--script-js", help="inline hCaptcha HSW JS, or @/path")
+    hsw_source.add_argument("--script-file")
+    hsw_source.add_argument("--script-url")
+    hsw.add_argument("--allow-network", action="store_true", help="allow fetching --script-url")
+    hsw.add_argument("--req-json", help="HSW req JSON object/string, or @/path")
+    hsw.add_argument("--req-file")
+    hsw.add_argument("--sitekey")
+    hsw.add_argument("--host")
+    hsw.add_argument("--rqdata")
+    hsw.add_argument("--motion-json", help="motionData JSON object, or @/path")
+    hsw.add_argument("--function-name", help="function path, e.g. hsw or module.exports.hsw")
+    hsw.add_argument("--args-json", help="extra positional args JSON list, or @/path")
+    hsw.add_argument("--profile-json")
+    hsw.add_argument("--profile-file")
+    hsw.add_argument("--page-url", default="https://example.test/")
+    hsw.add_argument("--header", action="append", default=[], help="script fetch header KEY=VALUE")
+    hsw.add_argument("--node")
+    hsw.add_argument("--timeout", type=int, default=10)
+    hsw.add_argument("--proxy")
+    hsw.add_argument("--output-dir")
+    hsw.add_argument("--raw", action="store_true")
 
     shpw = solve_sub.add_parser("shapow")
     shpw.add_argument("--base-url", default="https://example.com")
@@ -2122,6 +2147,33 @@ async def amain(argv: list[str] | None = None) -> int:
     sbotid.add_argument("--output-json")
     sbotid.add_argument("--full", action="store_true")
 
+    shsw = stress_sub.add_parser("hcaptcha_hsw")
+    shsw_source = shsw.add_mutually_exclusive_group(required=True)
+    shsw_source.add_argument("--script-js")
+    shsw_source.add_argument("--script-file")
+    shsw_source.add_argument("--script-url")
+    shsw.add_argument("--allow-network", action="store_true")
+    shsw.add_argument("--req-json")
+    shsw.add_argument("--req-file")
+    shsw.add_argument("--sitekey")
+    shsw.add_argument("--host")
+    shsw.add_argument("--rqdata")
+    shsw.add_argument("--motion-json")
+    shsw.add_argument("--function-name")
+    shsw.add_argument("--args-json")
+    shsw.add_argument("--profile-json")
+    shsw.add_argument("--profile-file")
+    shsw.add_argument("--page-url", default="https://example.test/")
+    shsw.add_argument("--header", action="append", default=[])
+    shsw.add_argument("--node")
+    shsw.add_argument("--runs", type=int, default=10)
+    shsw.add_argument("--concurrency", type=int, default=2)
+    shsw.add_argument("--timeout", type=int, default=10)
+    shsw.add_argument("--proxy")
+    shsw.add_argument("--output-dir")
+    shsw.add_argument("--output-json")
+    shsw.add_argument("--full", action="store_true")
+
     sshpw = stress_sub.add_parser("shapow")
     sshpw.add_argument("--base-url", default="https://example.com")
     sshpw.add_argument("--page-url")
@@ -3251,6 +3303,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "geetest",
             "yidun",
             "hcaptcha",
+            "hcaptcha_hsw",
             "recaptcha",
             "turnstile",
             "activehashcash",
@@ -3841,6 +3894,36 @@ async def amain(argv: list[str] | None = None) -> int:
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             headers=botid_headers,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+
+    if args.cmd == "solve" and args.provider == "hcaptcha_hsw":
+        hsw_headers = _kv(args.header)
+        ret = await client.solve_hcaptcha_hsw(
+            script_js=args.script_js,
+            script_file=args.script_file,
+            script_url=args.script_url,
+            allow_network=args.allow_network,
+            req_json=args.req_json,
+            req_file=args.req_file,
+            sitekey=args.sitekey,
+            host=args.host,
+            rqdata=args.rqdata,
+            motion_json=args.motion_json,
+            function_name=args.function_name,
+            args_json=args.args_json,
+            profile=(
+                _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
+                if args.profile_file
+                else _json_arg(args.profile_json)
+            ),
+            page_url=args.page_url,
+            node=args.node,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            headers=hsw_headers,
+            output_dir=args.output_dir,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -5576,6 +5659,44 @@ async def amain(argv: list[str] | None = None) -> int:
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 headers=botid_headers,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+
+    if args.cmd == "stress" and args.provider == "hcaptcha_hsw":
+        hsw_headers = _kv(args.header)
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="hcaptcha_hsw",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_hcaptcha_hsw(
+                script_js=args.script_js,
+                script_file=args.script_file,
+                script_url=args.script_url,
+                allow_network=args.allow_network,
+                req_json=args.req_json,
+                req_file=args.req_file,
+                sitekey=args.sitekey,
+                host=args.host,
+                rqdata=args.rqdata,
+                motion_json=args.motion_json,
+                function_name=args.function_name,
+                args_json=args.args_json,
+                profile=(
+                    _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
+                    if args.profile_file
+                    else _json_arg(args.profile_json)
+                ),
+                page_url=args.page_url,
+                node=args.node,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                headers=hsw_headers,
+                output_dir=str(root / f"run_{i}") if root else None,
             ),
         )
         emit_stress(ret, full=args.full)

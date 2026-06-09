@@ -589,6 +589,13 @@ from .providers.stravcaptcha import (
     verify_stravcaptcha_solution,
     verify_stravcaptcha_token_signature,
 )
+from .providers.hcaptcha_hsw import (
+    HCaptchaHswSolver,
+    build_hcaptcha_req,
+    extract_hcaptcha_hsw_urls,
+    parse_hcaptcha_hsw_result,
+    run_hcaptcha_hsw_vm,
+)
 from .providers.justnocaptcha import (
     JustNoCaptchaChallenge,
     JustNoCaptchaSolution,
@@ -965,6 +972,7 @@ __all__ = [
     "GunsLolSolution",
     "H33BotShieldChallenge",
     "H33BotShieldSolution",
+    "HCaptchaHswSolver",
     "HashGuardChallenge",
     "HashGuardSolution",
     "TrustcaptchaChallenge",
@@ -1149,6 +1157,10 @@ __all__ = [
     "parse_px_cookies",
     "parse_px_response",
     "run_perimeterx_px_vm",
+    "build_hcaptcha_req",
+    "extract_hcaptcha_hsw_urls",
+    "parse_hcaptcha_hsw_result",
+    "run_hcaptcha_hsw_vm",
     "build_botid_fingerprint",
     "chpiopow_hash_bytes",
     "decrypt_auro_mouse_data",

@@ -104,6 +104,7 @@
 | PerimeterX / HUMAN PX | 协议 primitive | `perimeterx_px_sensor_experimental` | experimental | PX collector request / `_px` cookies primitive |
 | Kasada KPSDK | 协议 primitive | `kasada_kpsdk_headers_experimental` | experimental | `x-kpsdk-*` headers / `KPSDK:DONE` |
 | Vercel BotID / X-Is-Human | 协议 solver | `x_is_human_aes_gcm_fingerprint` | prototype | `X-Is-Human` header JSON / submitted response |
+| hCaptcha HSW | 协议 primitive | `hcaptcha_hsw_n_experimental` | experimental | HSW `n` / proof primitive |
 | Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
 | Auro.Network | 协议 solver | `encrypted_behavior_pow` | alpha | validate body / Auro token |
 | FriendlyCaptcha | 协议 solver | `proof_of_work` | alpha | `frc-captcha-solution` payload |
@@ -1080,6 +1081,7 @@ antibot stress guardianwaf \
 - `perimeterx`：experimental provider，先落地 PerimeterX/HUMAN PX 的 browserless VM primitive：用 Node `vm` 补最小 `window/document/navigator/location/fetch/XMLHttpRequest/sendBeacon/Image/Storage/userAgentData` 环境，执行本地或显式允许获取的 `px.js`/collector 脚本，捕获 `/api/v*/collector` 请求、headers/body、`document.cookie` 中的 `_px/_px2/_px3/_pxvid` 写入；可选 replay 到受控 endpoint，解析 `Set-Cookie`/JSON body 里的 PX cookie 和 block/captcha URL。它不启动浏览器，不做视觉挑战，不宣称完整 PX/HUMAN 绕过；真实站仍受脚本版本、appId、pxvid/pxhd、CNAME/collector、cookie/session、TLS/HTTP2 指纹、header order、IP reputation、UA/CH 一致性与服务端策略影响。
 - `kasada_kpsdk`：experimental provider，先落地 Kasada/KPSDK 的 browserless VM primitive：用 Node `vm` 补最小 `window/document/navigator/location/fetch/XMLHttpRequest/Storage/userAgentData` 环境，执行本地或显式允许获取的 `p.js`，再触发 caller 指定的 protected request，捕获 `x-kpsdk-*` headers 和 `KPSDK:DONE` message。它不启动浏览器，不写死公开旧算法，也不宣称完整 Kasada 绕过；真实站仍受 `p.js` 版本、cookie/session、TLS/HTTP2 指纹、UA/CH、header order、Origin/Referer、出口 IP 与服务端状态影响。
 - `vercel_botid`：复现 Vercel BotID `X-Is-Human` header 的核心生成链：解析 BotID 脚本或 JSON context 中的 `key/seed/b/d/v/e/vr`，合成 `p/S/w/s/h/b/d` fingerprint，使用 `PBKDF2-SHA256(key,salt,100000)` 派生 AES-256-GCM key，加密 fingerprint 后输出 header JSON；对 raw/obfuscated `c.js` 新增 `--raw-vm`，用 Node `vm` 补最小 `window/document/WebGL/WebCrypto/navigator` 环境并执行 `V_C` callback，避免启动真实浏览器。新增 `--submit-url/--x-path/--x-method` 协议提交闭环，会把生成的 `X-Is-Human` 连同路由 header 发给受保护接口，并用 HTTP 状态、阻断 marker、可选 `--success-contains` 判断是否通过。
+- `hcaptcha_hsw`：experimental provider，只落地 hCaptcha HSW 的 `n/proof` 原语：用 Node `vm` 补最小 `window/document/navigator/WebAssembly/WebCrypto` 环境，执行本地或显式允许获取的 HSW JS/WASM glue，自动寻找 `hsw`/`module.exports.hsw` 或按 `--function-name` 调用，并把 `req/sitekey/host/rqdata/motionData` 传入生成 `n`。它不启动浏览器，不解图像/语义任务，不提交 `/getcaptcha`，不宣称完整 hCaptcha 绕过；真实站仍受 `rqdata`、`req` 上下文、HSW/WASM 版本、sitekey 策略、TLS/HTTP2 指纹、UA/CH 与服务端风险评分影响。
 
 命令示例：
 
@@ -1167,6 +1169,13 @@ antibot solve perimeterx \
   --submit-url https://target.example/api/v2/collector \
   --raw
 
+antibot solve hcaptcha_hsw \
+  --script-js @hsw.js \
+  --sitekey 10000000-ffff-ffff-ffff-000000000001 \
+  --host target.example \
+  --rqdata business-issued-rqdata \
+  --raw
+
 antibot solve kasada_kpsdk \
   --script-js @p.js \
   --page-url https://target.example/ \
@@ -1206,13 +1215,14 @@ antibot stress pingoo --challenge-json @pingoo-challenge.json --runs 20 --concur
 antibot stress akamai_bm --bm-sz 'A0F0D145~YAAQfixture~3~4~1700000000~3499107~3759692' --runs 20 --concurrency 4
 antibot stress datadome --script-js @tags.js --page-url https://target.example/ --endpoint-url https://api-js.datadome.co/js/ --runs 20 --concurrency 4
 antibot stress perimeterx --script-js @px.js --page-url https://target.example/ --collector-url https://target.example/api/v2/collector --runs 20 --concurrency 4
+antibot stress hcaptcha_hsw --script-js @hsw.js --sitekey 10000000-ffff-ffff-ffff-000000000001 --host target.example --runs 20 --concurrency 4
 antibot stress kasada_kpsdk --script-js @p.js --page-url https://target.example/ --request-url https://target.example/api/protected --runs 20 --concurrency 4
 antibot stress vercel_botid --script-js @botid-output.js --runs 20 --concurrency 4
 antibot stress vercel_botid --script-js @raw-c.js --raw-vm --runs 20 --concurrency 4
 antibot stress vercel_botid --script-js @raw-c.js --raw-vm --submit-url https://target.example/api/contact/test --x-path /api/contact/test --submit --runs 20 --concurrency 4
 ```
 
-当前限制：AWS WAF 的 live `challenge.js` 混淆版本会变化，SDK 目前吃解析后的 JS/JSON fixture；balooProxy 已支持 GET 真实 challenge 页面、求 suffix、带 `_2__bProxy_v` cookie 二次请求的无浏览器闭环；BasedFlare 已支持无浏览器 GET/POST `bot-check` 闭环，若站点额外开启 hCaptcha/reCAPTCHA/BFCaptcha，当前只输出 PoW 部分；acwscv2 已覆盖参考实现和本地 HTML fixture，真实站点若混淆变量/decoder 结构大改需要扩 parser；Pingoo 的 verified JWT 由服务端签名且绑定客户端，必须保持 init/verify 的 IP、UA、Host 一致；Akamai BM 当前是 experimental primitive，只证明 key extraction、sensor transform、minimal JSON envelope、`mn_*` PoW 原语和 mock submit，不等于完整 `_abck`/动态 bmak 通过；DataDome 当前是 browserless VM primitive，只证明 `tags.js` 环境补全、signal request 捕获、cookie 写入/响应 cookie 解析和 mock submit，不等于完整 Device Check/CAPTCHA 通过；PerimeterX/HUMAN PX 当前是 browserless VM primitive，只证明 `px.js` 环境补全、collector request 捕获、`_px*` cookie 写入/响应 cookie 解析和 mock submit，不等于完整 PX/HUMAN 通过；Kasada KPSDK 当前是 browserless VM primitive，只证明环境补全、脚本执行、`fetch/new Request/XMLHttpRequest` 捕获和 `x-kpsdk-*` header 提取，不等于完整 Kasada 通过；Vercel BotID 已支持输出 `X-Is-Human` header 与本地 mock/受控接口 submit flow，本地 parser 对简化/可静态提取脚本最稳，raw obfuscated `c.js` 可用 `--raw-vm` 直接跑最小环境补全；这些 VM 模式需要本机有 `node`，但不需要 npm/Playwright/浏览器；真实站点仍要保持提交接口的 TLS 指纹、UA、Origin/Referer、出口 IP 与领取脚本的环境一致；如果目标未来把 callback、WebGL/crypto 或 SDK hook 链路改形，再接 AST deobf helper 和更厚环境 shim。
+当前限制：AWS WAF 的 live `challenge.js` 混淆版本会变化，SDK 目前吃解析后的 JS/JSON fixture；balooProxy 已支持 GET 真实 challenge 页面、求 suffix、带 `_2__bProxy_v` cookie 二次请求的无浏览器闭环；BasedFlare 已支持无浏览器 GET/POST `bot-check` 闭环，若站点额外开启 hCaptcha/reCAPTCHA/BFCaptcha，当前只输出 PoW 部分；acwscv2 已覆盖参考实现和本地 HTML fixture，真实站点若混淆变量/decoder 结构大改需要扩 parser；Pingoo 的 verified JWT 由服务端签名且绑定客户端，必须保持 init/verify 的 IP、UA、Host 一致；Akamai BM 当前是 experimental primitive，只证明 key extraction、sensor transform、minimal JSON envelope、`mn_*` PoW 原语和 mock submit，不等于完整 `_abck`/动态 bmak 通过；DataDome 当前是 browserless VM primitive，只证明 `tags.js` 环境补全、signal request 捕获、cookie 写入/响应 cookie 解析和 mock submit，不等于完整 Device Check/CAPTCHA 通过；PerimeterX/HUMAN PX 当前是 browserless VM primitive，只证明 `px.js` 环境补全、collector request 捕获、`_px*` cookie 写入/响应 cookie 解析和 mock submit，不等于完整 PX/HUMAN 通过；hCaptcha HSW 当前只证明 HSW JS/WASM glue 的 VM 执行和 `n/proof` 原语，不等于完整 hCaptcha token/视觉任务通过；Kasada KPSDK 当前是 browserless VM primitive，只证明环境补全、脚本执行、`fetch/new Request/XMLHttpRequest` 捕获和 `x-kpsdk-*` header 提取，不等于完整 Kasada 通过；Vercel BotID 已支持输出 `X-Is-Human` header 与本地 mock/受控接口 submit flow，本地 parser 对简化/可静态提取脚本最稳，raw obfuscated `c.js` 可用 `--raw-vm` 直接跑最小环境补全；这些 VM 模式需要本机有 `node`，但不需要 npm/Playwright/浏览器；真实站点仍要保持提交接口的 TLS 指纹、UA、Origin/Referer、出口 IP 与领取脚本的环境一致；如果目标未来把 callback、WebGL/crypto 或 SDK hook 链路改形，再接 AST deobf helper 和更厚环境 shim。
 
 SDK 顶层也暴露这批 solver 和 helper，适合直接嵌到业务代码：
 

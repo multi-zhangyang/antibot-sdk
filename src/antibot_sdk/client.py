@@ -44,6 +44,7 @@ from .providers.h33botshield import H33BotShieldSolver
 from .providers.hashguard import HashGuardSolver
 from .providers.hashptcha import HashptchaSolver
 from .providers.hcaptcha import HCaptchaSolver
+from .providers.hcaptcha_hsw import HCaptchaHswSolver
 from .providers.justnocaptcha import JustNoCaptchaSolver
 from .providers.impost import ImpostSolver
 from .providers.kerberus import KerberusSolver
@@ -149,6 +150,7 @@ class AntibotClient:
         self.geetest = GeeTestCaptchaSolver()
         self.turnstile = TurnstileSolver()
         self.hcaptcha = HCaptchaSolver()
+        self.hcaptcha_hsw = HCaptchaHswSolver()
         self.hashguard = HashGuardSolver()
         self.hashptcha = HashptchaSolver()
         self.justnocaptcha = JustNoCaptchaSolver()
@@ -341,6 +343,9 @@ class AntibotClient:
 
     async def solve_hcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.hcaptcha.solve(**kwargs)
+
+    async def solve_hcaptcha_hsw(self, **kwargs: Any) -> CaptchaResult:
+        return await self.hcaptcha_hsw.solve(**kwargs)
 
     async def solve_gunslol(self, **kwargs: Any) -> CaptchaResult:
         return await self.gunslol.solve(**kwargs)
@@ -1128,6 +1133,41 @@ class AntibotClient:
             botid_kwargs.setdefault("allow_network", True)
             botid_kwargs.setdefault("submit", False)
             return await self.solve_vercel_botid(**botid_kwargs)
+        if provider == "hcaptcha_hsw":
+            hsw_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "script_js",
+                    "script_file",
+                    "script_url",
+                    "allow_network",
+                    "req",
+                    "req_json",
+                    "req_file",
+                    "sitekey",
+                    "host",
+                    "rqdata",
+                    "motion_json",
+                    "function_name",
+                    "args_json",
+                    "profile",
+                    "profile_json",
+                    "profile_file",
+                    "page_url",
+                    "node",
+                    "timeout_sec",
+                    "proxy_server",
+                    "headers",
+                    "output_dir",
+                }
+                and v is not None
+            }
+            hsw_kwargs.setdefault("script_url", target_url)
+            hsw_kwargs.setdefault("allow_network", True)
+            hsw_kwargs.setdefault("page_url", target_url)
+            return await self.solve_hcaptcha_hsw(**hsw_kwargs)
         if provider == "friendlycaptcha":
             frc_kwargs = {
                 k: v

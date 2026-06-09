@@ -22,6 +22,7 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://www.geetest.com/adaptive-captcha-demo") == "geetest"
     assert detect_provider_for_url("https://dun.163.com/trial/jigsaw") == "yidun"
     assert detect_provider_for_url("https://docs.hcaptcha.com/invisible/") == "hcaptcha"
+    assert detect_provider_for_url("https://newassets.hcaptcha.com/captcha/v1/hsw.js") == "hcaptcha_hsw"
     assert detect_provider_for_url("https://cloud.google.com/recaptcha/docs/overview") == "recaptcha"
     assert detect_provider_for_url("https://developers.cloudflare.com/turnstile/") == "turnstile"
     assert detect_provider_for_url("https://captcha.example/api/pow/challenge?siteKey=site-key") == "fcaptcha"
@@ -89,6 +90,7 @@ def test_generic_provider_detection():
     assert "generic_v4" in list_profiles()["geetest"]
     assert "generic_jigsaw" in list_profiles()["yidun"]
     assert "generic_widget" in list_profiles()["hcaptcha"]
+    assert "hcaptcha_hsw_n_experimental" in list_profiles()["hcaptcha_hsw"]
     assert "generic_widget_enterprise" in list_profiles()["recaptcha"]
     assert "generic_widget" in list_profiles()["turnstile"]
     assert "rails_hashcash_sha256" in list_profiles()["activehashcash"]

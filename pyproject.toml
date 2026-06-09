@@ -49,6 +49,7 @@ artifacts = [
   "src/antibot_sdk/vendor/aliyun/package-lock.json",
   "src/antibot_sdk/vendor/aliyun/src/**/*.js",
   "src/antibot_sdk/vendor/datadome/**/*.mjs",
+  "src/antibot_sdk/vendor/hcaptcha_hsw/**/*.mjs",
   "src/antibot_sdk/vendor/kasada_kpsdk/**/*.mjs",
   "src/antibot_sdk/vendor/perimeterx/**/*.mjs",
   "src/antibot_sdk/vendor/vercel_botid/**/*.mjs",

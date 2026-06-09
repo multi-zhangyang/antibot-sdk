@@ -36,6 +36,7 @@ def test_capability_matrix_product_boundary() -> None:
         "perimeterx",
         "kasada_kpsdk",
         "vercel_botid",
+        "hcaptcha_hsw",
         "fcaptcha",
         "friendlycaptcha",
         "getpowcaptcha",
@@ -104,6 +105,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["perimeterx"]["captcha_type"] == "perimeterx_px_sensor_experimental"
     assert solvers["kasada_kpsdk"]["captcha_type"] == "kasada_kpsdk_headers_experimental"
     assert solvers["vercel_botid"]["captcha_type"] == "x_is_human_aes_gcm_fingerprint"
+    assert solvers["hcaptcha_hsw"]["captcha_type"] == "hcaptcha_hsw_n_experimental"
     assert solvers["fcaptcha"]["captcha_type"] == "signals_bound_pow"
     assert solvers["friendlycaptcha"]["captcha_type"] == "proof_of_work"
     assert solvers["getpowcaptcha"]["captcha_type"] == "signals_bound_pow"
@@ -224,3 +226,8 @@ def test_new_protocol_solvers_are_top_level_sdk_exports() -> None:
     assert antibot_sdk.generate_x_is_human_raw_vm
     assert antibot_sdk.parse_botid_script
     assert antibot_sdk.solve_vercel_botid_raw_vm
+    assert antibot_sdk.HCaptchaHswSolver
+    assert antibot_sdk.run_hcaptcha_hsw_vm
+    assert antibot_sdk.extract_hcaptcha_hsw_urls
+    assert antibot_sdk.build_hcaptcha_req
+    assert antibot_sdk.parse_hcaptcha_hsw_result
