@@ -25,6 +25,7 @@ from .providers.cryptopuzzle import CryptoPuzzleSolver
 from .providers.friendlycaptcha import FriendlyCaptchaSolver
 from .providers.geetest import GeeTestCaptchaSolver
 from .providers.getpowcaptcha import GetPowCaptchaSolver
+from .providers.goaway import GoAwaySolver
 from .providers.gunslol import GunsLolSolver
 from .providers.h33botshield import H33BotShieldSolver
 from .providers.hashguard import HashGuardSolver
@@ -85,6 +86,7 @@ class AntibotClient:
         self.cryptopuzzle = CryptoPuzzleSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
         self.getpowcaptcha = GetPowCaptchaSolver()
+        self.goaway = GoAwaySolver()
         self.gunslol = GunsLolSolver()
         self.h33botshield = H33BotShieldSolver()
         self.mcaptcha = MCaptchaSolver()
@@ -187,6 +189,9 @@ class AntibotClient:
 
     async def solve_getpowcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.getpowcaptcha.solve(**kwargs)
+
+    async def solve_goaway(self, **kwargs: Any) -> CaptchaResult:
+        return await self.goaway.solve(**kwargs)
 
     async def solve_fcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.fcaptcha.solve(**kwargs)
@@ -542,6 +547,37 @@ class AntibotClient:
             powxy_kwargs.setdefault("base_url", target_url)
             powxy_kwargs.setdefault("submit", True)
             return await self.solve_powxy(**powxy_kwargs)
+        if provider == "goaway":
+            goaway_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "page_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "challenge_path",
+                    "challenge_name",
+                    "request_id",
+                    "redirect",
+                    "submit",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "chunk_size",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            goaway_kwargs.setdefault("base_url", target_url)
+            goaway_kwargs.setdefault("submit", True)
+            return await self.solve_goaway(**goaway_kwargs)
         if provider == "anubis":
             anubis_kwargs = {
                 k: v

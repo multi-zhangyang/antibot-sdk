@@ -77,6 +77,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "powxy form field / powxy HMAC cookie",
         "scope": "Powxy 反向代理 PoW：解析 challenge 页面 data-identifier/data-difficulty，保持 User-Agent/Accept-Encoding/Accept-Language 一致，复现 SHA256(identifier||uint64_le(nonce)) leading-zero-bit 搜索，POST base64 nonce 换 powxy cookie；不启动浏览器。",
     },
+    "goaway": {
+        "provider": "goaway",
+        "name": "go-away js-pow-sha256",
+        "category": "solver",
+        "captcha_type": "goaway_js_pow_sha256",
+        "status": "alpha",
+        "output": "__goaway_token / go-away state cookie",
+        "scope": "go-away WASM/JS PoW：解析 challenge 页面 script.mjs 与 Request Id，保持 IP/UA/Accept/CH headers 稳定，POST make-challenge 取得 challenge/target，复现 Worker 的 SHA256(challenge||uint64_le(nonce)) < target，GET verify-challenge 换 *-state cookie；不启动浏览器。",
+    },
     "auro": {
         "provider": "auro",
         "name": "Auro.Network",

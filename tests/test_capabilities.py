@@ -18,6 +18,7 @@ def test_capability_matrix_product_boundary() -> None:
         "altcha",
         "albireo",
         "powxy",
+        "goaway",
         "anubis",
         "auro",
         "fcaptcha",
@@ -68,6 +69,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["altcha"]["captcha_type"] == "proof_of_work"
     assert solvers["albireo"]["captcha_type"] == "serverless_signed_pow"
     assert solvers["powxy"]["captcha_type"] == "reverse_proxy_pow"
+    assert solvers["goaway"]["captcha_type"] == "goaway_js_pow_sha256"
     assert solvers["anubis"]["captcha_type"] == "proof_of_work"
     assert solvers["auro"]["captcha_type"] == "encrypted_behavior_pow"
     assert solvers["fcaptcha"]["captcha_type"] == "signals_bound_pow"

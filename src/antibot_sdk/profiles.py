@@ -119,6 +119,11 @@ def detect_provider_for_url(url: str | None) -> str:
         return "albireo"
     if any(x in u or x in host for x in ("powxy", "/.powxy/", "data-identifier", "proof-of-work challenge")):
         return "powxy"
+    if any(
+        x in u or x in host
+        for x in ("go-away", "__goaway", "/challenge/js-pow-sha256", "js-pow-sha256")
+    ):
+        return "goaway"
     if any(x in u or x in host for x in ("auro.network", "auro-captcha", "/api/pow/setup", "/api/pow/validate")):
         return "auro"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
@@ -299,6 +304,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "ip-ua-accept-bound-identifier-sha256-bit-pow-solver",
                 "successFields": ["powxy form field", "powxy cookie"],
                 "endpoints": ["GET protected page", "POST same URL with powxy=<base64 uint64_le nonce>"],
+            }
+        },
+        "goaway": {
+            "goaway_js_pow_sha256": {
+                "patterns": ["go-away", "__goaway", "/challenge/js-pow-sha256", "script.mjs"],
+                "mode": "key-bound-js-wasm-sha256-target-pow-solver",
+                "successFields": ["__goaway_token", "*-state cookie"],
+                "endpoints": ["GET protected page", "POST make-challenge", "GET verify-challenge"],
             }
         },
         "auro": {

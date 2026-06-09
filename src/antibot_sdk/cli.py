@@ -134,6 +134,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "altcha",
             "albireo",
             "powxy",
+            "goaway",
             "anubis",
             "auro",
             "aliyun",
@@ -345,6 +346,27 @@ async def amain(argv: list[str] | None = None) -> int:
     pxy.add_argument("--proxy")
     pxy.add_argument("--output-dir")
     pxy.add_argument("--raw", action="store_true")
+
+    gwa = solve_sub.add_parser("goaway")
+    gwa.add_argument("--base-url", default="https://example.com")
+    gwa.add_argument("--page-url")
+    gwa.add_argument("--challenge-json", help="inline challenge JSON/HTML/key fixture, or @/path")
+    gwa.add_argument("--challenge-file")
+    gwa.add_argument("--challenge-url")
+    gwa.add_argument("--verify-url")
+    gwa.add_argument("--challenge-path")
+    gwa.add_argument("--challenge-name", default="js-pow-sha256")
+    gwa.add_argument("--request-id")
+    gwa.add_argument("--redirect")
+    gwa.add_argument("--submit", action="store_true")
+    gwa.add_argument("--start", type=int, default=0)
+    gwa.add_argument("--max-attempts", type=int, default=5_000_000)
+    gwa.add_argument("--workers", type=int, default=1)
+    gwa.add_argument("--chunk-size", type=int, default=100_000)
+    gwa.add_argument("--timeout", type=int, default=10)
+    gwa.add_argument("--proxy")
+    gwa.add_argument("--output-dir")
+    gwa.add_argument("--raw", action="store_true")
 
     anu = solve_sub.add_parser("anubis")
     anu_source = anu.add_mutually_exclusive_group(required=True)
@@ -1395,6 +1417,30 @@ async def amain(argv: list[str] | None = None) -> int:
     spxy.add_argument("--output-dir")
     spxy.add_argument("--output-json")
     spxy.add_argument("--full", action="store_true")
+
+    sgwa = stress_sub.add_parser("goaway")
+    sgwa.add_argument("--base-url", default="https://example.com")
+    sgwa.add_argument("--page-url")
+    sgwa.add_argument("--challenge-json")
+    sgwa.add_argument("--challenge-file")
+    sgwa.add_argument("--challenge-url")
+    sgwa.add_argument("--verify-url")
+    sgwa.add_argument("--challenge-path")
+    sgwa.add_argument("--challenge-name", default="js-pow-sha256")
+    sgwa.add_argument("--request-id")
+    sgwa.add_argument("--redirect")
+    sgwa.add_argument("--submit", action="store_true")
+    sgwa.add_argument("--start", type=int, default=0)
+    sgwa.add_argument("--max-attempts", type=int, default=5_000_000)
+    sgwa.add_argument("--workers", type=int, default=1)
+    sgwa.add_argument("--chunk-size", type=int, default=100_000)
+    sgwa.add_argument("--runs", type=int, default=10)
+    sgwa.add_argument("--concurrency", type=int, default=2)
+    sgwa.add_argument("--timeout", type=int, default=10)
+    sgwa.add_argument("--proxy")
+    sgwa.add_argument("--output-dir")
+    sgwa.add_argument("--output-json")
+    sgwa.add_argument("--full", action="store_true")
 
     sanu = stress_sub.add_parser("anubis")
     sanu_source = sanu.add_mutually_exclusive_group(required=True)
@@ -2465,6 +2511,9 @@ async def amain(argv: list[str] | None = None) -> int:
             "wicketkeeper",
             "yourcaptcha",
             "silentchallenge",
+            "albireo",
+            "powxy",
+            "goaway",
             "anubis",
         ):
             common.update({
@@ -2656,6 +2705,29 @@ async def amain(argv: list[str] | None = None) -> int:
             challenge_json=args.challenge_json,
             challenge_file=args.challenge_file,
             submit_url=args.submit_url,
+            submit=args.submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            chunk_size=args.chunk_size,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "goaway":
+        ret = await client.solve_goaway(
+            base_url=args.base_url,
+            page_url=args.page_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            challenge_path=args.challenge_path,
+            challenge_name=args.challenge_name,
+            request_id=args.request_id,
+            redirect=args.redirect,
             submit=args.submit,
             start=args.start,
             max_attempts=args.max_attempts,
@@ -3846,6 +3918,37 @@ async def amain(argv: list[str] | None = None) -> int:
                 challenge_json=args.challenge_json,
                 challenge_file=args.challenge_file,
                 submit_url=args.submit_url,
+                submit=args.submit,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                chunk_size=args.chunk_size,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "goaway":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="goaway",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_goaway(
+                base_url=args.base_url,
+                page_url=args.page_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                challenge_path=args.challenge_path,
+                challenge_name=args.challenge_name,
+                request_id=args.request_id,
+                redirect=args.redirect,
                 submit=args.submit,
                 start=args.start,
                 max_attempts=args.max_attempts,
