@@ -185,6 +185,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "encrypted bda / session token primitive",
         "scope": "Arkose/FunCaptcha experimental：复现 public_key token 初始化所需的 browser data array(BDA) 结构、FingerprintJS x64 MurmurHash128、OpenSSL EVP_BytesToKey 风格 AES-256-CBC 加密与 /fc/gt2/public_key/{pkey} 表单提交，解析 token/session/sup 状态；不做视觉游戏自动答题，不宣称完整 FunCaptcha 绕过。",
     },
+    "kasada_kpsdk": {
+        "provider": "kasada_kpsdk",
+        "name": "Kasada KPSDK",
+        "category": "solver",
+        "captcha_type": "kasada_kpsdk_headers_experimental",
+        "status": "experimental",
+        "output": "x-kpsdk-* headers / KPSDK:DONE primitive",
+        "scope": "Kasada/KPSDK experimental：用 Node VM 补最小浏览器环境执行本地/显式获取的 p.js，触发受保护请求并捕获 x-kpsdk-* headers 与 KPSDK:DONE 消息；不启动浏览器，不宣称完整 Kasada 绕过。",
+    },
     "vercel_botid": {
         "provider": "vercel_botid",
         "name": "Vercel BotID / X-Is-Human",

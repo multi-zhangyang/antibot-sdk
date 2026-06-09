@@ -18,6 +18,7 @@ from .providers.basedflare import BasedFlareSolver
 from .providers.acwscv2 import AcwScV2Solver
 from .providers.akamai_bm import AkamaiBmSolver
 from .providers.arkose import ArkoseSolver
+from .providers.kasada_kpsdk import KasadaKpsdkSolver
 from .providers.pingoo import PingooSolver
 from .providers.vercel_botid import VercelBotIdSolver
 from .providers.browser import BrowserAutomation
@@ -103,6 +104,7 @@ class AntibotClient:
         self.acwscv2 = AcwScV2Solver()
         self.akamai_bm = AkamaiBmSolver()
         self.arkose = ArkoseSolver()
+        self.kasada_kpsdk = KasadaKpsdkSolver()
         self.pingoo = PingooSolver()
         self.vercel_botid = VercelBotIdSolver()
         self.fcaptcha = FCaptchaSolver()
@@ -227,6 +229,9 @@ class AntibotClient:
 
     async def solve_arkose(self, **kwargs: Any) -> CaptchaResult:
         return await self.arkose.solve(**kwargs)
+
+    async def solve_kasada_kpsdk(self, **kwargs: Any) -> CaptchaResult:
+        return await self.kasada_kpsdk.solve(**kwargs)
 
     async def solve_pingoo(self, **kwargs: Any) -> CaptchaResult:
         return await self.pingoo.solve(**kwargs)
@@ -975,6 +980,40 @@ class AntibotClient:
                 arkose_kwargs["surl"] = f"{parsed.scheme}://{parsed.netloc}"
             arkose_kwargs.setdefault("site", target_url)
             return await self.solve_arkose(**arkose_kwargs)
+        if provider == "kasada_kpsdk":
+            kasada_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "script_js",
+                    "script_file",
+                    "script_url",
+                    "allow_network",
+                    "page_url",
+                    "request_url",
+                    "request_method",
+                    "request_transport",
+                    "request_headers",
+                    "headers",
+                    "config",
+                    "config_json",
+                    "config_file",
+                    "profile",
+                    "profile_json",
+                    "profile_file",
+                    "node",
+                    "timeout_sec",
+                    "settle_ms",
+                    "proxy_server",
+                    "output_dir",
+                }
+                and v is not None
+            }
+            kasada_kwargs.setdefault("script_url", target_url)
+            kasada_kwargs.setdefault("allow_network", True)
+            kasada_kwargs.setdefault("page_url", target_url)
+            return await self.solve_kasada_kpsdk(**kasada_kwargs)
         if provider == "vercel_botid":
             botid_kwargs = {
                 k: v

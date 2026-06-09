@@ -100,6 +100,7 @@
 | Pingoo Captcha | 协议 solver | `jwt_cookie_sha256_pow` | alpha | `__pingoo_captcha_verified` cookie / verify body |
 | Akamai Bot Manager | 协议 primitive | `akamai_bm_sensor_experimental` | experimental | `sensor_data` / `mn_r` / `_abck` Set-Cookie |
 | Arkose / FunCaptcha | 协议 primitive | `arkose_funcaptcha_bda_token` | experimental | encrypted BDA / session token primitive |
+| Kasada KPSDK | 协议 primitive | `kasada_kpsdk_headers_experimental` | experimental | `x-kpsdk-*` headers / `KPSDK:DONE` |
 | Vercel BotID / X-Is-Human | 协议 solver | `x_is_human_aes_gcm_fingerprint` | prototype | `X-Is-Human` header JSON / submitted response |
 | Anubis | 协议 solver | `proof_of_work` | alpha | pass-challenge params / auth cookie |
 | Auro.Network | 协议 solver | `encrypted_behavior_pow` | alpha | validate body / Auro token |
@@ -1073,6 +1074,7 @@ antibot stress guardianwaf \
 - `pingoo`：复现 pingooio/pingoo 的 CAPTCHA flow：`/__pingoo/captcha/api/init` 返回 challenge 和 `__pingoo_captcha` EdDSA JWT cookie，客户端计算 `SHA256(challenge + nonce)` 十六进制前缀零，`POST /__pingoo/captcha/api/verify` 后拿 `__pingoo_captcha_verified` JWT cookie。该 token 由服务端签名并绑定 IP/User-Agent/Host，SDK 走协议提交而不是伪造签名。
 - `akamai_bm`：experimental provider，只落地 Akamai Bot Manager 的可验证底层原语：从 `bm_sz` 或 Cookie header 提取末尾两个 integer keys，复现 `abck-tools` LCG alphabet shift 和 sensor field shuffle，可构造 minimal v3-style `sensor_data` JSON envelope，并能 POST 到 `/_bm/_data` mock/受控接口；支持 `/_bm/get_params` 的 `k/t/e/a` 状态解析/拉取并注入 sensor，solver 会复用同一个 HTTP session，把 get_params 下发的 cookie 带到后续 `/_bm/_data`，且 `--submit` 未传 `--submit-url` 时可由 `--page-url` 或绝对 `--get-params-url` 自动推导 origin 根路径的 `/_bm/_data`；新增 `_abck` 第 5 段里 `mn_*` challenge 的解析与 SHA-256 byte-wise modulo PoW 求解，输出可嵌入 sensor 的 `mn_r`。它不是完整 Akamai bypass，真实 `_abck` 状态、动态 `bmak`/VM extractor、TLS/HTTP2 指纹仍是后续攻坚点。
 - `arkose`：experimental provider，只落地 Arkose/FunCaptcha 的 token 初始化 primitive：构造 `bda` browser data array，复现 FingerprintJS x64 MurmurHash128、OpenSSL EVP_BytesToKey 风格 AES-256-CBC 加密、base64 包装和 `/fc/gt2/public_key/{pkey}` 表单提交，解析返回 token 中的 session id、public key、analytics tier 与 `sup=1` 状态。它不是完整 FunCaptcha 绕过，不自动解 3D/图片/语义游戏，也不伪造业务后端下发的 blob。
+- `kasada_kpsdk`：experimental provider，先落地 Kasada/KPSDK 的 browserless VM primitive：用 Node `vm` 补最小 `window/document/navigator/location/fetch/XMLHttpRequest/Storage/userAgentData` 环境，执行本地或显式允许获取的 `p.js`，再触发 caller 指定的 protected request，捕获 `x-kpsdk-*` headers 和 `KPSDK:DONE` message。它不启动浏览器，不写死公开旧算法，也不宣称完整 Kasada 绕过；真实站仍受 `p.js` 版本、cookie/session、TLS/HTTP2 指纹、UA/CH、header order、Origin/Referer、出口 IP 与服务端状态影响。
 - `vercel_botid`：复现 Vercel BotID `X-Is-Human` header 的核心生成链：解析 BotID 脚本或 JSON context 中的 `key/seed/b/d/v/e/vr`，合成 `p/S/w/s/h/b/d` fingerprint，使用 `PBKDF2-SHA256(key,salt,100000)` 派生 AES-256-GCM key，加密 fingerprint 后输出 header JSON；对 raw/obfuscated `c.js` 新增 `--raw-vm`，用 Node `vm` 补最小 `window/document/WebGL/WebCrypto/navigator` 环境并执行 `V_C` callback，避免启动真实浏览器。新增 `--submit-url/--x-path/--x-method` 协议提交闭环，会把生成的 `X-Is-Human` 连同路由 header 发给受保护接口，并用 HTTP 状态、阻断 marker、可选 `--success-contains` 判断是否通过。
 
 命令示例：
@@ -1133,6 +1135,13 @@ antibot solve arkose \
   --submit \
   --raw
 
+antibot solve kasada_kpsdk \
+  --script-js @p.js \
+  --page-url https://target.example/ \
+  --request-url https://target.example/api/protected \
+  --header 'Accept=*/*' \
+  --raw
+
 antibot solve vercel_botid \
   --script-js @botid-output.js \
   --raw
@@ -1163,12 +1172,13 @@ antibot stress basedflare --challenge-json @basedflare-challenge.json --difficul
 antibot stress acwscv2 --challenge-html @acw-challenge.html --runs 20 --concurrency 4
 antibot stress pingoo --challenge-json @pingoo-challenge.json --runs 20 --concurrency 4
 antibot stress akamai_bm --bm-sz 'A0F0D145~YAAQfixture~3~4~1700000000~3499107~3759692' --runs 20 --concurrency 4
+antibot stress kasada_kpsdk --script-js @p.js --page-url https://target.example/ --request-url https://target.example/api/protected --runs 20 --concurrency 4
 antibot stress vercel_botid --script-js @botid-output.js --runs 20 --concurrency 4
 antibot stress vercel_botid --script-js @raw-c.js --raw-vm --runs 20 --concurrency 4
 antibot stress vercel_botid --script-js @raw-c.js --raw-vm --submit-url https://target.example/api/contact/test --x-path /api/contact/test --submit --runs 20 --concurrency 4
 ```
 
-当前限制：AWS WAF 的 live `challenge.js` 混淆版本会变化，SDK 目前吃解析后的 JS/JSON fixture；balooProxy 已支持 GET 真实 challenge 页面、求 suffix、带 `_2__bProxy_v` cookie 二次请求的无浏览器闭环；BasedFlare 已支持无浏览器 GET/POST `bot-check` 闭环，若站点额外开启 hCaptcha/reCAPTCHA/BFCaptcha，当前只输出 PoW 部分；acwscv2 已覆盖参考实现和本地 HTML fixture，真实站点若混淆变量/decoder 结构大改需要扩 parser；Pingoo 的 verified JWT 由服务端签名且绑定客户端，必须保持 init/verify 的 IP、UA、Host 一致；Akamai BM 当前是 experimental primitive，只证明 key extraction、sensor transform、minimal JSON envelope、`mn_*` PoW 原语和 mock submit，不等于完整 `_abck`/动态 bmak 通过；Vercel BotID 已支持输出 `X-Is-Human` header 与本地 mock/受控接口 submit flow，本地 parser 对简化/可静态提取脚本最稳，raw obfuscated `c.js` 可用 `--raw-vm` 直接跑最小环境补全；该模式需要本机有 `node`，但不需要 npm/Playwright/浏览器；真实站点仍要保持提交接口的 TLS 指纹、UA、Origin/Referer、出口 IP 与领取脚本的环境一致；如果目标未来把 `V_C` callback 或 WebGL/crypto 链路改形，再接 AST deobf helper。
+当前限制：AWS WAF 的 live `challenge.js` 混淆版本会变化，SDK 目前吃解析后的 JS/JSON fixture；balooProxy 已支持 GET 真实 challenge 页面、求 suffix、带 `_2__bProxy_v` cookie 二次请求的无浏览器闭环；BasedFlare 已支持无浏览器 GET/POST `bot-check` 闭环，若站点额外开启 hCaptcha/reCAPTCHA/BFCaptcha，当前只输出 PoW 部分；acwscv2 已覆盖参考实现和本地 HTML fixture，真实站点若混淆变量/decoder 结构大改需要扩 parser；Pingoo 的 verified JWT 由服务端签名且绑定客户端，必须保持 init/verify 的 IP、UA、Host 一致；Akamai BM 当前是 experimental primitive，只证明 key extraction、sensor transform、minimal JSON envelope、`mn_*` PoW 原语和 mock submit，不等于完整 `_abck`/动态 bmak 通过；Kasada KPSDK 当前是 browserless VM primitive，只证明环境补全、脚本执行、`fetch/new Request/XMLHttpRequest` 捕获和 `x-kpsdk-*` header 提取，不等于完整 Kasada 通过；Vercel BotID 已支持输出 `X-Is-Human` header 与本地 mock/受控接口 submit flow，本地 parser 对简化/可静态提取脚本最稳，raw obfuscated `c.js` 可用 `--raw-vm` 直接跑最小环境补全；这些 VM 模式需要本机有 `node`，但不需要 npm/Playwright/浏览器；真实站点仍要保持提交接口的 TLS 指纹、UA、Origin/Referer、出口 IP 与领取脚本的环境一致；如果目标未来把 callback、WebGL/crypto 或 SDK hook 链路改形，再接 AST deobf helper 和更厚环境 shim。
 
 SDK 顶层也暴露这批 solver 和 helper，适合直接嵌到业务代码：
 

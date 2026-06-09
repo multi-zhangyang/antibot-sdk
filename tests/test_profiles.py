@@ -38,6 +38,8 @@ def test_generic_provider_detection():
     assert detect_provider_for_url("https://gate.example/.basedflare/bot-check") == "basedflare"
     assert detect_provider_for_url("https://gate.example/page?acw_sc__v2=1") == "acwscv2"
     assert detect_provider_for_url("https://gate.example/__pingoo/captcha/api/init") == "pingoo"
+    assert detect_provider_for_url("https://target.example/149e9513-01fa-4fb0-aad4-566afd725d1b/p.js") == "kasada_kpsdk"
+    assert detect_provider_for_url("https://target.example/kpsdk/ips.js") == "kasada_kpsdk"
     assert detect_provider_for_url("https://example.com/_vercel/botid/c.js?i=0&v=3") == "vercel_botid"
     assert detect_provider_for_url("https://captcha.example/crypto-puzzle/challenge") == "cryptopuzzle"
     assert detect_provider_for_url("https://captcha.example/challenge/simp") == "captxa"

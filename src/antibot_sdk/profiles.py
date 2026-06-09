@@ -103,8 +103,15 @@ def detect_provider_for_url(url: str | None) -> str:
 
     if not url:
         return "browser"
+    parsed_url = urlparse(url)
     u = url.lower()
-    host = (urlparse(url).hostname or "").lower()
+    host = (parsed_url.hostname or "").lower()
+    path = (parsed_url.path or "").lower()
+    path_segments = [segment for segment in path.split("/") if segment]
+    kasada_pjs_path = path.endswith("/p.js") and any(
+        len(segment) >= 8 and all(ch in "0123456789abcdef-" for ch in segment)
+        for segment in path_segments[:-1]
+    )
     if any(x in u or x in host for x in ("acw_sc__v2", "acwscv2", "arg1=", "yundunwaf")):
         return "acwscv2"
     if aliyun_profile_for_url(url, "auto") or "aliyun" in u or "alibaba" in u:
@@ -156,6 +163,8 @@ def detect_provider_for_url(url: str | None) -> str:
         for x in ("arkoselabs", "funcaptcha", "/fc/gt2/public_key/", "/fc/gfct/", "fc-token")
     ):
         return "arkose"
+    if kasada_pjs_path or any(x in u or x in host for x in ("kasada", "kpsdk", "x-kpsdk", "/ips.js")):
+        return "kasada_kpsdk"
     if any(x in u or x in host for x in ("vercel-botid", "botid", "x-is-human", "/_vercel/botid", "/botid/")):
         return "vercel_botid"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
@@ -428,6 +437,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "pbkdf2-aes-gcm-fingerprint-header-generator",
                 "successFields": ["X-Is-Human header"],
                 "endpoints": ["GET BotID c.js", "caller submits protected request with X-Is-Human"],
+            }
+        },
+        "kasada_kpsdk": {
+            "kasada_kpsdk_headers_experimental": {
+                "patterns": ["Kasada", "KPSDK", "x-kpsdk-*", "p.js", "ips.js"],
+                "mode": "browserless-node-vm-kpsdk-header-capture",
+                "successFields": ["x-kpsdk-* headers", "KPSDK:DONE message"],
+                "endpoints": ["GET p.js when explicitly allowed", "caller-provided protected request URL"],
             }
         },
         "acwscv2": {

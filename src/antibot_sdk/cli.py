@@ -160,6 +160,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "pingoo",
             "akamai_bm",
             "arkose",
+            "kasada_kpsdk",
             "vercel_botid",
             "aliyun",
             "tencent",
@@ -560,6 +561,28 @@ async def amain(argv: list[str] | None = None) -> int:
     ark.add_argument("--proxy")
     ark.add_argument("--output-dir")
     ark.add_argument("--raw", action="store_true")
+
+    kas = solve_sub.add_parser("kasada_kpsdk")
+    kas_source = kas.add_mutually_exclusive_group(required=True)
+    kas_source.add_argument("--script-js", help="inline Kasada KPSDK p.js, or @/path")
+    kas_source.add_argument("--script-file")
+    kas_source.add_argument("--script-url")
+    kas.add_argument("--allow-network", action="store_true", help="allow fetching --script-url")
+    kas.add_argument("--page-url", default="https://example.test/")
+    kas.add_argument("--request-url", help="protected endpoint to trigger inside the VM")
+    kas.add_argument("--request-method", default="GET")
+    kas.add_argument("--request-transport", default="fetch", choices=["fetch", "xhr"])
+    kas.add_argument("--header", action="append", default=[], help="protected request header KEY=VALUE")
+    kas.add_argument("--config-json", help="KPSDK.configure JSON object, or @/path")
+    kas.add_argument("--config-file")
+    kas.add_argument("--profile-json", help="VM browser profile JSON object, or @/path")
+    kas.add_argument("--profile-file")
+    kas.add_argument("--node", help="node executable")
+    kas.add_argument("--settle-ms", type=int, default=50)
+    kas.add_argument("--timeout", type=int, default=10)
+    kas.add_argument("--proxy")
+    kas.add_argument("--output-dir")
+    kas.add_argument("--raw", action="store_true")
 
     botid = solve_sub.add_parser("vercel_botid")
     botid_source = botid.add_mutually_exclusive_group(required=True)
@@ -1939,6 +1962,31 @@ async def amain(argv: list[str] | None = None) -> int:
     sark.add_argument("--output-json")
     sark.add_argument("--full", action="store_true")
 
+    skas = stress_sub.add_parser("kasada_kpsdk")
+    skas_source = skas.add_mutually_exclusive_group(required=True)
+    skas_source.add_argument("--script-js")
+    skas_source.add_argument("--script-file")
+    skas_source.add_argument("--script-url")
+    skas.add_argument("--allow-network", action="store_true")
+    skas.add_argument("--page-url", default="https://example.test/")
+    skas.add_argument("--request-url")
+    skas.add_argument("--request-method", default="GET")
+    skas.add_argument("--request-transport", default="fetch", choices=["fetch", "xhr"])
+    skas.add_argument("--header", action="append", default=[])
+    skas.add_argument("--config-json")
+    skas.add_argument("--config-file")
+    skas.add_argument("--profile-json")
+    skas.add_argument("--profile-file")
+    skas.add_argument("--node")
+    skas.add_argument("--settle-ms", type=int, default=50)
+    skas.add_argument("--runs", type=int, default=10)
+    skas.add_argument("--concurrency", type=int, default=2)
+    skas.add_argument("--timeout", type=int, default=10)
+    skas.add_argument("--proxy")
+    skas.add_argument("--output-dir")
+    skas.add_argument("--output-json")
+    skas.add_argument("--full", action="store_true")
+
     sbotid = stress_sub.add_parser("vercel_botid")
     sbotid_source = sbotid.add_mutually_exclusive_group(required=True)
     sbotid_source.add_argument("--script-js")
@@ -3152,6 +3200,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "basedflare",
             "acwscv2",
             "pingoo",
+            "kasada_kpsdk",
             "vercel_botid",
         ):
             common.update({
@@ -3563,6 +3612,33 @@ async def amain(argv: list[str] | None = None) -> int:
             timeout_sec=args.timeout,
             headers=arkose_headers,
             proxy=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "kasada_kpsdk":
+        kasada_headers = _kv(args.header)
+        ret = await client.solve_kasada_kpsdk(
+            script_js=args.script_js,
+            script_file=args.script_file,
+            script_url=args.script_url,
+            allow_network=args.allow_network,
+            page_url=args.page_url,
+            request_url=args.request_url,
+            request_method=args.request_method,
+            request_transport=args.request_transport,
+            request_headers=kasada_headers,
+            config_json=args.config_json,
+            config_file=args.config_file,
+            profile=(
+                _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
+                if args.profile_file
+                else _json_arg(args.profile_json)
+            ),
+            node=args.node,
+            timeout_sec=args.timeout,
+            settle_ms=args.settle_ms,
+            proxy_server=args.proxy,
             output_dir=args.output_dir,
         )
         emit(ret, include_raw=args.raw)
@@ -5178,6 +5254,42 @@ async def amain(argv: list[str] | None = None) -> int:
                 timeout_sec=args.timeout,
                 headers=arkose_headers,
                 proxy=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+
+    if args.cmd == "stress" and args.provider == "kasada_kpsdk":
+        kasada_headers = _kv(args.header)
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="kasada_kpsdk",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_kasada_kpsdk(
+                script_js=args.script_js,
+                script_file=args.script_file,
+                script_url=args.script_url,
+                allow_network=args.allow_network,
+                page_url=args.page_url,
+                request_url=args.request_url,
+                request_method=args.request_method,
+                request_transport=args.request_transport,
+                request_headers=kasada_headers,
+                config_json=args.config_json,
+                config_file=args.config_file,
+                profile=(
+                    _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
+                    if args.profile_file
+                    else _json_arg(args.profile_json)
+                ),
+                node=args.node,
+                timeout_sec=args.timeout,
+                settle_ms=args.settle_ms,
+                proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
             ),
         )

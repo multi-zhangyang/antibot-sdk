@@ -319,6 +319,13 @@ from .providers.arkose import (
     parse_arkose_token,
     parse_arkose_token_response,
 )
+from .providers.kasada_kpsdk import (
+    KasadaKpsdkSolver,
+    extract_kasada_sdk_urls,
+    extract_kpsdk_headers,
+    parse_kpsdk_done_messages,
+    run_kasada_kpsdk_vm,
+)
 from .providers.vercel_botid import (
     VercelBotIdScriptContext,
     VercelBotIdSolution,
@@ -894,6 +901,7 @@ __all__ = [
     "ArkoseSolver",
     "ArkoseTokenInfo",
     "ArkoseTokenResponse",
+    "KasadaKpsdkSolver",
     "VercelBotIdScriptContext",
     "VercelBotIdSolution",
     "VercelBotIdSolver",
@@ -1105,6 +1113,10 @@ __all__ = [
     "arkose_build_bda",
     "arkose_build_enhanced_fp",
     "arkose_build_public_key_request",
+    "extract_kasada_sdk_urls",
+    "extract_kpsdk_headers",
+    "parse_kpsdk_done_messages",
+    "run_kasada_kpsdk_vm",
     "build_botid_fingerprint",
     "chpiopow_hash_bytes",
     "decrypt_auro_mouse_data",
