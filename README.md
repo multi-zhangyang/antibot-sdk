@@ -27,7 +27,7 @@
 - BasedFlare / haproxy-protection：新增 HAProxy 边缘 PoW 集成入口，面向 `/.basedflare/bot-check` 的 JSON/HTML challenge，输出 `pow_response` / `_basedflare_pow` cookie；不启动浏览器。
 - Aliyun / acw_sc__v2：新增阿里云/加速乐类 JS cookie challenge solver，解析 `arg1`、混淆 string table、RC4 key 与 40 位 shuffle，本地生成 `acw_sc__v2` clearance cookie，可带 cookie 重试原页面；不启动浏览器。
 - Pingoo Captcha：新增反向代理 JWT challenge cookie + SHA-256 前缀 PoW solver，GET `/__pingoo/captcha/api/init` 领取 challenge，POST `/__pingoo/captcha/api/verify` 换 `__pingoo_captcha_verified` cookie；不启动浏览器。
-- Vercel BotID：新增 `X-Is-Human` header 原型 solver，从 BotID 脚本/JSON context 提取 key、seed、signature、version，合成低风险 fingerprint，复现 PBKDF2-SHA256 + AES-256-GCM 加密 payload；不启动浏览器。
+- Vercel BotID：升级 `X-Is-Human` header solver，从 BotID 脚本/JSON context 提取 key、seed、signature、version，合成低风险 fingerprint，复现 PBKDF2-SHA256 + AES-256-GCM；raw 混淆 `c.js` 可走 Node VM 最小浏览器环境补全并执行 `V_C` callback，不启动浏览器。
 - FriendlyCaptcha：新增 classic `friendly-pow` 协议 solver，获取 puzzle 后本地计算 blake2b nonce，输出 `frc-captcha-solution` payload，不启动浏览器。
 - powCAPTCHA：新增 widget 协议 solver，合成 fingerprint/signals 调 `/challenges/create`，复现 `SHA256(signature+problem+nonce)` 多 problem 前导零 PoW，输出 `powcaptcha-response` token，不启动浏览器。
 - FCaptcha：新增 behavior/environment signals + `signalsHash` 绑定 SHA-256 PoW 协议 solver，补齐 `meta.challengeNonce`、canonical `signalsJson` 和最小提交耗时，可提交 `/api/verify` 换 token，不启动浏览器。
@@ -1067,7 +1067,7 @@ antibot stress guardianwaf \
 - `basedflare`：复现 BasedFlare/haproxy-protection 的 HAProxy edge PoW 路径：解析 `/.basedflare/bot-check` JSON/HTML challenge，兼容上游 Lua `checkdiff` 的非标准 nibble/bit 行为，支持 sha256 与 Argon2id worker PoW，POST `pow_response` 换 `_basedflare_pow` cookie；JSON 只暴露 `ceil(pd/8)` 时可用 `--difficulty-bits` 指定精确难度。
 - `acwscv2`：复现阿里云/加速乐类 `acw_sc__v2` JS cookie challenge：从 HTML 中解析 `arg1`、`_0x4818` string table、rotation、`_0x55f3(index,key)` RC4 key 与 40 位 shuffle，计算 `hex_xor(unbox(arg1), xor_key)` 得到 `acw_sc__v2`，可带 cookie 重试 protected page。
 - `pingoo`：复现 pingooio/pingoo 的 CAPTCHA flow：`/__pingoo/captcha/api/init` 返回 challenge 和 `__pingoo_captcha` EdDSA JWT cookie，客户端计算 `SHA256(challenge + nonce)` 十六进制前缀零，`POST /__pingoo/captcha/api/verify` 后拿 `__pingoo_captcha_verified` JWT cookie。该 token 由服务端签名并绑定 IP/User-Agent/Host，SDK 走协议提交而不是伪造签名。
-- `vercel_botid`：复现 Vercel BotID `X-Is-Human` header 的核心生成链：解析 BotID 脚本或 JSON context 中的 `key/seed/b/d/v/e/vr`，合成 `p/S/w/s/h/b/d` fingerprint，使用 `PBKDF2-SHA256(key,salt,100000)` 派生 AES-256-GCM key，加密 fingerprint 后输出 header JSON。当前是 header generator 原型，真实站点提交由调用方保持 TLS/HTTP/header 环境一致后自持。
+- `vercel_botid`：复现 Vercel BotID `X-Is-Human` header 的核心生成链：解析 BotID 脚本或 JSON context 中的 `key/seed/b/d/v/e/vr`，合成 `p/S/w/s/h/b/d` fingerprint，使用 `PBKDF2-SHA256(key,salt,100000)` 派生 AES-256-GCM key，加密 fingerprint 后输出 header JSON；对 raw/obfuscated `c.js` 新增 `--raw-vm`，用 Node `vm` 补最小 `window/document/WebGL/WebCrypto/navigator` 环境并执行 `V_C` callback，避免启动真实浏览器。真实站点提交由调用方保持 TLS/HTTP/header 环境一致后自持。
 
 命令示例：
 
@@ -1102,6 +1102,11 @@ antibot solve pingoo \
 antibot solve vercel_botid \
   --script-js @botid-output.js \
   --raw
+
+antibot solve vercel_botid \
+  --script-js @raw-c.js \
+  --raw-vm \
+  --raw
 ```
 
 压测示例：
@@ -1114,9 +1119,10 @@ antibot stress basedflare --challenge-json @basedflare-challenge.json --difficul
 antibot stress acwscv2 --challenge-html @acw-challenge.html --runs 20 --concurrency 4
 antibot stress pingoo --challenge-json @pingoo-challenge.json --runs 20 --concurrency 4
 antibot stress vercel_botid --script-js @botid-output.js --runs 20 --concurrency 4
+antibot stress vercel_botid --script-js @raw-c.js --raw-vm --runs 20 --concurrency 4
 ```
 
-当前限制：AWS WAF 的 live `challenge.js` 混淆版本会变化，SDK 目前吃解析后的 JS/JSON fixture；balooProxy 已支持 GET 真实 challenge 页面、求 suffix、带 `_2__bProxy_v` cookie 二次请求的无浏览器闭环；BasedFlare 已支持无浏览器 GET/POST `bot-check` 闭环，若站点额外开启 hCaptcha/reCAPTCHA/BFCaptcha，当前只输出 PoW 部分；acwscv2 已覆盖参考实现和本地 HTML fixture，真实站点若混淆变量/decoder 结构大改需要扩 parser；Pingoo 的 verified JWT 由服务端签名且绑定客户端，必须保持 init/verify 的 IP、UA、Host 一致；Vercel BotID 当前输出 `X-Is-Human` header，本地 parser 对简化/可静态提取脚本最稳，raw obfuscated `c.js` 后续应接 AST deobf helper。
+当前限制：AWS WAF 的 live `challenge.js` 混淆版本会变化，SDK 目前吃解析后的 JS/JSON fixture；balooProxy 已支持 GET 真实 challenge 页面、求 suffix、带 `_2__bProxy_v` cookie 二次请求的无浏览器闭环；BasedFlare 已支持无浏览器 GET/POST `bot-check` 闭环，若站点额外开启 hCaptcha/reCAPTCHA/BFCaptcha，当前只输出 PoW 部分；acwscv2 已覆盖参考实现和本地 HTML fixture，真实站点若混淆变量/decoder 结构大改需要扩 parser；Pingoo 的 verified JWT 由服务端签名且绑定客户端，必须保持 init/verify 的 IP、UA、Host 一致；Vercel BotID 当前输出 `X-Is-Human` header，本地 parser 对简化/可静态提取脚本最稳，raw obfuscated `c.js` 可用 `--raw-vm` 直接跑最小环境补全；该模式需要本机有 `node`，但不需要 npm/Playwright/浏览器；如果目标未来把 `V_C` callback 或 WebGL/crypto 链路改形，再接 AST deobf helper。
 
 SDK 顶层也暴露这批 solver 和 helper，适合直接嵌到业务代码：
 

@@ -280,8 +280,10 @@ from .providers.vercel_botid import (
     derive_botid_aes_key,
     encrypt_botid_fingerprint,
     generate_x_is_human,
+    generate_x_is_human_raw_vm,
     generate_x_is_human_payload,
     parse_botid_script,
+    solve_vercel_botid_raw_vm,
     solve_vercel_botid_script,
 )
 from .providers.wargon2 import (
@@ -1042,6 +1044,7 @@ __all__ = [
     "encode_awswaf_signals",
     "extract_awswaf_script_url",
     "generate_x_is_human",
+    "generate_x_is_human_raw_vm",
     "generate_x_is_human_payload",
     "hex_suffix_by_index",
     "impost_argon2_hash_hex",
@@ -1119,6 +1122,7 @@ __all__ = [
     "solve_acwscv2_value",
     "solve_pingoo_challenge",
     "solve_pingoo_nonce",
+    "solve_vercel_botid_raw_vm",
     "solve_vercel_botid_script",
     "solve_wargon2_challenge",
     "solve_wargon2_nonce",

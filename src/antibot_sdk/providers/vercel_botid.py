@@ -8,6 +8,8 @@ import hashlib
 import json
 import re
 import secrets
+import shutil
+import subprocess
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -30,6 +32,8 @@ DEFAULT_WEBGL = {
     "v": "Google Inc. (Intel)",
     "r": "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)",
 }
+VENDOR_DIR = Path(__file__).resolve().parents[1] / "vendor" / "vercel_botid"
+RAW_VM_SOLVER = VENDOR_DIR / "raw_vm_solver.mjs"
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,6 +281,77 @@ def solve_vercel_botid_script(
     )
 
 
+def solve_vercel_botid_raw_vm(
+    script: str,
+    *,
+    script_url: str | None = None,
+    profile: dict[str, Any] | None = None,
+    node: str | None = None,
+    timeout_sec: int = DEFAULT_TIMEOUT,
+) -> dict[str, Any]:
+    """Execute raw BotID ``c.js`` inside a minimal Node VM browser shim.
+
+    This path is for raw/obfuscated BotID scripts whose key/seed are intentionally hidden behind
+    a string decoder or control-flow proxy.  It still avoids a browser: the VM supplies only the
+    small surface used by the BotID payload builder (``window``, ``document``, WebGL, WebCrypto,
+    ``btoa`` and navigator flags), then invokes the registered ``V_C`` callback and returns the
+    generated ``X-Is-Human`` payload.
+    """
+
+    source = _load_text_arg(script)
+    if not source.strip():
+        raise ValueError("BotID raw VM script is empty")
+    node_bin = node or shutil.which("node")
+    if not node_bin:
+        raise RuntimeError("node executable is required for BotID raw VM mode")
+    if not RAW_VM_SOLVER.is_file():
+        raise RuntimeError(f"BotID raw VM helper is missing: {RAW_VM_SOLVER}")
+    payload = {
+        "script": source,
+        "script_url": script_url,
+        "profile": profile or {},
+        "vm_timeout_ms": max(1000, int(timeout_sec * 1000)),
+    }
+    proc = subprocess.run(
+        [node_bin, str(RAW_VM_SOLVER)],
+        input=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=max(1, int(timeout_sec)),
+        check=False,
+    )
+    if proc.returncode != 0:
+        message = (proc.stderr or proc.stdout or "BotID raw VM helper failed").strip()
+        raise RuntimeError(message)
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("BotID raw VM helper returned non-JSON output") from exc
+    payload_obj = data.get("payload")
+    if not isinstance(payload_obj, dict) or not isinstance(payload_obj.get("s"), str):
+        raise RuntimeError("BotID raw VM helper returned invalid payload")
+    return data
+
+
+def generate_x_is_human_raw_vm(
+    script: str,
+    *,
+    script_url: str | None = None,
+    profile: dict[str, Any] | None = None,
+    node: str | None = None,
+    timeout_sec: int = DEFAULT_TIMEOUT,
+) -> str:
+    data = solve_vercel_botid_raw_vm(
+        script,
+        script_url=script_url,
+        profile=profile,
+        node=node,
+        timeout_sec=timeout_sec,
+    )
+    return _json_dumps(data["payload"])
+
+
 class VercelBotIdSolver:
     """Prototype protocol solver for Vercel BotID ``X-Is-Human`` headers.
 
@@ -294,11 +369,13 @@ class VercelBotIdSolver:
         script_file: str | None = None,
         script_url: str | None = None,
         allow_network: bool = False,
+        raw_vm: bool = False,
         submit: bool = False,
         fingerprint: dict[str, Any] | None = None,
         profile: dict[str, Any] | None = None,
         salt: bytes | str | None = None,
         iv: bytes | str | None = None,
+        node: str | None = None,
         timeout_sec: int = DEFAULT_TIMEOUT,
         proxy_server: str | None = None,
         headers: dict[str, str] | None = None,
@@ -309,6 +386,7 @@ class VercelBotIdSolver:
             "browser": "not_used",
             "script_url": script_url,
             "allow_network": allow_network,
+            "raw_vm": raw_vm,
             "submit": submit,
             "submit_mode": "stub_only",
             "timeout_sec": timeout_sec,
@@ -345,6 +423,35 @@ class VercelBotIdSolver:
                 headers=headers,
                 raw=raw,
             )
+            if raw_vm:
+                vm_data = solve_vercel_botid_raw_vm(
+                    script,
+                    script_url=script_url,
+                    profile=profile,
+                    node=node,
+                    timeout_sec=timeout_sec,
+                )
+                payload = vm_data["payload"]
+                diagnostics.update(
+                    {
+                        "mode": "raw_vm",
+                        "arg1": payload.get("b"),
+                        "arg2": payload.get("d"),
+                        "rand": payload.get("v"),
+                        "version": payload.get("vr"),
+                        "signature_prefix": str(payload.get("e") or "")[:16],
+                        "fingerprint_keys": ["vm_generated"],
+                        "vm": vm_data.get("diagnostics") or {},
+                    }
+                )
+                raw["payload"] = payload
+                raw["vm"] = vm_data.get("diagnostics") or {}
+                header = _json_dumps(payload)
+                if submit:
+                    diagnostics["submitted"] = False
+                    errors.append("Vercel BotID network submit is stub-only; use ticket as X-Is-Human header")
+                    return finish(ok=False, ticket=header, verify_code="submit_stub")
+                return finish(ok=True, ticket=header, verify_code="solved")
             solution = solve_vercel_botid_script(
                 script,
                 fingerprint=fingerprint,

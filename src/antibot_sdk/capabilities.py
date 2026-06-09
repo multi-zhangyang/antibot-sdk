@@ -174,7 +174,7 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "captcha_type": "x_is_human_aes_gcm_fingerprint",
         "status": "prototype",
         "output": "X-Is-Human header JSON",
-        "scope": "Vercel BotID 原型：从 BotID c.js/简化脚本或 JSON context 提取 key/seed/signature/version，合成低风险 WebGL/browser fingerprint，并复现 PBKDF2-SHA256 + AES-256-GCM 生成 X-Is-Human header；不启动浏览器，网络提交为调用方自持。",
+        "scope": "Vercel BotID：从 BotID c.js/简化脚本或 JSON context 提取 key/seed/signature/version，合成低风险 WebGL/browser fingerprint，并复现 PBKDF2-SHA256 + AES-256-GCM 生成 X-Is-Human header；raw 混淆脚本可走 Node VM 最小浏览器环境补全并直接执行 V_C callback，不启动浏览器，网络提交为调用方自持。",
     },
     "friendlycaptcha": {
         "provider": "friendlycaptcha",

@@ -516,6 +516,7 @@ async def amain(argv: list[str] | None = None) -> int:
     botid_source.add_argument("--script-file")
     botid_source.add_argument("--script-url")
     botid.add_argument("--allow-network", action="store_true", help="allow fetching --script-url")
+    botid.add_argument("--raw-vm", action="store_true", help="execute raw c.js in the bundled Node VM shim")
     botid.add_argument("--submit", action="store_true", help="stub-only: returns failure with generated header ticket")
     botid.add_argument("--profile-json", help="fingerprint profile JSON, or @/path")
     botid.add_argument("--profile-file")
@@ -523,6 +524,7 @@ async def amain(argv: list[str] | None = None) -> int:
     botid.add_argument("--fingerprint-file")
     botid.add_argument("--salt", help="optional hex/base64 deterministic salt for tests")
     botid.add_argument("--iv", help="optional hex/base64 deterministic IV for tests")
+    botid.add_argument("--node", help="node executable for --raw-vm")
     botid.add_argument("--timeout", type=int, default=15)
     botid.add_argument("--proxy")
     botid.add_argument("--raw", action="store_true")
@@ -1838,6 +1840,7 @@ async def amain(argv: list[str] | None = None) -> int:
     sbotid_source.add_argument("--script-file")
     sbotid_source.add_argument("--script-url")
     sbotid.add_argument("--allow-network", action="store_true")
+    sbotid.add_argument("--raw-vm", action="store_true")
     sbotid.add_argument("--submit", action="store_true")
     sbotid.add_argument("--profile-json")
     sbotid.add_argument("--profile-file")
@@ -1845,6 +1848,7 @@ async def amain(argv: list[str] | None = None) -> int:
     sbotid.add_argument("--fingerprint-file")
     sbotid.add_argument("--salt")
     sbotid.add_argument("--iv")
+    sbotid.add_argument("--node")
     sbotid.add_argument("--runs", type=int, default=10)
     sbotid.add_argument("--concurrency", type=int, default=2)
     sbotid.add_argument("--timeout", type=int, default=15)
@@ -3405,6 +3409,7 @@ async def amain(argv: list[str] | None = None) -> int:
             script_file=args.script_file,
             script_url=args.script_url,
             allow_network=args.allow_network,
+            raw_vm=args.raw_vm,
             submit=args.submit,
             profile=_json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}") if args.profile_file else _json_arg(args.profile_json),
             fingerprint=(
@@ -3414,6 +3419,7 @@ async def amain(argv: list[str] | None = None) -> int:
             ),
             salt=args.salt,
             iv=args.iv,
+            node=args.node,
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
         )
@@ -4944,6 +4950,7 @@ async def amain(argv: list[str] | None = None) -> int:
                 script_file=args.script_file,
                 script_url=args.script_url,
                 allow_network=args.allow_network,
+                raw_vm=args.raw_vm,
                 submit=args.submit,
                 profile=(
                     _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
@@ -4957,6 +4964,7 @@ async def amain(argv: list[str] | None = None) -> int:
                 ),
                 salt=args.salt,
                 iv=args.iv,
+                node=args.node,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
             ),

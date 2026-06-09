@@ -180,4 +180,6 @@ def test_new_protocol_solvers_are_top_level_sdk_exports() -> None:
     assert antibot_sdk.solve_pingoo_nonce
     assert antibot_sdk.pingoo_hash_hex
     assert antibot_sdk.generate_x_is_human
+    assert antibot_sdk.generate_x_is_human_raw_vm
     assert antibot_sdk.parse_botid_script
+    assert antibot_sdk.solve_vercel_botid_raw_vm

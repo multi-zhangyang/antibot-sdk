@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import shutil
 
 import pytest
 
@@ -14,8 +15,10 @@ from antibot_sdk.providers.vercel_botid import (
     decrypt_botid_fingerprint,
     encrypt_botid_fingerprint,
     generate_x_is_human,
+    generate_x_is_human_raw_vm,
     generate_x_is_human_payload,
     parse_botid_script,
+    solve_vercel_botid_raw_vm,
     solve_vercel_botid_script,
 )
 
@@ -62,6 +65,76 @@ window.V_C = window.V_C || [];
 })();
 """
 
+RAW_VM_SCRIPT_FIXTURE = r"""
+window.V_C = window.V_C || [];
+window.V_C.L = Date.now();
+var k = "", a = "";
+async function D(G, Z) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const material = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(G),
+    "PBKDF2",
+    false,
+    ["deriveBits", "deriveKey"]
+  );
+  const key = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
+    material,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt"]
+  );
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(JSON.stringify(Z))
+  );
+  return btoa(String.fromCharCode(...salt, ...iv, ...new Uint8Array(cipher)));
+}
+function t(G) {
+  k = "YuwH2m" + "B" + "s";
+  const canvas = G.document.createElement("canvas");
+  const gl = canvas.getContext("webgl");
+  const ext = gl.getExtension("WEBGL_debug_renderer_info");
+  return {
+    "v": gl.getParameter(ext.UNMASKED_VENDOR_WEBGL),
+    "r": gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)
+  };
+}
+function W(G) {
+  a = "Zu8vAs" + "n" + "S";
+  return !!G.navigator.webdriver;
+}
+function J() {
+  let G = window;
+  return {
+    "p": false,
+    "S": 0.5908011488308877 * 2,
+    "w": t(G),
+    "s": W(G),
+    "h": false,
+    "b": false,
+    "d": false
+  };
+}
+window.V_C.S = async (G, Z, x, X, F) => {
+  let Y = J(), B = await D([k, a].join(""), Y);
+  return {"b": G, "v": x, "e": X, "s": B, "d": Z, "vr": F};
+};
+(() => {
+  let X = window.V_C.S;
+  window.V_C.push(() => X(
+    0,
+    0,
+    0.40549597232944556 * 0.4278983770123972,
+    "eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0.fixture.tag",
+    "3"
+  ));
+})();
+"""
+
 EXPECTED_KEY = "YuwH2mBsZu8vAsnS"
 EXPECTED_SEED = 1.1816022976617755
 SALT = bytes(range(SALT_BYTES))
@@ -99,9 +172,10 @@ def test_fingerprint_payload_and_aes_gcm_roundtrip() -> None:
         },
     )
 
+    assert fingerprint["S"] == pytest.approx(EXPECTED_SEED)
     assert fingerprint == {
         "p": False,
-        "S": EXPECTED_SEED,
+        "S": fingerprint["S"],
         "w": {"v": "Google Inc. (Intel)", "r": "ANGLE (Intel, fixture GPU, D3D11)"},
         "s": False,
         "h": False,
@@ -153,6 +227,55 @@ def test_solution_and_async_solver_are_local_only() -> None:
     assert result.diagnostics["browser"] == "not_used"
     assert result.diagnostics["key_length"] == len(EXPECTED_KEY)
     assert json.loads(result.ticket or "{}")["s"] == solution.encrypted_fingerprint
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node executable is required for raw VM mode")
+def test_raw_vm_solver_executes_obfuscated_style_c_js_without_browser() -> None:
+    vm_data = solve_vercel_botid_raw_vm(
+        RAW_VM_SCRIPT_FIXTURE,
+        script_url="https://example.test/_vercel/botid/c.js?i=1&v=3&h=example.test",
+        profile={
+            "webgl": {
+                "v": "Google Inc. (Intel)",
+                "r": "ANGLE (Intel, fixture GPU, D3D11)",
+            }
+        },
+        timeout_sec=5,
+    )
+    payload = vm_data["payload"]
+
+    assert payload["b"] == 0
+    assert payload["d"] == 0
+    assert payload["vr"] == "3"
+    assert payload["e"].startswith("eyJ")
+    assert payload["v"] == pytest.approx(0.1735110684448337)
+
+    fingerprint = decrypt_botid_fingerprint(EXPECTED_KEY, payload["s"])
+    assert fingerprint == {
+        "p": False,
+        "S": EXPECTED_SEED,
+        "w": {"v": "Google Inc. (Intel)", "r": "ANGLE (Intel, fixture GPU, D3D11)"},
+        "s": False,
+        "h": False,
+        "b": False,
+        "d": False,
+    }
+
+    header = generate_x_is_human_raw_vm(RAW_VM_SCRIPT_FIXTURE, timeout_sec=5)
+    assert json.loads(header)["vr"] == "3"
+
+    result = asyncio.run(
+        VercelBotIdSolver().solve(
+            script_js=RAW_VM_SCRIPT_FIXTURE,
+            raw_vm=True,
+            profile={"webgl": {"v": "Google Inc. (Intel)", "r": "ANGLE (Intel, fixture GPU, D3D11)"}},
+            timeout_sec=5,
+        )
+    )
+    assert result.ok is True
+    assert result.verify_code == "solved"
+    assert result.diagnostics["mode"] == "raw_vm"
+    assert json.loads(result.ticket or "{}")["vr"] == "3"
 
 
 def test_input_validation_and_network_stub() -> None:
