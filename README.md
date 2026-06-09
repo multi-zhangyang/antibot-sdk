@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -31,6 +31,7 @@
 - chpio/pow-captcha：新增 signed multi-challenge target-match PoW solver，复现 `signedData` 的 UTF-16LE SHA-256 签名与 `SHA256(solution_le||nonce)` target bit 匹配，可提交 redeem，不启动浏览器。
 - Impost：新增 Zig/WASM Argon2id PoW solver，复现 `t=3,m=8192KiB,p=1` 的内存硬化 hash，支持 `leading_zeroes` 与 `target_number` 两种策略，输出 `{challenge, nonce}`，不启动浏览器。
 - Kerberus：新增多盐 u128-score PoW solver，预计算 `SHA256(salt+serializedInput)`，搜索 `SHA256(prefixHash||nonce_dec)` 前 16 字节评分超过阈值，输出 `Solution{id, nonces}`，不启动浏览器。
+- Lapti PoW Captcha：新增 SHA3-512 secret-token 绑定 PoW solver，请求 `/handshake/{data}` 得到 `token=SHA3(data+SECRET)` 与 `complexity`，复现 worker 的 `SHA3(token+nonce)` 前若干字节为零，可提交 `/action/{data}/{nonce}`，不启动浏览器。
 - PaulDotSH/pow-captcha：新增 bcrypt exact/prefix PoW solver，复现 `bcrypt::verify` 与 `bcrypt::hash_with_salt(salt[0:16])` 两条链路，输出 `CaptchaServerInfo` 风格 JSON，不启动浏览器。
 - guns.lol：新增 `_gs_sets` seal PoW solver，解析 `_2xa` 空位模板，枚举十六进制 seal 使 `SHA256(seal+_n+_org_ts)=o09`，再生成 BLAKE3 `_oo` 提交标签，不启动浏览器。
 - HashGuard：新增 target-threshold PoW + JWT proof token 协议 solver，复现 `SHA256(challengeId:seed:nonce) <= target`，提交 `/pow/verifications` 换 proofToken，并可选 `/pow/assertions/introspect`，不启动浏览器。
@@ -78,6 +79,7 @@
 | chpio/pow-captcha | 协议 solver | `target_match_pow` | alpha | challenge solution body / redeemed token |
 | Impost | 协议 solver | `argon2id_pow` | alpha | `{challenge, nonce}` / validated message |
 | Kerberus | 协议 solver | `u128_score_pow` | alpha | `Solution{id, nonces}` / validated token |
+| Lapti | 协议 solver | `sha3_token_pow` | alpha | `data+nonce` / protected action result |
 | PaulDotSH/pow-captcha | 协议 solver | `bcrypt_pow` | alpha | `CaptchaServerInfo` JSON / validated token |
 | guns.lol | 协议 solver | `seal_pow_blake3` | alpha | `{seal, _oo}` / validated token |
 | HashGuard | 协议 solver | `jwt_proof_pow` | alpha | proofToken JWT / introspection result |
@@ -1623,6 +1625,49 @@ async with AntibotClient() as client:
 
 ---
 
+### 18.1 Lapti Proof-of-Work Captcha SHA3 token PoW
+
+Lapti 的关键不是 UI，而是服务端先用私有 `SECRET` 派生 token，再让客户端围绕这个 token 做 SHA3-512 PoW。SDK 不需要知道 SECRET；只要拿到 `/handshake/{data}` 返回的 token，就可以复现 worker 的 proof 搜索。
+
+关键点：
+
+```text
+GET /handshake/{data}
+-> {token: sha3_512(data + SECRET), complexity}
+
+nonce = first decimal counter where first `complexity` bytes of sha3_512(token + nonce) are 0x00
+GET /action/{data}/{nonce}
+-> protected action response
+```
+
+注意：README 里写的是 “first n characters”，但源码实际是：`parseHexString(hash).slice(0, complexity).reduce(sum, 0) === 0`，也就是前 `complexity` 个字节为 `0x00`。SDK 按源码行为实现。
+
+命令示例：
+
+```bash
+antibot solve lapti \
+  --base-url 'https://api.example' \
+  --data 'data-to-be-passed-in-handshake' \
+  --submit
+
+antibot solve lapti \
+  --challenge-json '{"token":"e72fbefe902899bf4dae800b58a5eaf8f6a84fed3e6fc49cd668580b13d7ee185d356b00f614f64c2f837df33d8f88bfd279c41ebd9a3ab0d5e474f80a791f73","complexity":2,"data":"lapti-data-fixture"}' \
+  --timeout 5
+
+antibot stress lapti \
+  --challenge-json '{"token":"e72fbefe902899bf4dae800b58a5eaf8f6a84fed3e6fc49cd668580b13d7ee185d356b00f614f64c2f837df33d8f88bfd279c41ebd9a3ab0d5e474f80a791f73","complexity":2,"data":"lapti-data-fixture"}' \
+  --runs 20 \
+  --concurrency 4
+```
+
+当前定位：
+
+- 这是 secret-token-bound SHA3 PoW 协议 solver；
+- SDK 不伪造未知 SECRET 的 token，只复用服务端 handshake 已签发 token；
+- 是否一次性消费由目标服务端 action 逻辑决定。
+
+---
+
 ### 19. PaulDotSH/pow-captcha bcrypt PoW
 
 PaulDotSH/pow-captcha 是 Rust 版 bcrypt PoW CAPTCHA，核心不是 SHA 前导零，而是 bcrypt 的内存/CPU 成本。它有两种模式：`Exact` 用完整 bcrypt hash 反查小范围 nonce；`Prefix` 用服务端给的 salt 前 16 字节作为 bcrypt salt，客户端枚举 nonce 后比较 bcrypt 字符串前缀。
@@ -2934,6 +2979,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - chpio / chpiopow / signedData magic 相关 URL -> `chpiopow`
 - Impost / impost-captcha 相关 URL -> `impost`
 - Kerberus / difficultyFactor / serializedInput 相关 URL -> `kerberus`
+- Lapti / lapti-pow-captcha / `/handshake/` / `/action/` 相关 URL -> `lapti`
 - PaulDotSH / bcrypt_pow / paulpow 相关 URL -> `paulpow`
 - guns.lol / `_gs_sets` / `_2xa` 相关 URL -> `gunslol`
 - HashGuard / `/pow/challenges` / `/pow/verifications` 相关 URL -> `hashguard`
@@ -3224,6 +3270,11 @@ antibot solve kerberus --challenge-json '{"id":"kerb-1","salts":["salt-a","salt-
 antibot solve kerberus --challenge-url 'https://captcha.example/kerberus/challenge' --validate-url 'https://captcha.example/kerberus/validate' --submit
 antibot stress kerberus --challenge-json '{"id":"kerb-1","salts":["salt-a","salt-b"],"difficultyFactor":50}' --serialized-input 'JRTFM' --runs 20 --concurrency 4
 
+# Lapti
+antibot solve lapti --base-url 'https://api.example' --data 'data-to-be-passed-in-handshake' --submit
+antibot solve lapti --challenge-json '{"token":"e72fbefe902899bf4dae800b58a5eaf8f6a84fed3e6fc49cd668580b13d7ee185d356b00f614f64c2f837df33d8f88bfd279c41ebd9a3ab0d5e474f80a791f73","complexity":2,"data":"lapti-data-fixture"}' --timeout 5
+antibot stress lapti --challenge-json '{"token":"e72fbefe902899bf4dae800b58a5eaf8f6a84fed3e6fc49cd668580b13d7ee185d356b00f614f64c2f837df33d8f88bfd279c41ebd9a3ab0d5e474f80a791f73","complexity":2,"data":"lapti-data-fixture"}' --runs 20 --concurrency 4
+
 # PaulDotSH/pow-captcha
 antibot solve paulpow --challenge-json '{"hash":"$2b$04$WUHhXETkX0fnYkrqZU3ta.8fgEd9BkOc6WYotoKsxTqtUY77MC9KC","salt":"abcdefghijklmnopXYZ","captchaType":"prefix","size":30,"cost":4}' --max-attempts 10
 antibot solve paulpow --challenge-url 'https://captcha.example/paulpow/challenge' --verify-url 'https://captcha.example/paulpow/verify' --submit
@@ -3359,6 +3410,7 @@ anubis_run.json
 friendlycaptcha_run.json
 fcaptcha_run.json
 cap_run.json
+lapti_run.json
 cryptopuzzle_run.json
 captxa_run.json
 swetrix_run.json
@@ -3437,6 +3489,7 @@ src/antibot_sdk/
     stravcaptcha.py         # @strav/captcha stateless HMAC token + hashcash PoW solver
     justnocaptcha.py        # JustNoCaptcha multi-puzzle FNV/fmix PoW protocol solver
     capybara.py             # Capybara-Captcha payload-token-bound SHA-256 PoW solver
+    lapti.py               # Lapti SHA3 secret-token-bound PoW solver
     mcaptcha.py             # mCaptcha SHA-256 PoW protocol solver
     wicketkeeper.py         # Wicketkeeper JWT PoW protocol solver
     yourcaptcha.py          # yourcaptcha behavioral signals + SHA-256 exact PoW protocol solver
@@ -3484,6 +3537,7 @@ tests/
   test_hashguard.py
   test_justnocaptcha.py
   test_capybara.py
+  test_lapti.py
   test_yourcaptcha.py
   test_silentchallenge.py
   test_yidun_slide.py
@@ -3496,12 +3550,15 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 133 passed
+pytest: 141 passed
 Swetrix fixture/mock/live/stress: /generate + SHA256(challenge:nonce) PoW + /verify + /validate 验证通过
 Crovly fixture/mock/stress: /challenge + fingerprint/environment/behavior + SHA256(nonce+counter) bit-PoW + /verify 验证通过
 HashGuard fixture/mock/stress: /pow/challenges + SHA256(challengeId:seed:nonce)<=target + /pow/verifications + /pow/assertions/introspect 验证通过
 TrustCaptcha fixture/mock/stress: /v2/verifications + fingerprint/integrityHash + 多任务 SHA256(input||tcnN) PoW + /challenges 验证通过
 @strav/captcha fixture/mock/stress: /__captcha/pow + HMAC token payload + SHA256(salt:nonce) PoW + middleware submit body 验证通过
+JustNoCaptcha fixture/mock/stress: FNV/fmix multi-puzzle PoW + challengeSalt 完整性校验 + hidden submit body 验证通过
+Capybara-Captcha fixture/mock/stress: payload_token 绑定 + SHA256(nonce+solution) hex-prefix PoW + /api/verify 验证通过
+Lapti fixture/mock/stress: SHA3(data+SECRET) token + SHA3(token+nonce) byte-zero PoW + /action submit 验证通过
 Captxa fixture/mock/stress: browser metrics + JA4-bound opaque token + SHA-256 PoW simple mode 验证通过
 FCaptcha fixture/mock/stress: signalsHash-bound PoW、本地 /api/pow/challenge + /api/verify 验证通过
 PoW Bot Deterrent fixture/mock/stress: scrypt-WASM PoW、本地 /GetChallenges + /Verify 验证通过

@@ -25,6 +25,7 @@ from .providers.hcaptcha import HCaptchaSolver
 from .providers.justnocaptcha import JustNoCaptchaSolver
 from .providers.impost import ImpostSolver
 from .providers.kerberus import KerberusSolver
+from .providers.lapti import LaptiSolver
 from .providers.mcaptcha import MCaptchaSolver
 from .providers.paulpow import PaulPowSolver
 from .providers.pcaptcha import PCaptchaSolver
@@ -94,6 +95,7 @@ class AntibotClient:
         self.justnocaptcha = JustNoCaptchaSolver()
         self.impost = ImpostSolver()
         self.kerberus = KerberusSolver()
+        self.lapti = LaptiSolver()
         self.recaptcha = ReCaptchaSolver()
         self.yidun = YidunCaptchaSolver()
 
@@ -214,6 +216,9 @@ class AntibotClient:
 
     async def solve_kerberus(self, **kwargs: Any) -> CaptchaResult:
         return await self.kerberus.solve(**kwargs)
+
+    async def solve_lapti(self, **kwargs: Any) -> CaptchaResult:
+        return await self.lapti.solve(**kwargs)
 
     async def solve_recaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.recaptcha.solve(**kwargs)
@@ -561,6 +566,41 @@ class AntibotClient:
             }
             jnc_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_justnocaptcha(**jnc_kwargs)
+        if provider == "lapti":
+            lapti_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "data",
+                    "token",
+                    "challenge_json",
+                    "challenge_file",
+                    "base_url",
+                    "handshake_url",
+                    "action_url",
+                    "submit",
+                    "secret",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            if not lapti_kwargs.get("base_url") and not lapti_kwargs.get("handshake_url"):
+                if "/handshake/" in target_url:
+                    lapti_kwargs["handshake_url"] = target_url
+                elif "/action/" in target_url:
+                    lapti_kwargs["action_url"] = target_url
+                    lapti_kwargs["base_url"] = target_url.split("/action/", 1)[0]
+                else:
+                    lapti_kwargs["base_url"] = target_url
+            return await self.solve_lapti(**lapti_kwargs)
         if provider == "capybara":
             capy_kwargs = {
                 k: v

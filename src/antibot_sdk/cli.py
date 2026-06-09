@@ -147,6 +147,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "chpiopow",
             "impost",
             "kerberus",
+            "lapti",
             "mcaptcha",
             "paulpow",
             "pcaptcha",
@@ -476,6 +477,26 @@ async def amain(argv: list[str] | None = None) -> int:
     kerb.add_argument("--proxy")
     kerb.add_argument("--output-dir")
     kerb.add_argument("--raw", action="store_true")
+
+    lapti = solve_sub.add_parser("lapti")
+    lapti_source = lapti.add_mutually_exclusive_group(required=True)
+    lapti_source.add_argument("--base-url", help="Lapti API root; infers /handshake/{data} and /action/{data}/{nonce}")
+    lapti_source.add_argument("--handshake-url", help="explicit GET /handshake/{data} URL")
+    lapti_source.add_argument("--token", help="inline SHA3-512 token returned by handshake")
+    lapti_source.add_argument("--challenge-json", help="inline {token,complexity,data} JSON, or @/path")
+    lapti_source.add_argument("--challenge-file")
+    lapti.add_argument("--data", help="initial client data used by /handshake/{data}")
+    lapti.add_argument("--action-url", help="explicit protected action URL, usually /action/{data}/{nonce}")
+    lapti.add_argument("--submit", action="store_true")
+    lapti.add_argument("--secret", help="optional server SECRET for local token verification")
+    lapti.add_argument("--start", type=int, default=1)
+    lapti.add_argument("--max-attempts", type=int, default=100_000_000)
+    lapti.add_argument("--workers", type=int, default=1)
+    lapti.add_argument("--timeout", type=int, default=60)
+    lapti.add_argument("--proxy")
+    lapti.add_argument("--output-dir")
+    lapti.add_argument("--user-agent")
+    lapti.add_argument("--raw", action="store_true")
 
     mc = solve_sub.add_parser("mcaptcha")
     mc_source = mc.add_mutually_exclusive_group(required=True)
@@ -1295,6 +1316,29 @@ async def amain(argv: list[str] | None = None) -> int:
     skerb.add_argument("--output-json")
     skerb.add_argument("--full", action="store_true")
 
+    slapti = stress_sub.add_parser("lapti")
+    slapti_source = slapti.add_mutually_exclusive_group(required=True)
+    slapti_source.add_argument("--base-url")
+    slapti_source.add_argument("--handshake-url")
+    slapti_source.add_argument("--token")
+    slapti_source.add_argument("--challenge-json")
+    slapti_source.add_argument("--challenge-file")
+    slapti.add_argument("--data")
+    slapti.add_argument("--action-url")
+    slapti.add_argument("--submit", action="store_true")
+    slapti.add_argument("--secret")
+    slapti.add_argument("--runs", type=int, default=10)
+    slapti.add_argument("--concurrency", type=int, default=2)
+    slapti.add_argument("--timeout", type=int, default=60)
+    slapti.add_argument("--start", type=int, default=1)
+    slapti.add_argument("--max-attempts", type=int, default=100_000_000)
+    slapti.add_argument("--workers", type=int, default=1)
+    slapti.add_argument("--proxy")
+    slapti.add_argument("--output-dir")
+    slapti.add_argument("--output-json")
+    slapti.add_argument("--user-agent")
+    slapti.add_argument("--full", action="store_true")
+
     smc = stress_sub.add_parser("mcaptcha")
     smc_source = smc.add_mutually_exclusive_group(required=True)
     smc_source.add_argument("--config-url")
@@ -1928,6 +1972,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "capybara",
             "impost",
             "kerberus",
+            "lapti",
             "mcaptcha",
             "paulpow",
             "pcaptcha",
@@ -2145,6 +2190,27 @@ async def amain(argv: list[str] | None = None) -> int:
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "lapti":
+        ret = await client.solve_lapti(
+            data=args.data,
+            token=args.token,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            base_url=args.base_url,
+            handshake_url=args.handshake_url,
+            action_url=args.action_url,
+            submit=args.submit,
+            secret=args.secret,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -3077,6 +3143,35 @@ async def amain(argv: list[str] | None = None) -> int:
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "lapti":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="lapti",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_lapti(
+                data=args.data,
+                token=args.token,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                base_url=args.base_url,
+                handshake_url=args.handshake_url,
+                action_url=args.action_url,
+                submit=args.submit,
+                secret=args.secret,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
             ),
         )
         emit_stress(ret, full=args.full)

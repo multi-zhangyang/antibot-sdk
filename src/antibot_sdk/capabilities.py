@@ -194,6 +194,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "Solution{id, nonces} / validated token",
         "scope": "Kerberus 多盐 u128-score PoW：对每个 salt 预计算 SHA256(salt+serializedInput)，再搜索 SHA256(prefixHash||nonce_dec) 前 16 字节评分超过阈值，输出 nonces；不启动浏览器。",
     },
+    "lapti": {
+        "provider": "lapti",
+        "name": "Lapti Proof-of-Work Captcha",
+        "category": "solver",
+        "captcha_type": "sha3_token_pow",
+        "status": "alpha",
+        "output": "data+nonce / protected action result",
+        "scope": "Lapti PoW：请求 /handshake/{data} 获取 SHA3-512(data+SECRET) token 与 complexity，复现 worker 中 SHA3-512(token+nonce) 前 complexity 个字节为 0 的搜索，可提交 /action/{data}/{nonce}；不启动浏览器。",
+    },
     "mcaptcha": {
         "provider": "mcaptcha",
         "name": "mCaptcha",

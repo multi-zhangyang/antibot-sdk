@@ -151,6 +151,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "impost"
     if any(x in u or x in host for x in ("kerberus", "/kerberus/", "difficultyfactor")):
         return "kerberus"
+    if any(x in u or x in host for x in ("lapti", "lapti-pow-captcha", "/handshake/", "/action/")):
+        return "lapti"
     if any(x in u or x in host for x in ("mcaptcha", "/api/v1/pow/config", "/api/v1/pow/verify")):
         return "mcaptcha"
     if any(x in u or x in host for x in ("pauldotsh", "bcrypt_pow", "bcrypt-captcha", "/paulpow/")):
@@ -370,6 +372,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "multi-salt-u128-score-pow-protocol-solver",
                 "successFields": ["Solution{id, nonces}", "validated token/status"],
                 "endpoints": ["challenge endpoint returning {id,salts,difficultyFactor}", "validate endpoint"],
+            }
+        },
+        "lapti": {
+            "sha3_token_pow": {
+                "patterns": ["lapti", "lapti-pow-captcha", "/handshake/", "/action/"],
+                "mode": "secret-derived-sha3-token-plus-sha3-proof-solver",
+                "successFields": ["data", "nonce", "action response"],
+                "endpoints": ["GET /handshake/{data}", "GET /action/{data}/{nonce}"],
             }
         },
         "mcaptcha": {
