@@ -534,8 +534,12 @@ async def amain(argv: list[str] | None = None) -> int:
     akbm.add_argument("--mn-start-ts-ms", type=int, help="bmak startTs for mn_*; defaults to now")
     akbm.add_argument("--mn-rounds", type=int, default=10)
     akbm.add_argument("--mn-max-attempts-per-round", type=int, default=250_000)
-    akbm.add_argument("--submit", action="store_true", help="POST {'sensor_data':...} to --submit-url")
-    akbm.add_argument("--submit-url", help="usually https://origin/_bm/_data")
+    akbm.add_argument(
+        "--submit",
+        action="store_true",
+        help="POST {'sensor_data':...} to --submit-url, or derive https://origin/_bm/_data from --page-url/--get-params-url",
+    )
+    akbm.add_argument("--submit-url", help="absolute URL or /path; usually https://origin/_bm/_data")
     akbm.add_argument("--header", action="append", default=[], help="extra submit header KEY=VALUE")
     akbm.add_argument("--timeout", type=int, default=10)
     akbm.add_argument("--raw", action="store_true")

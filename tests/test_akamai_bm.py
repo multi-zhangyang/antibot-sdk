@@ -39,10 +39,14 @@ class _AkamaiBmHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:
         return
 
-    def _write(self, body: bytes, status: int, headers: dict[str, str] | None = None) -> None:
+    def _write(self, body: bytes, status: int, headers: dict[str, str | list[str]] | None = None) -> None:
         self.send_response(status)
         for key, value in (headers or {}).items():
-            self.send_header(key, value)
+            if isinstance(value, list):
+                for item in value:
+                    self.send_header(key, item)
+            else:
+                self.send_header(key, value)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -63,8 +67,11 @@ class _AkamaiBmHandler(BaseHTTPRequestHandler):
             self.path != "/_bm/_data"
             or self.headers.get("Content-Type") != "application/json"
             or decoded.get("provider") != "akamai_bm"
-            or decoded.get("page_url") != "https://target.example/protected?x=1"
-            or decoded.get("events") != [{"type": "load", "t": 7}]
+            or not str(decoded.get("page_url") or "").startswith(("http://127.0.0.1:", "https://target.example/"))
+            or not (
+                decoded.get("events") == [{"type": "load", "t": 7}]
+                or decoded.get("get_params", {}).get("e") == "encrypted-state-fixture"
+            )
         ):
             self._write(b'{"ok":false}', 403, {"Content-Type": "application/json"})
             return
@@ -92,7 +99,17 @@ class _AkamaiBmHandler(BaseHTTPRequestHandler):
             },
             separators=(",", ":"),
         ).encode("utf-8")
-        self._write(body, 200, {"Content-Type": "application/json"})
+        self._write(
+            body,
+            200,
+            {
+                "Content-Type": "application/json",
+                "Set-Cookie": [
+                    "gp_cookie=1; Path=/; HttpOnly",
+                    "bm_sz=refreshed-bm-sz; Path=/; HttpOnly",
+                ],
+            },
+        )
 
 
 def test_extract_bm_sz_keys_from_value_and_cookie_header() -> None:
@@ -203,6 +220,182 @@ def test_get_params_parse_fetch_and_profile_injection() -> None:
     decoded = decode_minimal_sensor_json(result.ticket)
     assert decoded["get_params"]["k"] == f"{KEYS.shuffle_key}~{KEYS.cipher_key}"
     assert decoded["get_params"]["e"] == "encrypted-state-fixture"
+
+
+def test_solver_full_get_params_to_bm_data_flow_derives_submit_url_and_reuses_session() -> None:
+    _AkamaiBmHandler.calls = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _AkamaiBmHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    page_url = f"{base}/protected?x=1"
+    try:
+        result = asyncio.run(
+            AkamaiBmSolver().solve(
+                page_url=page_url,
+                get_params_url="/_bm/get_params?type=sensor",
+                submit=True,
+                user_agent="Mozilla/5.0 fixture",
+                profile={
+                    "provider": "akamai_bm",
+                    "mode": "experimental_minimal",
+                    "ts": 1_700_000_000_000,
+                    "page_url": page_url,
+                    "events": [{"type": "load", "t": 7}],
+                },
+            )
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    assert result.ok is True
+    assert result.verify_code == "submitted"
+    assert result.ticket == "_abck=updated-fixture; Path=/; HttpOnly"
+    assert result.diagnostics["submit_url"] == f"{base}/_bm/_data"
+    assert result.diagnostics["get_params"] is True
+    assert result.diagnostics["keys_source"] == "get_params"
+
+    assert [call["path"] for call in _AkamaiBmHandler.calls] == [
+        "/_bm/get_params?type=sensor",
+        "/_bm/_data",
+    ]
+    assert _AkamaiBmHandler.calls[0]["headers"].get("User-Agent") == "Mozilla/5.0 fixture"
+    post_call = _AkamaiBmHandler.calls[1]
+    assert post_call["headers"].get("User-Agent") == "Mozilla/5.0 fixture"
+    assert "gp_cookie=1" in post_call["headers"].get("Cookie", "")
+    assert "bm_sz=refreshed-bm-sz" in post_call["headers"].get("Cookie", "")
+    assert post_call["decoded"]["get_params"]["e"] == "encrypted-state-fixture"
+    assert post_call["decoded"]["page_url"] == page_url
+
+
+def test_solver_get_params_set_cookie_overrides_initial_cookie_on_submit() -> None:
+    _AkamaiBmHandler.calls = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _AkamaiBmHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    page_url = f"{base}/protected"
+    try:
+        result = asyncio.run(
+            AkamaiBmSolver().solve(
+                bm_sz=BM_SZ,
+                page_url=page_url,
+                get_params_url="/_bm/get_params?type=sensor",
+                submit=True,
+                profile={
+                    "provider": "akamai_bm",
+                    "mode": "experimental_minimal",
+                    "ts": 1_700_000_000_000,
+                    "page_url": page_url,
+                    "events": [{"type": "load", "t": 7}],
+                },
+            )
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    assert result.ok is True
+    post_cookie = _AkamaiBmHandler.calls[1]["headers"].get("Cookie", "")
+    assert "bm_sz=refreshed-bm-sz" in post_cookie
+    assert BM_SZ not in post_cookie
+
+
+def test_solver_derives_submit_url_from_absolute_get_params_url() -> None:
+    _AkamaiBmHandler.calls = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _AkamaiBmHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    page_url = f"{base}/protected"
+    try:
+        result = asyncio.run(
+            AkamaiBmSolver().solve(
+                get_params_url=f"{base}/_bm/get_params?type=sensor",
+                submit=True,
+                profile={
+                    "provider": "akamai_bm",
+                    "mode": "experimental_minimal",
+                    "ts": 1_700_000_000_000,
+                    "page_url": page_url,
+                    "events": [{"type": "load", "t": 7}],
+                },
+            )
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    assert result.ok is True
+    assert result.diagnostics["submit_url"] == f"{base}/_bm/_data"
+    assert [call["path"] for call in _AkamaiBmHandler.calls] == [
+        "/_bm/get_params?type=sensor",
+        "/_bm/_data",
+    ]
+
+
+def test_solver_preserves_get_params_failure_response_preview() -> None:
+    _AkamaiBmHandler.calls = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _AkamaiBmHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    try:
+        result = asyncio.run(
+            AkamaiBmSolver().solve(
+                page_url=f"{base}/protected",
+                get_params_url="/_bm/get_params?type=missing",
+            )
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    assert result.ok is False
+    assert result.raw["getParamsResponse"]["status"] == 404
+    assert result.raw["getParamsResponse"]["bodyPrefix"] == "not found"
+    assert "HTTP 404" in result.errors[0]
+
+
+def test_solver_submit_without_submit_url_requires_absolute_page_url() -> None:
+    result = asyncio.run(
+        AkamaiBmSolver().solve(
+            bm_sz=BM_SZ,
+            submit=True,
+            profile={
+                "provider": "akamai_bm",
+                "mode": "experimental_minimal",
+                "ts": 1_700_000_000_000,
+            },
+        )
+    )
+
+    assert result.ok is False
+    assert result.verify_code == "missing_submit_url"
+    assert result.ticket
+    assert result.ticket.startswith("3;3759692;3499107;0;")
+    assert "submit_url" in result.errors[0]
+
+
+def test_solver_uses_user_agent_header_in_default_profile() -> None:
+    result = asyncio.run(
+        AkamaiBmSolver().solve(
+            bm_sz=BM_SZ,
+            page_url="https://target.example/protected?x=1",
+            headers={"User-Agent": "Mozilla/5.0 header-fixture"},
+        )
+    )
+
+    assert result.ok is True
+    assert result.ticket
+    decoded = decode_minimal_sensor_json(result.ticket)
+    assert decoded["user_agent"] == "Mozilla/5.0 header-fixture"
+    assert result.diagnostics["user_agent_present"] is True
 
 
 def test_mock_submit_to_bm_data_receives_decodable_sensor() -> None:

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from http.cookies import SimpleCookie
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urljoin
+from urllib.parse import unquote, urljoin, urlsplit
 
 import requests
 
@@ -158,6 +158,14 @@ class AkamaiBmGetParams:
         }
 
 
+class AkamaiBmGetParamsError(ValueError):
+    """Fetch/parse failure that keeps the HTTP response preview for diagnostics."""
+
+    def __init__(self, message: str, raw: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.raw = raw
+
+
 def extract_bm_sz_keys(cookie_value: str) -> AkamaiBmKeys:
     """Extract `(shuffle_key, cipher_key)` from a `bm_sz` value or Cookie header."""
 
@@ -200,20 +208,26 @@ def fetch_akamai_bm_get_params(
     timeout: float = 10,
     session: requests.Session | None = None,
 ) -> tuple[AkamaiBmGetParams, dict[str, Any]]:
+    close_client = session is None
     client = session or requests.Session()
-    resp = client.get(get_params_url, headers=headers or {}, cookies=cookies, timeout=timeout)
-    raw = {
-        "status": resp.status_code,
-        "url": resp.url,
-        "contentType": resp.headers.get("Content-Type", ""),
-        "bodyPrefix": resp.text[:200],
-    }
-    resp.raise_for_status()
     try:
-        data = resp.json()
-    except ValueError as exc:
-        raise ValueError("Akamai get_params response must be JSON") from exc
-    return parse_akamai_bm_get_params(data), raw
+        resp = client.get(get_params_url, headers=headers or {}, cookies=cookies, timeout=timeout)
+        raw = {
+            "status": resp.status_code,
+            "url": resp.url,
+            "contentType": resp.headers.get("Content-Type", ""),
+            "bodyPrefix": resp.text[:200],
+        }
+        if not 200 <= resp.status_code < 400:
+            raise AkamaiBmGetParamsError(f"Akamai get_params HTTP {resp.status_code}", raw)
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise AkamaiBmGetParamsError("Akamai get_params response must be JSON", raw) from exc
+        return parse_akamai_bm_get_params(data), raw
+    finally:
+        if close_client:
+            client.close()
 
 
 def parse_abck_mn_challenges(cookie_value: str) -> list[AkamaiAbckMnChallenge]:
@@ -494,8 +508,9 @@ def submit_akamai_bm_sensor(
     raw_body = json.dumps(body, separators=(",", ":"))
     errors: list[str] = []
     response: requests.Response | None = None
+    close_client = session is None
+    client = session or requests.Session()
     try:
-        client = session or requests.Session()
         response = client.post(
             submit_url,
             data=raw_body.encode("utf-8"),
@@ -507,6 +522,9 @@ def submit_akamai_bm_sensor(
     except requests.RequestException as exc:
         errors.append(str(exc))
         ok = False
+    finally:
+        if close_client:
+            client.close()
 
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     diagnostics: dict[str, Any] = {
@@ -594,6 +612,13 @@ class AkamaiBmSolver:
             "get_params_url": get_params_url,
         }
         errors: list[str] = []
+        session = requests.Session()
+        effective_user_agent = _effective_user_agent(user_agent=user_agent, headers=headers)
+        request_headers = _merge_request_headers(user_agent=effective_user_agent, headers=headers)
+        diagnostics["user_agent_present"] = bool(effective_user_agent)
+        diagnostics["cookie_header_overrides_session"] = _has_header(request_headers, "Cookie")
+        if user_agent and _header_value(headers, "User-Agent") and user_agent != _header_value(headers, "User-Agent"):
+            diagnostics["user_agent_header_mismatch"] = True
 
         def finish(*, ok: bool, ticket: str | None = None, verify_code: str | None = None) -> CaptchaResult:
             elapsed_ms = int((time.monotonic() - started) * 1000)
@@ -635,8 +660,9 @@ class AkamaiBmSolver:
                 get_params_url=get_params_url,
                 page_url=page_url,
                 cookies=cookie_map or None,
-                headers=headers,
+                headers=request_headers,
                 timeout_sec=timeout_sec,
+                session=session,
                 raw=raw,
             )
             if bm_params is not None:
@@ -738,14 +764,19 @@ class AkamaiBmSolver:
                     extra = {"get_params": bm_params.to_profile()} if bm_params is not None else None
                     profile_obj = build_minimal_sensor_profile(
                         page_url=page_url,
-                        user_agent=user_agent,
+                        user_agent=effective_user_agent,
                         bm_sz=cookie_map.get("bm_sz"),
                         abck=cookie_map.get("_abck"),
                         extra=extra,
                     )
-                elif bm_params is not None:
+                else:
                     profile_obj = dict(profile_obj)
-                    profile_obj.setdefault("get_params", bm_params.to_profile())
+                    if page_url:
+                        profile_obj.setdefault("page_url", page_url)
+                    if effective_user_agent:
+                        profile_obj.setdefault("user_agent", effective_user_agent)
+                    if bm_params is not None:
+                        profile_obj.setdefault("get_params", bm_params.to_profile())
                 if mn_solution is not None:
                     profile_obj = dict(profile_obj)
                     profile_obj.setdefault("mn_r", mn_solution.result)
@@ -765,15 +796,24 @@ class AkamaiBmSolver:
             if not submit:
                 return finish(ok=True, ticket=sensor, verify_code="solved")
 
-            if not submit_url:
-                errors.append("Akamai BM submit requested but submit_url is missing")
+            try:
+                effective_submit_url = _derive_submit_url(
+                    submit_url,
+                    page_url=page_url,
+                    get_params_url=get_params_url or "",
+                )
+            except ValueError as exc:
+                errors.append(str(exc))
                 return finish(ok=False, ticket=sensor, verify_code="missing_submit_url")
+            diagnostics["submit_url"] = effective_submit_url
+            _prime_session_cookies(session, cookie_map, overwrite=False)
             submit_result = submit_akamai_bm_sensor(
                 sensor,
-                submit_url,
-                cookies=cookie_map or None,
-                headers=headers,
+                effective_submit_url,
+                cookies=None,
+                headers=request_headers,
                 timeout=timeout_sec,
+                session=session,
             )
             raw["submit"] = submit_result.raw
             diagnostics.update(
@@ -791,6 +831,8 @@ class AkamaiBmSolver:
             raw["error"] = {"type": type(exc).__name__, "message": str(exc)}
             errors.append(str(exc))
             return finish(ok=False)
+        finally:
+            session.close()
 
     def _load_or_fetch_get_params(
         self,
@@ -802,6 +844,7 @@ class AkamaiBmSolver:
         cookies: dict[str, str] | None,
         headers: dict[str, str] | None,
         timeout_sec: int,
+        session: requests.Session,
         raw: dict[str, Any],
     ) -> AkamaiBmGetParams | None:
         if get_params_file:
@@ -811,12 +854,17 @@ class AkamaiBmSolver:
         if not get_params_url:
             return None
         url = _derive_get_params_url(get_params_url, page_url=page_url)
-        params, response_raw = fetch_akamai_bm_get_params(
-            url,
-            cookies=cookies,
-            headers=headers,
-            timeout=timeout_sec,
-        )
+        try:
+            params, response_raw = fetch_akamai_bm_get_params(
+                url,
+                cookies=cookies,
+                headers=headers,
+                timeout=timeout_sec,
+                session=session,
+            )
+        except AkamaiBmGetParamsError as exc:
+            raw["getParamsResponse"] = exc.raw
+            raise
         raw["getParamsResponse"] = response_raw
         return params
 
@@ -895,13 +943,83 @@ def _build_mn_result(
 
 def _derive_get_params_url(value: str, *, page_url: str = "") -> str:
     text = value.strip()
-    if text.startswith("http://") or text.startswith("https://"):
+    if _is_absolute_http_url(text):
         return text
     if not page_url:
         raise ValueError("relative get_params_url requires page_url")
     if text.startswith("/"):
         return urljoin(page_url, text)
     return urljoin(page_url, f"/_bm/get_params?type={text}")
+
+
+def _derive_bm_data_url(page_url: str) -> str:
+    return _derive_submit_url(None, page_url=page_url)
+
+
+def _derive_submit_url(
+    submit_url: str | None,
+    *,
+    page_url: str = "",
+    get_params_url: str = "",
+) -> str:
+    """Resolve Akamai submit target from explicit URL, page origin, or get_params origin."""
+
+    explicit = (submit_url or "").strip()
+    base = _origin_base(page_url) or _origin_base(get_params_url)
+    if explicit:
+        if _is_absolute_http_url(explicit):
+            return explicit
+        if not base:
+            raise ValueError("relative submit_url requires absolute page_url or get_params_url")
+        return urljoin(base, explicit)
+    if not base:
+        raise ValueError("Akamai BM submit requires submit_url, absolute page_url, or absolute get_params_url")
+    return urljoin(base, "/_bm/_data")
+
+
+def _origin_base(value: str | None) -> str:
+    text = (value or "").strip()
+    if not _is_absolute_http_url(text):
+        return ""
+    parsed = urlsplit(text)
+    return f"{parsed.scheme.lower()}://{parsed.netloc}"
+
+
+def _is_absolute_http_url(value: str | None) -> bool:
+    parsed = urlsplit((value or "").strip())
+    return parsed.scheme.lower() in {"http", "https"} and bool(parsed.netloc)
+
+
+def _merge_request_headers(*, user_agent: str = "", headers: dict[str, str] | None = None) -> dict[str, str] | None:
+    merged = {str(key): str(value) for key, value in (headers or {}).items()}
+    if user_agent and not any(key.lower() == "user-agent" for key in merged):
+        merged["User-Agent"] = user_agent
+    return merged or None
+
+
+def _effective_user_agent(*, user_agent: str = "", headers: dict[str, str] | None = None) -> str:
+    return _header_value(headers, "User-Agent") or user_agent
+
+
+def _has_header(headers: dict[str, str] | None, name: str) -> bool:
+    return _header_value(headers, name) != ""
+
+
+def _header_value(headers: dict[str, str] | None, name: str) -> str:
+    lower_name = name.lower()
+    for key, value in (headers or {}).items():
+        if str(key).lower() == lower_name:
+            return str(value)
+    return ""
+
+
+def _prime_session_cookies(session: requests.Session, cookies: dict[str, str] | None, *, overwrite: bool) -> None:
+    if not cookies:
+        return
+    current = session.cookies.get_dict()
+    for name, value in cookies.items():
+        if overwrite or name not in current:
+            session.cookies.set(name, value)
 
 
 def _load_text_arg(value: str | None, file_path: str | None = None) -> str | None:
@@ -1027,6 +1145,7 @@ __all__ = [
     "AkamaiAbckMnSolution",
     "AkamaiBmKeys",
     "AkamaiBmGetParams",
+    "AkamaiBmGetParamsError",
     "AkamaiBmSolver",
     "akamai_mn_hash_bytes",
     "akamai_mn_hash_hex",

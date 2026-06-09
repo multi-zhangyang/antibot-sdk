@@ -1069,7 +1069,7 @@ antibot stress guardianwaf \
 - `basedflare`：复现 BasedFlare/haproxy-protection 的 HAProxy edge PoW 路径：解析 `/.basedflare/bot-check` JSON/HTML challenge，兼容上游 Lua `checkdiff` 的非标准 nibble/bit 行为，支持 sha256 与 Argon2id worker PoW，POST `pow_response` 换 `_basedflare_pow` cookie；JSON 只暴露 `ceil(pd/8)` 时可用 `--difficulty-bits` 指定精确难度。
 - `acwscv2`：复现阿里云/加速乐类 `acw_sc__v2` JS cookie challenge：从 HTML 中解析 `arg1`、`_0x4818` string table、rotation、`_0x55f3(index,key)` RC4 key 与 40 位 shuffle，计算 `hex_xor(unbox(arg1), xor_key)` 得到 `acw_sc__v2`，可带 cookie 重试 protected page。
 - `pingoo`：复现 pingooio/pingoo 的 CAPTCHA flow：`/__pingoo/captcha/api/init` 返回 challenge 和 `__pingoo_captcha` EdDSA JWT cookie，客户端计算 `SHA256(challenge + nonce)` 十六进制前缀零，`POST /__pingoo/captcha/api/verify` 后拿 `__pingoo_captcha_verified` JWT cookie。该 token 由服务端签名并绑定 IP/User-Agent/Host，SDK 走协议提交而不是伪造签名。
-- `akamai_bm`：experimental provider，只落地 Akamai Bot Manager 的可验证底层原语：从 `bm_sz` 或 Cookie header 提取末尾两个 integer keys，复现 `abck-tools` LCG alphabet shift 和 sensor field shuffle，可构造 minimal v3-style `sensor_data` JSON envelope，并能 POST 到 `/_bm/_data` mock/受控接口；支持 `/_bm/get_params` 的 `k/t/e/a` 状态解析/拉取并注入 sensor；新增 `_abck` 第 5 段里 `mn_*` challenge 的解析与 SHA-256 byte-wise modulo PoW 求解，输出可嵌入 sensor 的 `mn_r`。它不是完整 Akamai bypass，真实 `_abck` 状态、动态 `bmak`/VM extractor、TLS/HTTP2 指纹仍是后续攻坚点。
+- `akamai_bm`：experimental provider，只落地 Akamai Bot Manager 的可验证底层原语：从 `bm_sz` 或 Cookie header 提取末尾两个 integer keys，复现 `abck-tools` LCG alphabet shift 和 sensor field shuffle，可构造 minimal v3-style `sensor_data` JSON envelope，并能 POST 到 `/_bm/_data` mock/受控接口；支持 `/_bm/get_params` 的 `k/t/e/a` 状态解析/拉取并注入 sensor，solver 会复用同一个 HTTP session，把 get_params 下发的 cookie 带到后续 `/_bm/_data`，且 `--submit` 未传 `--submit-url` 时可由 `--page-url` 或绝对 `--get-params-url` 自动推导 origin 根路径的 `/_bm/_data`；新增 `_abck` 第 5 段里 `mn_*` challenge 的解析与 SHA-256 byte-wise modulo PoW 求解，输出可嵌入 sensor 的 `mn_r`。它不是完整 Akamai bypass，真实 `_abck` 状态、动态 `bmak`/VM extractor、TLS/HTTP2 指纹仍是后续攻坚点。
 - `vercel_botid`：复现 Vercel BotID `X-Is-Human` header 的核心生成链：解析 BotID 脚本或 JSON context 中的 `key/seed/b/d/v/e/vr`，合成 `p/S/w/s/h/b/d` fingerprint，使用 `PBKDF2-SHA256(key,salt,100000)` 派生 AES-256-GCM key，加密 fingerprint 后输出 header JSON；对 raw/obfuscated `c.js` 新增 `--raw-vm`，用 Node `vm` 补最小 `window/document/WebGL/WebCrypto/navigator` 环境并执行 `V_C` callback，避免启动真实浏览器。新增 `--submit-url/--x-path/--x-method` 协议提交闭环，会把生成的 `X-Is-Human` 连同路由 header 发给受保护接口，并用 HTTP 状态、阻断 marker、可选 `--success-contains` 判断是否通过。
 
 命令示例：
@@ -1107,6 +1107,7 @@ antibot solve akamai_bm \
   --abck abck-fixture \
   --page-url https://target.example/protected \
   --get-params-url /_bm/get_params?type=sensor \
+  --submit \
   --raw
 
 antibot solve akamai_bm \
