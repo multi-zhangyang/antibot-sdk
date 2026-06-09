@@ -57,6 +57,94 @@ navigator.sendBeacon("__PX_COLLECTOR__", "_px=1&pxvid=vid-fixture");
 new Image().src = "__PX_COLLECTOR__?pxvid=vid-fixture&_px=1";
 """
 
+DYNAMIC_SCRIPT_FIXTURE = r"""
+window._pxAppId = "PXFIXTURE";
+const s = document.createElement("script");
+s.src = "__PX_COLLECTOR__?script=1&pxvid=vid-fixture";
+s.onload = () => {
+  fetch("__PX_COLLECTOR__", {
+    method: "POST",
+    body: new URLSearchParams({
+      appId: window._pxAppId,
+      pxvid: "vid-fixture",
+      focus: String(document.hasFocus()),
+      visibility: document.visibilityState
+    })
+  });
+};
+s.addEventListener("load", () => {
+  navigator.sendBeacon(
+    "__PX_COLLECTOR__",
+    new Blob(["pxvid=vid-fixture&_px=blob-listener"], {type: "text/plain"})
+  );
+});
+document.head.appendChild(s);
+"""
+
+RAF_ENV_FIXTURE = r"""
+window._pxAppId = "PXFIXTURE";
+const cancelled = requestAnimationFrame(() => {
+  fetch("__PX_COLLECTOR__", {method: "POST", body: "cancelled=1&pxvid=vid-fixture"});
+});
+cancelAnimationFrame(cancelled);
+const observer = new PerformanceObserver((list) => {
+  window.__pxObserved = list.getEntries().length;
+});
+observer.observe({entryTypes: ["resource"]});
+queueMicrotask(() => {
+  const mq = matchMedia("(min-width: 800px) and (pointer: fine)");
+  const style = getComputedStyle(document.documentElement);
+  const entries = performance.getEntriesByType("navigation").length;
+  requestAnimationFrame((ts) => {
+    setImmediate(() => {
+      fetch("__PX_COLLECTOR__", {
+        method: "POST",
+        body: JSON.stringify({
+          appId: window._pxAppId,
+          pxvid: "vid-fixture",
+          raf: typeof ts === "number",
+          mq: mq.matches,
+          display: style.getPropertyValue("display"),
+          entries,
+          observed: window.__pxObserved || 0,
+          effectiveType: navigator.connection.effectiveType
+        })
+      });
+    });
+  });
+});
+"""
+
+SERIALIZED_BODY_FIXTURE = r"""
+window._pxAppId = "PXFIXTURE";
+const params = new URLSearchParams({appId: window._pxAppId, pxvid: "vid-fixture", via: "urlsearch"});
+fetch("__PX_COLLECTOR__", {method: "POST", body: params});
+
+const fd = new FormData();
+fd.append("appId", window._pxAppId);
+fd.append("pxvid", "vid-fixture");
+fd.append("_px", "formdata");
+navigator.sendBeacon("__PX_COLLECTOR__", fd);
+
+const blob = new Blob(["appId=PXFIXTURE&pxvid=vid-fixture&_px=blob"], {type: "text/plain"});
+const blobUrl = URL.createObjectURL(blob);
+const worker = new Worker(blobUrl);
+worker.postMessage({pxvid: "vid-fixture"});
+URL.revokeObjectURL(blobUrl);
+const xhr = new XMLHttpRequest();
+xhr.open("POST", "__PX_COLLECTOR__");
+xhr.send(blob);
+
+navigator.permissions.query({name: "notifications"}).then((permission) => {
+  return navigator.mediaDevices.enumerateDevices().then(() => {
+    fetch("__PX_COLLECTOR__", {
+      method: "POST",
+      body: new URLSearchParams({pxvid: "vid-fixture", permission: permission.state})
+    });
+  });
+});
+"""
+
 COOKIE_ONLY_FIXTURE = r"""
 document.cookie = "_px2=fixture-px2; Path=/";
 """
@@ -100,6 +188,64 @@ def test_perimeterx_vm_captures_xhr_beacon_and_image(script: str, expected_kind:
     assert requests[0]["kind"] == expected_kind
     if expected_kind == "beacon":
         assert {item["kind"] for item in requests} >= {"beacon", "image"}
+
+
+def test_perimeterx_vm_dynamic_script_callback_and_blob_beacon() -> None:
+    data = run_perimeterx_px_vm(
+        DYNAMIC_SCRIPT_FIXTURE,
+        page_url="https://target.example/",
+        collector_url="https://collector.example/api/v2/collector",
+        settle_ms=150,
+        timeout_sec=5,
+    )
+    assert data["errors"] == []
+    requests = extract_px_requests(data, collector_hint="https://collector.example/api/v2/collector")
+    assert [item["kind"] for item in requests][:1] == ["script"]
+    assert {item["kind"] for item in requests} == {"script", "fetch", "beacon"}
+    assert requests[0]["url"] == "https://collector.example/api/v2/collector?script=1&pxvid=vid-fixture"
+    bodies = {item["kind"]: item["body"] for item in requests}
+    assert "focus=true" in bodies["fetch"]
+    assert "visibility=visible" in bodies["fetch"]
+    assert bodies["beacon"] == "pxvid=vid-fixture&_px=blob-listener"
+
+
+def test_perimeterx_vm_raf_matchmedia_performance_and_connection() -> None:
+    data = run_perimeterx_px_vm(
+        RAF_ENV_FIXTURE,
+        page_url="https://target.example/",
+        collector_url="https://collector.example/api/v2/collector",
+        settle_ms=200,
+        timeout_sec=5,
+    )
+    assert data["errors"] == []
+    requests = extract_px_requests(data, collector_hint="https://collector.example/api/v2/collector")
+    assert len(requests) == 1
+    assert "cancelled=1" not in requests[0]["body"]
+    body = json.loads(requests[0]["body"])
+    assert body["raf"] is True
+    assert body["mq"] is True
+    assert body["display"] == "block"
+    assert body["entries"] >= 1
+    assert body["effectiveType"] == "4g"
+
+
+def test_perimeterx_vm_serializes_urlsearchparams_formdata_blob_and_worker_stub() -> None:
+    data = run_perimeterx_px_vm(
+        SERIALIZED_BODY_FIXTURE,
+        page_url="https://target.example/",
+        collector_url="https://collector.example/api/v2/collector",
+        settle_ms=200,
+        timeout_sec=5,
+    )
+    assert data["errors"] == []
+    assert [item["kind"] for item in data["requests"]] == ["fetch", "beacon", "worker", "xhr", "fetch"]
+    assert data["requests"][2]["url"].startswith("blob:https://target.example/")
+    requests = extract_px_requests(data, collector_hint="https://collector.example/api/v2/collector")
+    assert [item["kind"] for item in requests] == ["fetch", "beacon", "xhr", "fetch"]
+    assert requests[0]["body"] == "appId=PXFIXTURE&pxvid=vid-fixture&via=urlsearch"
+    assert requests[1]["body"] == "appId=PXFIXTURE&pxvid=vid-fixture&_px=formdata"
+    assert requests[2]["body"] == "appId=PXFIXTURE&pxvid=vid-fixture&_px=blob"
+    assert "permission=prompt" in requests[3]["body"]
 
 
 def test_px_cookie_response_and_url_helpers() -> None:

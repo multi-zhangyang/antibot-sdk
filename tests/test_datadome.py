@@ -60,6 +60,58 @@ navigator.sendBeacon("__DATADOME_ENDPOINT__", "beacon=1&ddjskey=fixture");
 new Image().src = "__DATADOME_ENDPOINT__?img=1&ddjskey=fixture";
 """
 
+HARDENED_BROWSER_API_FIXTURE = r"""
+window.ddoptions = { endpoint: "__DATADOME_ENDPOINT__" };
+const observerCounts = [];
+new PerformanceObserver((list) => {
+  observerCounts.push(list.getEntries().length);
+}).observe({entryTypes: ["resource"], buffered: true});
+
+const script = document.createElement("script");
+script.src = "__DATADOME_ENDPOINT__?script=1&ddjskey=script";
+script.onload = () => {
+  queueMicrotask(() => {
+    setImmediate(() => {
+      const raf = requestAnimationFrame(() => {
+        const media = matchMedia("(min-width: 100px) and (orientation: landscape)");
+        const style = getComputedStyle(document.documentElement);
+        const params = new URLSearchParams({
+          ddjskey: "urlsearch",
+          jsData: JSON.stringify({
+            focus: document.hasFocus(),
+            visible: document.visibilityState,
+            defaultView: document.defaultView === window,
+            media: media.matches,
+            display: style.getPropertyValue("display"),
+            perf: performance.getEntriesByType("resource").length,
+            connection: navigator.connection.effectiveType,
+          }),
+        });
+        navigator.sendBeacon("__DATADOME_ENDPOINT__", params);
+
+        const form = new FormData();
+        form.append("ddjskey", "formdata");
+        form.append("jsData", JSON.stringify({
+          permissions: !!navigator.permissions,
+          mediaDevices: !!navigator.mediaDevices,
+          observerCounts,
+        }));
+        fetch("__DATADOME_ENDPOINT__", {method: "POST", body: form});
+
+        const blob = new Blob(["ddjskey=blob&jsData=blob"], {type: "application/x-www-form-urlencoded"});
+        fetch("__DATADOME_ENDPOINT__", {method: "POST", body: blob});
+
+        const workerUrl = URL.createObjectURL(new Blob(["postMessage('worker-ready')"], {type: "application/javascript"}));
+        const worker = new Worker(workerUrl);
+        worker.onmessage = () => worker.terminate();
+      });
+      cancelAnimationFrame(raf + 1000);
+    });
+  });
+};
+document.head.appendChild(script);
+"""
+
 DONE_ONLY_COOKIE_FIXTURE = r"""
 document.cookie = "datadome=vm-cookie-only; Path=/";
 """
@@ -104,6 +156,23 @@ def test_datadome_tag_vm_captures_xhr_beacon_and_image(script: str, expected_kin
     assert requests[0]["kind"] == expected_kind
     if expected_kind == "beacon":
         assert {item["kind"] for item in requests} >= {"beacon", "image"}
+
+
+def test_datadome_tag_vm_hardened_browser_api_shims_and_body_serialization() -> None:
+    data = run_datadome_tag_vm(
+        HARDENED_BROWSER_API_FIXTURE,
+        page_url="https://target.example/",
+        endpoint_url="https://api-js.datadome.co/js/",
+        timeout_sec=5,
+        settle_ms=250,
+    )
+    assert data["errors"] == []
+    requests = extract_datadome_requests(data, endpoint_hint="https://api-js.datadome.co/js/")
+    assert any(item["kind"] == "script" and item["url"].endswith("?script=1&ddjskey=script") for item in requests)
+    assert any(item["kind"] == "beacon" and item["body"] and "ddjskey=urlsearch" in item["body"] for item in requests)
+    assert any(item["kind"] == "fetch" and item["body"] and "ddjskey=formdata" in item["body"] for item in requests)
+    assert any(item["kind"] == "fetch" and item["body"] == "ddjskey=blob&jsData=blob" for item in requests)
+    assert data["diagnostics"]["requestCount"] >= 5
 
 
 def test_datadome_cookie_response_and_url_helpers() -> None:
