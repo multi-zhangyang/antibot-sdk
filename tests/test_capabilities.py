@@ -46,6 +46,7 @@ def test_capability_matrix_product_boundary() -> None:
         "kerberus",
         "lapti",
         "mcaptcha",
+        "neoirc",
         "paulpow",
         "pcaptcha",
         "powcaptcha",
@@ -98,6 +99,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["kerberus"]["captcha_type"] == "u128_score_pow"
     assert solvers["lapti"]["captcha_type"] == "sha3_token_pow"
     assert solvers["mcaptcha"]["captcha_type"] == "proof_of_work"
+    assert solvers["neoirc"]["captcha_type"] == "resource_body_bound_hashcash"
     assert solvers["paulpow"]["captcha_type"] == "bcrypt_pow"
     assert solvers["pcaptcha"]["captcha_type"] == "quadratic_residue_pow"
     assert solvers["powcaptcha"]["captcha_type"] == "buffer_reconstruction_pow"

@@ -320,6 +320,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "verify body / mCaptcha token",
         "scope": "mCaptcha SHA-256 PoW：获取 /api/v1/pow/config，复现 bincode(String)+u128 score nonce 搜索，可提交 /verify 换 token；不启动浏览器。",
     },
+    "neoirc": {
+        "provider": "neoirc",
+        "name": "NeoIRC Hashcash",
+        "category": "solver",
+        "captcha_type": "resource_body_bound_hashcash",
+        "status": "alpha",
+        "output": "pow_token / hashcash meta / session token",
+        "scope": "NeoIRC Hashcash：复现 WebCrypto 的 6 字段 SHA-256 Hashcash，支持 session 级 resource 绑定 stamp 和 channel PRIVMSG 的 channel+bodyHash 绑定 stamp，可提交 /api/v1/session；不启动浏览器。",
+    },
     "paulpow": {
         "provider": "paulpow",
         "name": "PaulDotSH/pow-captcha",

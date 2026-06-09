@@ -35,6 +35,7 @@ from .providers.impost import ImpostSolver
 from .providers.kerberus import KerberusSolver
 from .providers.lapti import LaptiSolver
 from .providers.mcaptcha import MCaptchaSolver
+from .providers.neoirc import NeoIrcSolver
 from .providers.paulpow import PaulPowSolver
 from .providers.pcaptcha import PCaptchaSolver
 from .providers.powcaptcha import PowCaptchaSolver
@@ -92,6 +93,7 @@ class AntibotClient:
         self.gunslol = GunsLolSolver()
         self.h33botshield = H33BotShieldSolver()
         self.mcaptcha = MCaptchaSolver()
+        self.neoirc = NeoIrcSolver()
         self.paulpow = PaulPowSolver()
         self.pcaptcha = PCaptchaSolver()
         self.powcaptcha = PowCaptchaSolver()
@@ -206,6 +208,9 @@ class AntibotClient:
 
     async def solve_mcaptcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.mcaptcha.solve(**kwargs)
+
+    async def solve_neoirc(self, **kwargs: Any) -> CaptchaResult:
+        return await self.neoirc.solve(**kwargs)
 
     async def solve_paulpow(self, **kwargs: Any) -> CaptchaResult:
         return await self.paulpow.solve(**kwargs)
@@ -1341,6 +1346,42 @@ class AntibotClient:
                 else:
                     mc_kwargs["base_url"] = target_url
             return await self.solve_mcaptcha(**mc_kwargs)
+        if provider == "neoirc":
+            ni_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "mode",
+                    "base_url",
+                    "api_base",
+                    "server_url",
+                    "session_url",
+                    "challenge_json",
+                    "challenge_file",
+                    "resource",
+                    "bits",
+                    "stamp_date",
+                    "nick",
+                    "channel",
+                    "body",
+                    "body_json",
+                    "body_file",
+                    "body_hash",
+                    "submit",
+                    "start",
+                    "max_attempts",
+                    "workers",
+                    "chunk_size",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            ni_kwargs.setdefault("base_url", target_url)
+            return await self.solve_neoirc(**ni_kwargs)
         if provider == "paulpow":
             pp_kwargs = {
                 k: v

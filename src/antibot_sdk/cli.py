@@ -161,6 +161,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "kerberus",
             "lapti",
             "mcaptcha",
+            "neoirc",
             "paulpow",
             "pcaptcha",
             "powcaptcha",
@@ -725,6 +726,33 @@ async def amain(argv: list[str] | None = None) -> int:
     mc.add_argument("--proxy")
     mc.add_argument("--output-dir")
     mc.add_argument("--raw", action="store_true")
+
+    ni = solve_sub.add_parser("neoirc")
+    ni.add_argument("--mode", choices=["session", "channel"], default="session")
+    ni.add_argument("--base-url", help="NeoIRC root; infers /api/v1/{server,session}")
+    ni.add_argument("--api-base", help="NeoIRC API prefix, e.g. http://host/api/v1")
+    ni.add_argument("--server-url")
+    ni.add_argument("--session-url")
+    ni.add_argument("--challenge-json", help="inline JSON object or stamp, or @/path")
+    ni.add_argument("--challenge-file")
+    ni.add_argument("--resource")
+    ni.add_argument("--bits", type=int)
+    ni.add_argument("--date", dest="stamp_date")
+    ni.add_argument("--nick", default="antibot-sdk")
+    ni.add_argument("--channel")
+    ni.add_argument("--body")
+    ni.add_argument("--body-json")
+    ni.add_argument("--body-file")
+    ni.add_argument("--body-hash")
+    ni.add_argument("--submit", action="store_true")
+    ni.add_argument("--start", type=int, default=0)
+    ni.add_argument("--max-attempts", type=int, default=100_000_000)
+    ni.add_argument("--workers", type=int, default=1)
+    ni.add_argument("--chunk-size", type=int, default=100_000)
+    ni.add_argument("--timeout", type=int, default=20)
+    ni.add_argument("--proxy")
+    ni.add_argument("--output-dir")
+    ni.add_argument("--raw", action="store_true")
 
     pp = solve_sub.add_parser("paulpow")
     pp_source = pp.add_mutually_exclusive_group(required=True)
@@ -1848,6 +1876,36 @@ async def amain(argv: list[str] | None = None) -> int:
     smc.add_argument("--output-json")
     smc.add_argument("--full", action="store_true")
 
+    sni = stress_sub.add_parser("neoirc")
+    sni.add_argument("--mode", choices=["session", "channel"], default="session")
+    sni.add_argument("--base-url")
+    sni.add_argument("--api-base")
+    sni.add_argument("--server-url")
+    sni.add_argument("--session-url")
+    sni.add_argument("--challenge-json")
+    sni.add_argument("--challenge-file")
+    sni.add_argument("--resource")
+    sni.add_argument("--bits", type=int)
+    sni.add_argument("--date", dest="stamp_date")
+    sni.add_argument("--nick", default="antibot-sdk")
+    sni.add_argument("--channel")
+    sni.add_argument("--body")
+    sni.add_argument("--body-json")
+    sni.add_argument("--body-file")
+    sni.add_argument("--body-hash")
+    sni.add_argument("--submit", action="store_true")
+    sni.add_argument("--start", type=int, default=0)
+    sni.add_argument("--max-attempts", type=int, default=100_000_000)
+    sni.add_argument("--workers", type=int, default=1)
+    sni.add_argument("--chunk-size", type=int, default=100_000)
+    sni.add_argument("--runs", type=int, default=10)
+    sni.add_argument("--concurrency", type=int, default=2)
+    sni.add_argument("--timeout", type=int, default=20)
+    sni.add_argument("--proxy")
+    sni.add_argument("--output-dir")
+    sni.add_argument("--output-json")
+    sni.add_argument("--full", action="store_true")
+
     spp = stress_sub.add_parser("paulpow")
     spp_source = spp.add_mutually_exclusive_group(required=True)
     spp_source.add_argument("--challenge-json")
@@ -2536,6 +2594,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "kerberus",
             "lapti",
             "mcaptcha",
+            "neoirc",
             "paulpow",
             "pcaptcha",
             "powcaptcha",
@@ -3152,6 +3211,35 @@ async def amain(argv: list[str] | None = None) -> int:
             start=args.start,
             max_attempts=args.max_attempts,
             workers=args.workers,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "neoirc":
+        ret = await client.solve_neoirc(
+            mode=args.mode,
+            base_url=args.base_url,
+            api_base=args.api_base,
+            server_url=args.server_url,
+            session_url=args.session_url,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            resource=args.resource,
+            bits=args.bits,
+            stamp_date=args.stamp_date,
+            nick=args.nick,
+            channel=args.channel,
+            body=args.body,
+            body_json=args.body_json,
+            body_file=args.body_file,
+            body_hash=args.body_hash,
+            submit=args.submit,
+            start=args.start,
+            max_attempts=args.max_attempts,
+            workers=args.workers,
+            chunk_size=args.chunk_size,
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
             output_dir=args.output_dir,
@@ -4514,6 +4602,43 @@ async def amain(argv: list[str] | None = None) -> int:
                 submit=not args.no_submit,
                 max_attempts=args.max_attempts,
                 workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "neoirc":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="neoirc",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_neoirc(
+                mode=args.mode,
+                base_url=args.base_url,
+                api_base=args.api_base,
+                server_url=args.server_url,
+                session_url=args.session_url,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                resource=args.resource,
+                bits=args.bits,
+                stamp_date=args.stamp_date,
+                nick=args.nick,
+                channel=args.channel,
+                body=args.body,
+                body_json=args.body_json,
+                body_file=args.body_file,
+                body_hash=args.body_hash,
+                submit=args.submit,
+                start=args.start,
+                max_attempts=args.max_attempts,
+                workers=args.workers,
+                chunk_size=args.chunk_size,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,

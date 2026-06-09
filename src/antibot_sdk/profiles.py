@@ -196,6 +196,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "lapti"
     if any(x in u or x in host for x in ("mcaptcha", "/api/v1/pow/config", "/api/v1/pow/verify")):
         return "mcaptcha"
+    if any(x in u or x in host for x in ("neoirc", "/api/v1/server", "pow_token", "hashcash_bits")):
+        return "neoirc"
     if any(x in u or x in host for x in ("pauldotsh", "bcrypt_pow", "bcrypt-captcha", "/paulpow/")):
         return "paulpow"
     if any(x in u or x in host for x in ("p-captcha", "pcaptcha", "quadraticresidueproblem")):
@@ -533,6 +535,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "mcaptcha-sha256-pow-protocol-solver",
                 "successFields": ["verify body", "mCaptcha token"],
                 "endpoints": ["/api/v1/pow/config", "/api/v1/pow/verify", "/api/v1/pow/siteverify"],
+            }
+        },
+        "neoirc": {
+            "resource_body_bound_hashcash": {
+                "patterns": ["neoirc", "/api/v1/server", "hashcash_bits", "pow_token"],
+                "mode": "six-field-sha256-hashcash-resource-and-body-bound-solver",
+                "successFields": ["pow_token", "meta.hashcash", "session token"],
+                "endpoints": ["GET /api/v1/server", "POST /api/v1/session", "channel meta hashcash"],
             }
         },
         "paulpow": {
