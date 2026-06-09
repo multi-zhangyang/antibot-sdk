@@ -1081,7 +1081,7 @@ antibot stress guardianwaf \
 - `perimeterx`：experimental provider，先落地 PerimeterX/HUMAN PX 的 browserless VM primitive：用 Node `vm` 补最小 `window/document/navigator/location/fetch/XMLHttpRequest/sendBeacon/Image/Storage/userAgentData` 环境，执行本地或显式允许获取的 `px.js`/collector 脚本，捕获 `/api/v*/collector` 请求、headers/body、`document.cookie` 中的 `_px/_px2/_px3/_pxvid` 写入；可选 replay 到受控 endpoint，解析 `Set-Cookie`/JSON body 里的 PX cookie 和 block/captcha URL。它不启动浏览器，不做视觉挑战，不宣称完整 PX/HUMAN 绕过；真实站仍受脚本版本、appId、pxvid/pxhd、CNAME/collector、cookie/session、TLS/HTTP2 指纹、header order、IP reputation、UA/CH 一致性与服务端策略影响。
 - `kasada_kpsdk`：experimental provider，先落地 Kasada/KPSDK 的 browserless VM primitive：用 Node `vm` 补最小 `window/document/navigator/location/fetch/XMLHttpRequest/Storage/userAgentData` 环境，执行本地或显式允许获取的 `p.js`，再触发 caller 指定的 protected request，捕获 `x-kpsdk-*` headers 和 `KPSDK:DONE` message。它不启动浏览器，不写死公开旧算法，也不宣称完整 Kasada 绕过；真实站仍受 `p.js` 版本、cookie/session、TLS/HTTP2 指纹、UA/CH、header order、Origin/Referer、出口 IP 与服务端状态影响。
 - `vercel_botid`：复现 Vercel BotID `X-Is-Human` header 的核心生成链：解析 BotID 脚本或 JSON context 中的 `key/seed/b/d/v/e/vr`，合成 `p/S/w/s/h/b/d` fingerprint，使用 `PBKDF2-SHA256(key,salt,100000)` 派生 AES-256-GCM key，加密 fingerprint 后输出 header JSON；对 raw/obfuscated `c.js` 新增 `--raw-vm`，用 Node `vm` 补最小 `window/document/WebGL/WebCrypto/navigator` 环境并执行 `V_C` callback，避免启动真实浏览器。新增 `--submit-url/--x-path/--x-method` 协议提交闭环，会把生成的 `X-Is-Human` 连同路由 header 发给受保护接口，并用 HTTP 状态、阻断 marker、可选 `--success-contains` 判断是否通过。
-- `hcaptcha_hsw`：experimental provider，只落地 hCaptcha HSW 的 `n/proof` 原语：用 Node `vm` 补最小 `window/document/navigator/WebAssembly/WebCrypto` 环境，执行本地或显式允许获取的 HSW JS/WASM glue，自动寻找 `hsw`/`module.exports.hsw` 或按 `--function-name` 调用，并把 `req/sitekey/host/rqdata/motionData` 传入生成 `n`。它不启动浏览器，不解图像/语义任务，不提交 `/getcaptcha`，不宣称完整 hCaptcha 绕过；真实站仍受 `rqdata`、`req` 上下文、HSW/WASM 版本、sitekey 策略、TLS/HTTP2 指纹、UA/CH 与服务端风险评分影响。
+- `hcaptcha_hsw`：experimental provider，只落地 hCaptcha HSW 的 `n/proof` 原语：用 Node `vm` 补最小 `window/document/navigator/WebAssembly/WebCrypto` 环境，执行本地或显式允许获取的 HSW JS/WASM glue，自动寻找 `hsw`/`module.exports.hsw`/AMD nested export 或按 `--function-name` 调用，并把 `req/sitekey/host/rqdata/motionData` 传入生成 `n`；新增 `--resources-json/--resources-file` 可给 VM 提供被 HSW glue fetch 的 `.wasm`/JS resource，支持 `WebAssembly.instantiateStreaming(fetch(...))`。它不启动浏览器，不解图像/语义任务，不提交 `/getcaptcha`，不宣称完整 hCaptcha 绕过；真实站仍受 `rqdata`、`req` 上下文、HSW/WASM 版本、sitekey 策略、TLS/HTTP2 指纹、UA/CH 与服务端风险评分影响。
 
 命令示例：
 
@@ -1174,6 +1174,7 @@ antibot solve hcaptcha_hsw \
   --sitekey 10000000-ffff-ffff-ffff-000000000001 \
   --host target.example \
   --rqdata business-issued-rqdata \
+  --resources-json @hsw-resources.json \
   --raw
 
 antibot solve kasada_kpsdk \

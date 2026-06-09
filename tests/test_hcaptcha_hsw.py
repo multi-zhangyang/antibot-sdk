@@ -41,6 +41,20 @@ module.exports.hsw = function(req, suffix) {
 };
 """
 
+
+WASM_STREAM_FIXTURE = r"""
+window.hsw = async function(req) {
+  const wasm = await WebAssembly.instantiateStreaming(fetch('/answer.wasm'), {});
+  return 'wasm-' + wasm.instance.exports.ans() + '-' + req.sitekey;
+};
+"""
+
+AMD_DEEP_FIXTURE = r"""
+define(function(require, exports) {
+  exports.nested = { proof: function(req) { return 'amd-' + req.sitekey; } };
+});
+"""
+
 pytestmark = pytest.mark.skipif(not shutil.which("node"), reason="node executable is required")
 
 
@@ -71,6 +85,22 @@ def test_hcaptcha_hsw_vm_supports_module_exports_and_extra_args() -> None:
     parsed = parse_hcaptcha_hsw_result(data)
     assert parsed["n"] == "module-site-fixture-suffix-fixture"
     assert parsed["raw"]["reqKeys"] == ["sitekey"]
+
+
+
+def test_hcaptcha_hsw_vm_supports_wasm_resource_and_amd_deep_export() -> None:
+    wasm_hex = '0061736d010000000105016000017f0302010007070103616e7300000a06010400412a0b'
+    data = run_hcaptcha_hsw_vm(
+        WASM_STREAM_FIXTURE,
+        req={"sitekey": "site-fixture"},
+        resources={"/answer.wasm": {"hex": wasm_hex}},
+        timeout_sec=5,
+    )
+    assert data["valueString"] == "wasm-42-site-fixture"
+
+    amd = run_hcaptcha_hsw_vm(AMD_DEEP_FIXTURE, req={"sitekey": "site-fixture"}, timeout_sec=5)
+    assert amd["functionName"] == "module.exports.nested.proof"
+    assert amd["valueString"] == "amd-site-fixture"
 
 
 def test_hcaptcha_hsw_url_and_req_helpers() -> None:

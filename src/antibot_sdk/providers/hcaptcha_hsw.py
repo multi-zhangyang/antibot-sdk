@@ -33,6 +33,7 @@ def run_hcaptcha_hsw_vm(
     script_url: str | None = None,
     page_url: str = "https://example.test/",
     profile: dict[str, Any] | None = None,
+    resources: dict[str, Any] | None = None,
     node: str | None = None,
     timeout_sec: int = DEFAULT_TIMEOUT,
 ) -> dict[str, Any]:
@@ -52,6 +53,7 @@ def run_hcaptcha_hsw_vm(
         "script_url": script_url,
         "page_url": page_url or "https://example.test/",
         "profile": profile or {},
+        "resources": resources or {},
         "vm_timeout_ms": max(1000, int(timeout_sec * 1000)),
     }
     try:
@@ -159,6 +161,9 @@ class HCaptchaHswSolver:
         profile: dict[str, Any] | None = None,
         profile_json: str | dict[str, Any] | None = None,
         profile_file: str | None = None,
+        resources: dict[str, Any] | None = None,
+        resources_json: str | dict[str, Any] | None = None,
+        resources_file: str | None = None,
         page_url: str = "https://example.test/",
         node: str | None = None,
         timeout_sec: int = DEFAULT_TIMEOUT,
@@ -206,6 +211,7 @@ class HCaptchaHswSolver:
             elif isinstance(req_obj, dict):
                 req_obj = build_hcaptcha_req(sitekey=sitekey, host=host, rqdata=rqdata, motion_data=_load_json_any(motion_json), extra=req_obj)
             profile_obj = _load_json_obj(profile, profile_json, profile_file, "profile") or {}
+            resources_obj = _load_json_obj(resources, resources_json, resources_file, "resources") or {}
             args = _load_args(args_json)
             vm_result = run_hcaptcha_hsw_vm(
                 script,
@@ -215,6 +221,7 @@ class HCaptchaHswSolver:
                 script_url=script_url,
                 page_url=page_url,
                 profile=profile_obj,
+                resources=resources_obj,
                 node=node,
                 timeout_sec=timeout_sec,
             )

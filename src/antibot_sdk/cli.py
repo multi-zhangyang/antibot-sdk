@@ -679,6 +679,8 @@ async def amain(argv: list[str] | None = None) -> int:
     hsw.add_argument("--args-json", help="extra positional args JSON list, or @/path")
     hsw.add_argument("--profile-json")
     hsw.add_argument("--profile-file")
+    hsw.add_argument("--resources-json", help="resource map for fetched WASM/JS, or @/path")
+    hsw.add_argument("--resources-file")
     hsw.add_argument("--page-url", default="https://example.test/")
     hsw.add_argument("--header", action="append", default=[], help="script fetch header KEY=VALUE")
     hsw.add_argument("--node")
@@ -2163,6 +2165,8 @@ async def amain(argv: list[str] | None = None) -> int:
     shsw.add_argument("--args-json")
     shsw.add_argument("--profile-json")
     shsw.add_argument("--profile-file")
+    shsw.add_argument("--resources-json")
+    shsw.add_argument("--resources-file")
     shsw.add_argument("--page-url", default="https://example.test/")
     shsw.add_argument("--header", action="append", default=[])
     shsw.add_argument("--node")
@@ -3917,6 +3921,11 @@ async def amain(argv: list[str] | None = None) -> int:
                 _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
                 if args.profile_file
                 else _json_arg(args.profile_json)
+            ),
+            resources=(
+                _json_arg(args.resources_json) or _json_arg(f"@{args.resources_file}")
+                if args.resources_file
+                else _json_arg(args.resources_json)
             ),
             page_url=args.page_url,
             node=args.node,
@@ -5690,6 +5699,11 @@ async def amain(argv: list[str] | None = None) -> int:
                     _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
                     if args.profile_file
                     else _json_arg(args.profile_json)
+                ),
+                resources=(
+                    _json_arg(args.resources_json) or _json_arg(f"@{args.resources_file}")
+                    if args.resources_file
+                    else _json_arg(args.resources_json)
                 ),
                 page_url=args.page_url,
                 node=args.node,
