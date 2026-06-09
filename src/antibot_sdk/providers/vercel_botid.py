@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import requests
 from Crypto.Cipher import AES
@@ -355,8 +356,10 @@ def generate_x_is_human_raw_vm(
 class VercelBotIdSolver:
     """Prototype protocol solver for Vercel BotID ``X-Is-Human`` headers.
 
-    Network submission is intentionally stub-only in this provider. Script fetching is disabled by
-    default and must be explicitly enabled via ``allow_network=True`` for controlled mocks.
+    Script fetching is disabled by default and must be explicitly enabled via
+    ``allow_network=True`` for controlled mocks.  Optional network submission sends the generated
+    ``X-Is-Human`` ticket plus BotID route headers to a caller-provided endpoint, so raw VM and
+    simplified extraction paths share the same protocol-level verification flow.
     """
 
     async def solve(self, **kwargs: Any) -> CaptchaResult:
@@ -371,6 +374,13 @@ class VercelBotIdSolver:
         allow_network: bool = False,
         raw_vm: bool = False,
         submit: bool = False,
+        submit_url: str | None = None,
+        submit_method: str = "POST",
+        x_path: str | None = None,
+        x_method: str | None = None,
+        submit_json: dict[str, Any] | None = None,
+        submit_body: str | bytes | None = None,
+        success_contains: str | None = None,
         fingerprint: dict[str, Any] | None = None,
         profile: dict[str, Any] | None = None,
         salt: bytes | str | None = None,
@@ -388,7 +398,11 @@ class VercelBotIdSolver:
             "allow_network": allow_network,
             "raw_vm": raw_vm,
             "submit": submit,
-            "submit_mode": "stub_only",
+            "submit_mode": "network" if submit else "ticket_only",
+            "submit_url": submit_url,
+            "submit_method": submit_method,
+            "x_path": x_path,
+            "x_method": x_method,
             "timeout_sec": timeout_sec,
             "proxy": redacted_proxy(proxy_server),
         }
@@ -448,9 +462,23 @@ class VercelBotIdSolver:
                 raw["vm"] = vm_data.get("diagnostics") or {}
                 header = _json_dumps(payload)
                 if submit:
-                    diagnostics["submitted"] = False
-                    errors.append("Vercel BotID network submit is stub-only; use ticket as X-Is-Human header")
-                    return finish(ok=False, ticket=header, verify_code="submit_stub")
+                    return self._submit_and_finish(
+                        header=header,
+                        submit_url=submit_url,
+                        submit_method=submit_method,
+                        x_path=x_path,
+                        x_method=x_method,
+                        submit_json=submit_json,
+                        submit_body=submit_body,
+                        success_contains=success_contains,
+                        headers=headers,
+                        timeout_sec=timeout_sec,
+                        proxy_server=proxy_server,
+                        diagnostics=diagnostics,
+                        raw=raw,
+                        errors=errors,
+                        finish=finish,
+                    )
                 return finish(ok=True, ticket=header, verify_code="solved")
             solution = solve_vercel_botid_script(
                 script,
@@ -474,14 +502,81 @@ class VercelBotIdSolver:
             raw["payload"] = solution.payload
             raw["fingerprint"] = solution.fingerprint
             if submit:
-                diagnostics["submitted"] = False
-                errors.append("Vercel BotID network submit is stub-only; use ticket as X-Is-Human header")
-                return finish(ok=False, ticket=solution.header, verify_code="submit_stub")
+                return self._submit_and_finish(
+                    header=solution.header,
+                    submit_url=submit_url,
+                    submit_method=submit_method,
+                    x_path=x_path,
+                    x_method=x_method,
+                    submit_json=submit_json,
+                    submit_body=submit_body,
+                    success_contains=success_contains,
+                    headers=headers,
+                    timeout_sec=timeout_sec,
+                    proxy_server=proxy_server,
+                    diagnostics=diagnostics,
+                    raw=raw,
+                    errors=errors,
+                    finish=finish,
+                )
             return finish(ok=True, ticket=solution.header, verify_code="solved")
         except Exception as exc:
             raw["error"] = {"type": type(exc).__name__, "message": str(exc)}
             errors.append(str(exc))
             return finish(ok=False)
+
+    def _submit_and_finish(
+        self,
+        *,
+        header: str,
+        submit_url: str | None,
+        submit_method: str,
+        x_path: str | None,
+        x_method: str | None,
+        submit_json: dict[str, Any] | None,
+        submit_body: str | bytes | None,
+        success_contains: str | None,
+        headers: dict[str, str] | None,
+        timeout_sec: int,
+        proxy_server: str | None,
+        diagnostics: dict[str, Any],
+        raw: dict[str, Any],
+        errors: list[str],
+        finish,
+    ) -> CaptchaResult:
+        if not submit_url:
+            diagnostics["submitted"] = False
+            errors.append("Vercel BotID submit requested but submit_url is missing")
+            return finish(ok=False, ticket=header, verify_code="missing_submit_url")
+        submit_info = _submit_x_is_human(
+            submit_url=submit_url,
+            header=header,
+            submit_method=submit_method,
+            x_path=x_path,
+            x_method=x_method,
+            submit_json=submit_json,
+            submit_body=submit_body,
+            success_contains=success_contains,
+            headers=headers,
+            timeout_sec=timeout_sec,
+            proxy_server=proxy_server,
+        )
+        raw["submitRequest"] = submit_info["request"]
+        raw["submitResponse"] = submit_info["response"]
+        diagnostics.update(
+            {
+                "submitted": True,
+                "submit_status": submit_info["response"]["status"],
+                "submit_ok": submit_info["ok"],
+                "submit_reason": submit_info["reason"],
+                "x_path": submit_info["request"]["xPath"],
+                "x_method": submit_info["request"]["xMethod"],
+            }
+        )
+        if submit_info["ok"]:
+            return finish(ok=True, ticket=header, verify_code="submitted")
+        errors.append(f"Vercel BotID submit failed: {submit_info['reason']}")
+        return finish(ok=False, ticket=header, verify_code="submit_failed")
 
     def _load_script(
         self,
@@ -513,6 +608,104 @@ class VercelBotIdSolver:
         }
         resp.raise_for_status()
         return resp.text
+
+
+BOTID_BLOCK_MARKERS = (
+    "invalid x-is-human",
+    "missing x-is-human",
+    "x-is-human header is missing",
+    "x-is-human header missing",
+    "botid verification failed",
+    "bot verification failed",
+    "not human",
+    "access denied",
+    "forbidden",
+)
+
+
+def _submit_x_is_human(
+    *,
+    submit_url: str,
+    header: str,
+    submit_method: str,
+    x_path: str | None,
+    x_method: str | None,
+    submit_json: dict[str, Any] | None,
+    submit_body: str | bytes | None,
+    success_contains: str | None,
+    headers: dict[str, str] | None,
+    timeout_sec: int,
+    proxy_server: str | None,
+) -> dict[str, Any]:
+    parsed = urlsplit(submit_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("submit_url must be an absolute http(s) URL")
+    method = (submit_method or "POST").strip().upper()
+    if not re.fullmatch(r"[A-Z]+", method):
+        raise ValueError("submit_method must be an HTTP method token")
+    botid_path = (x_path or parsed.path or "/").strip() or "/"
+    botid_method = (x_method or method).strip().upper()
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+
+    request_headers = dict(headers or {})
+    request_headers.setdefault(
+        "User-Agent",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    )
+    request_headers.setdefault("Accept", "*/*")
+    request_headers.setdefault("Origin", origin)
+    request_headers.setdefault("Referer", origin + "/")
+    request_headers["X-Is-Human"] = header
+    request_headers["X-Path"] = botid_path
+    request_headers["X-Method"] = botid_method
+
+    request_kwargs: dict[str, Any] = {
+        "headers": request_headers,
+        "timeout": timeout_sec,
+        "proxies": _requests_proxies(proxy_server),
+    }
+    body_kind = "none"
+    if submit_json is not None:
+        request_kwargs["json"] = submit_json
+        body_kind = "json"
+    elif submit_body is not None:
+        request_kwargs["data"] = submit_body
+        body_kind = "bytes" if isinstance(submit_body, bytes) else "text"
+
+    resp = requests.request(method, submit_url, **request_kwargs)
+    text = resp.text or ""
+    lowered = text.lower()
+    marker = next((m for m in BOTID_BLOCK_MARKERS if m in lowered), None)
+    contains_ok = True if success_contains is None else success_contains in text
+    status_ok = 200 <= resp.status_code < 400
+    ok = bool(status_ok and contains_ok and marker is None)
+    if not status_ok:
+        reason = f"http_{resp.status_code}"
+    elif success_contains is not None and not contains_ok:
+        reason = "missing_success_contains"
+    elif marker:
+        reason = f"blocked_marker:{marker}"
+    else:
+        reason = "accepted"
+    return {
+        "ok": ok,
+        "reason": reason,
+        "request": {
+            "url": submit_url,
+            "method": method,
+            "xPath": botid_path,
+            "xMethod": botid_method,
+            "bodyKind": body_kind,
+            "headerPrefix": header[:48],
+        },
+        "response": {
+            "status": resp.status_code,
+            "url": resp.url,
+            "contentType": resp.headers.get("content-type"),
+            "bodyPrefix": text[:240],
+        },
+    }
 
 
 def _context_from_mapping(data: dict[str, Any]) -> VercelBotIdScriptContext:

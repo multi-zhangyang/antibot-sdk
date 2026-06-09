@@ -4,6 +4,9 @@ import asyncio
 import base64
 import json
 import shutil
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 
 import pytest
 
@@ -141,6 +144,59 @@ SALT = bytes(range(SALT_BYTES))
 IV = bytes(range(32, 32 + IV_BYTES))
 
 
+class _BotIdSubmitHandler(BaseHTTPRequestHandler):
+    calls: list[dict[str, Any]] = []
+
+    def log_message(self, fmt: str, *args: Any) -> None:
+        return
+
+    def _write(self, body: bytes, status: int, headers: dict[str, str] | None = None) -> None:
+        self.send_response(status)
+        for key, value in (headers or {}).items():
+            self.send_header(key, value)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_POST(self) -> None:  # noqa: N802
+        raw = self.rfile.read(int(self.headers.get("Content-Length", "0") or "0"))
+        try:
+            body = json.loads(raw.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            body = raw.decode("utf-8", errors="replace")
+        header = self.headers.get("X-Is-Human", "")
+        errors = []
+        payload: dict[str, Any] = {}
+        fingerprint: dict[str, Any] = {}
+        try:
+            payload = json.loads(header)
+            fingerprint = decrypt_botid_fingerprint(EXPECTED_KEY, payload["s"])
+        except Exception as exc:  # pragma: no cover - surfaced in call record for assertions
+            errors.append(str(exc))
+        type(self).calls.append(
+            {
+                "method": "POST",
+                "path": self.path,
+                "headers": dict(self.headers),
+                "body": body,
+                "payload": payload,
+                "fingerprint": fingerprint,
+                "errors": errors,
+            }
+        )
+        if (
+            self.path != "/api/contact/test?via=1"
+            or self.headers.get("X-Path") != "/api/contact/test"
+            or self.headers.get("X-Method") != "POST"
+            or self.headers.get("X-Fixture") != "1"
+            or body != {"message": "hello"}
+            or errors
+        ):
+            self._write(b"not human", 403, {"Content-Type": "text/plain"})
+            return
+        self._write(b'{"accepted":true}', 200, {"Content-Type": "application/json"})
+
+
 def test_parse_botid_script_fixture() -> None:
     context = parse_botid_script(SCRIPT_FIXTURE)
 
@@ -229,6 +285,62 @@ def test_solution_and_async_solver_are_local_only() -> None:
     assert json.loads(result.ticket or "{}")["s"] == solution.encrypted_fingerprint
 
 
+def test_submit_flow_posts_x_is_human_route_headers_to_local_mock() -> None:
+    _BotIdSubmitHandler.calls = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _BotIdSubmitHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        submit_url = f"http://127.0.0.1:{server.server_port}/api/contact/test?via=1"
+        result = asyncio.run(
+            VercelBotIdSolver().solve(
+                script_js=SCRIPT_FIXTURE,
+                salt=SALT,
+                iv=IV,
+                submit=True,
+                submit_url=submit_url,
+                x_path="/api/contact/test",
+                x_method="POST",
+                submit_json={"message": "hello"},
+                success_contains="accepted",
+                headers={"X-Fixture": "1"},
+                timeout_sec=5,
+            )
+        )
+    finally:
+        server.shutdown()
+        thread.join(2)
+        server.server_close()
+
+    assert result.ok is True
+    assert result.verify_code == "submitted"
+    assert result.ticket
+    assert result.diagnostics["submitted"] is True
+    assert result.diagnostics["submit_status"] == 200
+    assert result.diagnostics["submit_ok"] is True
+    assert result.diagnostics["submit_reason"] == "accepted"
+    assert result.raw["submitRequest"] == {
+        "url": submit_url,
+        "method": "POST",
+        "xPath": "/api/contact/test",
+        "xMethod": "POST",
+        "bodyKind": "json",
+        "headerPrefix": result.ticket[:48],
+    }
+    assert result.raw["submitResponse"]["bodyPrefix"] == '{"accepted":true}'
+
+    assert len(_BotIdSubmitHandler.calls) == 1
+    call = _BotIdSubmitHandler.calls[0]
+    assert call["headers"]["X-Is-Human"] == result.ticket
+    assert call["headers"]["X-Path"] == "/api/contact/test"
+    assert call["headers"]["X-Method"] == "POST"
+    assert call["headers"]["X-Fixture"] == "1"
+    assert call["body"] == {"message": "hello"}
+    assert call["errors"] == []
+    assert call["payload"] == json.loads(result.ticket)
+    assert call["fingerprint"] == build_botid_fingerprint(parse_botid_script(SCRIPT_FIXTURE))
+
+
 @pytest.mark.skipif(not shutil.which("node"), reason="node executable is required for raw VM mode")
 def test_raw_vm_solver_executes_obfuscated_style_c_js_without_browser() -> None:
     vm_data = solve_vercel_botid_raw_vm(
@@ -292,5 +404,5 @@ def test_input_validation_and_network_stub() -> None:
 
     submit = asyncio.run(VercelBotIdSolver().solve(script_js=SCRIPT_FIXTURE, salt=SALT, iv=IV, submit=True))
     assert submit.ok is False
-    assert submit.verify_code == "submit_stub"
+    assert submit.verify_code == "missing_submit_url"
     assert submit.ticket

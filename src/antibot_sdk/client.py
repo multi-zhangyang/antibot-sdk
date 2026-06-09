@@ -15,6 +15,7 @@ from .providers.awswaf import AwsWafSolver
 from .providers.balooproxy import BalooProxySolver
 from .providers.basedflare import BasedFlareSolver
 from .providers.acwscv2 import AcwScV2Solver
+from .providers.akamai_bm import AkamaiBmSolver
 from .providers.pingoo import PingooSolver
 from .providers.vercel_botid import VercelBotIdSolver
 from .providers.browser import BrowserAutomation
@@ -98,6 +99,7 @@ class AntibotClient:
         self.balooproxy = BalooProxySolver()
         self.basedflare = BasedFlareSolver()
         self.acwscv2 = AcwScV2Solver()
+        self.akamai_bm = AkamaiBmSolver()
         self.pingoo = PingooSolver()
         self.vercel_botid = VercelBotIdSolver()
         self.fcaptcha = FCaptchaSolver()
@@ -216,6 +218,9 @@ class AntibotClient:
 
     async def solve_acwscv2(self, **kwargs: Any) -> CaptchaResult:
         return await self.acwscv2.solve(**kwargs)
+
+    async def solve_akamai_bm(self, **kwargs: Any) -> CaptchaResult:
+        return await self.akamai_bm.solve(**kwargs)
 
     async def solve_pingoo(self, **kwargs: Any) -> CaptchaResult:
         return await self.pingoo.solve(**kwargs)
@@ -899,6 +904,32 @@ class AntibotClient:
             pingoo_kwargs.setdefault("base_url", target_url)
             pingoo_kwargs.setdefault("submit", True)
             return await self.solve_pingoo(**pingoo_kwargs)
+        if provider == "akamai_bm":
+            akamai_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "sensor_data",
+                    "sensor_file",
+                    "bm_sz",
+                    "abck",
+                    "cookie_header",
+                    "cookies",
+                    "page_url",
+                    "user_agent",
+                    "profile",
+                    "profile_json",
+                    "profile_file",
+                    "submit",
+                    "submit_url",
+                    "timeout_sec",
+                    "headers",
+                }
+                and v is not None
+            }
+            akamai_kwargs.setdefault("page_url", target_url)
+            return await self.solve_akamai_bm(**akamai_kwargs)
         if provider == "vercel_botid":
             botid_kwargs = {
                 k: v
@@ -911,6 +942,13 @@ class AntibotClient:
                     "allow_network",
                     "raw_vm",
                     "submit",
+                    "submit_url",
+                    "submit_method",
+                    "x_path",
+                    "x_method",
+                    "submit_json",
+                    "submit_body",
+                    "success_contains",
                     "fingerprint",
                     "profile",
                     "salt",

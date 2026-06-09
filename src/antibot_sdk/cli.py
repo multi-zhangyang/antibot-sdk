@@ -57,6 +57,12 @@ def _json_arg(value: str | None):
     return json.loads(text)
 
 
+def _text_arg(value: str | None):
+    if value is None:
+        return None
+    return Path(value[1:]).read_text(encoding="utf-8") if value.startswith("@") else value
+
+
 def _headless(value: str):
     if value in ("", "auto", None):
         return None
@@ -152,6 +158,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "basedflare",
             "acwscv2",
             "pingoo",
+            "akamai_bm",
             "vercel_botid",
             "aliyun",
             "tencent",
@@ -510,6 +517,22 @@ async def amain(argv: list[str] | None = None) -> int:
     pingo.add_argument("--user-agent")
     pingo.add_argument("--raw", action="store_true")
 
+    akbm = solve_sub.add_parser("akamai_bm")
+    akbm.add_argument("--sensor-data", help="inline sensor_data, JSON {'sensor_data':...}, or @/path")
+    akbm.add_argument("--sensor-file")
+    akbm.add_argument("--bm-sz", help="bm_sz value or Cookie header fragment")
+    akbm.add_argument("--abck", help="_abck value or Cookie header fragment")
+    akbm.add_argument("--cookie-header", help="raw Cookie header containing bm_sz/_abck")
+    akbm.add_argument("--page-url", default="")
+    akbm.add_argument("--user-agent", default="")
+    akbm.add_argument("--profile-json", help="minimal sensor profile JSON, or @/path")
+    akbm.add_argument("--profile-file")
+    akbm.add_argument("--submit", action="store_true", help="POST {'sensor_data':...} to --submit-url")
+    akbm.add_argument("--submit-url", help="usually https://origin/_bm/_data")
+    akbm.add_argument("--header", action="append", default=[], help="extra submit header KEY=VALUE")
+    akbm.add_argument("--timeout", type=int, default=10)
+    akbm.add_argument("--raw", action="store_true")
+
     botid = solve_sub.add_parser("vercel_botid")
     botid_source = botid.add_mutually_exclusive_group(required=True)
     botid_source.add_argument("--script-js", help="inline BotID script/context JSON, or @/path")
@@ -517,7 +540,16 @@ async def amain(argv: list[str] | None = None) -> int:
     botid_source.add_argument("--script-url")
     botid.add_argument("--allow-network", action="store_true", help="allow fetching --script-url")
     botid.add_argument("--raw-vm", action="store_true", help="execute raw c.js in the bundled Node VM shim")
-    botid.add_argument("--submit", action="store_true", help="stub-only: returns failure with generated header ticket")
+    botid.add_argument("--submit", action="store_true", help="send generated X-Is-Human to --submit-url")
+    botid.add_argument("--submit-url", help="protected/API endpoint that expects BotID route headers")
+    botid.add_argument("--submit-method", default="POST")
+    botid.add_argument("--x-path", help="override X-Path; defaults to submit URL path")
+    botid.add_argument("--x-method", help="override X-Method; defaults to submit method")
+    botid.add_argument("--submit-json", help="JSON request body, or @/path")
+    botid.add_argument("--submit-body", help="raw request body, or @/path")
+    botid.add_argument("--success-contains", help="mark submit successful only if response contains this text")
+    botid.add_argument("--header", action="append", default=[], help="extra request header KEY=VALUE")
+    botid.add_argument("--user-agent")
     botid.add_argument("--profile-json", help="fingerprint profile JSON, or @/path")
     botid.add_argument("--profile-file")
     botid.add_argument("--fingerprint-json", help="explicit fingerprint JSON, or @/path")
@@ -1834,6 +1866,25 @@ async def amain(argv: list[str] | None = None) -> int:
     spingo.add_argument("--user-agent")
     spingo.add_argument("--full", action="store_true")
 
+    sakbm = stress_sub.add_parser("akamai_bm")
+    sakbm.add_argument("--sensor-data")
+    sakbm.add_argument("--sensor-file")
+    sakbm.add_argument("--bm-sz")
+    sakbm.add_argument("--abck")
+    sakbm.add_argument("--cookie-header")
+    sakbm.add_argument("--page-url", default="")
+    sakbm.add_argument("--user-agent", default="")
+    sakbm.add_argument("--profile-json")
+    sakbm.add_argument("--profile-file")
+    sakbm.add_argument("--submit", action="store_true")
+    sakbm.add_argument("--submit-url")
+    sakbm.add_argument("--header", action="append", default=[])
+    sakbm.add_argument("--runs", type=int, default=10)
+    sakbm.add_argument("--concurrency", type=int, default=2)
+    sakbm.add_argument("--timeout", type=int, default=10)
+    sakbm.add_argument("--output-json")
+    sakbm.add_argument("--full", action="store_true")
+
     sbotid = stress_sub.add_parser("vercel_botid")
     sbotid_source = sbotid.add_mutually_exclusive_group(required=True)
     sbotid_source.add_argument("--script-js")
@@ -1842,6 +1893,15 @@ async def amain(argv: list[str] | None = None) -> int:
     sbotid.add_argument("--allow-network", action="store_true")
     sbotid.add_argument("--raw-vm", action="store_true")
     sbotid.add_argument("--submit", action="store_true")
+    sbotid.add_argument("--submit-url")
+    sbotid.add_argument("--submit-method", default="POST")
+    sbotid.add_argument("--x-path")
+    sbotid.add_argument("--x-method")
+    sbotid.add_argument("--submit-json")
+    sbotid.add_argument("--submit-body")
+    sbotid.add_argument("--success-contains")
+    sbotid.add_argument("--header", action="append", default=[])
+    sbotid.add_argument("--user-agent")
     sbotid.add_argument("--profile-json")
     sbotid.add_argument("--profile-file")
     sbotid.add_argument("--fingerprint-json")
@@ -3403,7 +3463,34 @@ async def amain(argv: list[str] | None = None) -> int:
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "akamai_bm":
+        akamai_headers = _kv(args.header)
+        if args.user_agent:
+            akamai_headers.setdefault("User-Agent", args.user_agent)
+        ret = await client.solve_akamai_bm(
+            sensor_data=args.sensor_data,
+            sensor_file=args.sensor_file,
+            bm_sz=args.bm_sz,
+            abck=args.abck,
+            cookie_header=args.cookie_header,
+            page_url=args.page_url,
+            user_agent=args.user_agent,
+            profile=(
+                _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
+                if args.profile_file
+                else _json_arg(args.profile_json)
+            ),
+            submit=args.submit,
+            submit_url=args.submit_url,
+            timeout_sec=args.timeout,
+            headers=akamai_headers,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
     if args.cmd == "solve" and args.provider == "vercel_botid":
+        botid_headers = _kv(args.header)
+        if args.user_agent:
+            botid_headers["User-Agent"] = args.user_agent
         ret = await client.solve_vercel_botid(
             script_js=args.script_js,
             script_file=args.script_file,
@@ -3411,7 +3498,18 @@ async def amain(argv: list[str] | None = None) -> int:
             allow_network=args.allow_network,
             raw_vm=args.raw_vm,
             submit=args.submit,
-            profile=_json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}") if args.profile_file else _json_arg(args.profile_json),
+            submit_url=args.submit_url,
+            submit_method=args.submit_method,
+            x_path=args.x_path,
+            x_method=args.x_method,
+            submit_json=_json_arg(args.submit_json),
+            submit_body=_text_arg(args.submit_body),
+            success_contains=args.success_contains,
+            profile=(
+                _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
+                if args.profile_file
+                else _json_arg(args.profile_json)
+            ),
             fingerprint=(
                 _json_arg(args.fingerprint_json) or _json_arg(f"@{args.fingerprint_file}")
                 if args.fingerprint_file
@@ -3422,6 +3520,7 @@ async def amain(argv: list[str] | None = None) -> int:
             node=args.node,
             timeout_sec=args.timeout,
             proxy_server=args.proxy,
+            headers=botid_headers,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -4938,7 +5037,42 @@ async def amain(argv: list[str] | None = None) -> int:
         emit_stress(ret, full=args.full)
         return 0 if ret["summary"]["fail"] == 0 else 2
 
+    if args.cmd == "stress" and args.provider == "akamai_bm":
+        akamai_headers = _kv(args.header)
+        if args.user_agent:
+            akamai_headers.setdefault("User-Agent", args.user_agent)
+        ret = await run_stress(
+            name="akamai_bm",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda _i: client.solve_akamai_bm(
+                sensor_data=args.sensor_data,
+                sensor_file=args.sensor_file,
+                bm_sz=args.bm_sz,
+                abck=args.abck,
+                cookie_header=args.cookie_header,
+                page_url=args.page_url,
+                user_agent=args.user_agent,
+                profile=(
+                    _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
+                    if args.profile_file
+                    else _json_arg(args.profile_json)
+                ),
+                submit=args.submit,
+                submit_url=args.submit_url,
+                timeout_sec=args.timeout,
+                headers=akamai_headers,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+
     if args.cmd == "stress" and args.provider == "vercel_botid":
+        botid_headers = _kv(args.header)
+        if args.user_agent:
+            botid_headers["User-Agent"] = args.user_agent
         ret = await run_stress(
             name="vercel_botid",
             runs=args.runs,
@@ -4952,6 +5086,13 @@ async def amain(argv: list[str] | None = None) -> int:
                 allow_network=args.allow_network,
                 raw_vm=args.raw_vm,
                 submit=args.submit,
+                submit_url=args.submit_url,
+                submit_method=args.submit_method,
+                x_path=args.x_path,
+                x_method=args.x_method,
+                submit_json=_json_arg(args.submit_json),
+                submit_body=_text_arg(args.submit_body),
+                success_contains=args.success_contains,
                 profile=(
                     _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
                     if args.profile_file
@@ -4967,6 +5108,7 @@ async def amain(argv: list[str] | None = None) -> int:
                 node=args.node,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
+                headers=botid_headers,
             ),
         )
         emit_stress(ret, full=args.full)

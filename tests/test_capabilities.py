@@ -30,6 +30,7 @@ def test_capability_matrix_product_boundary() -> None:
         "basedflare",
         "acwscv2",
         "pingoo",
+        "akamai_bm",
         "vercel_botid",
         "fcaptcha",
         "friendlycaptcha",
@@ -93,6 +94,7 @@ def test_capability_matrix_product_boundary() -> None:
     assert solvers["basedflare"]["captcha_type"] == "haproxy_pow_cookie"
     assert solvers["acwscv2"]["captcha_type"] == "aliyun_acw_sc_v2_js_cookie"
     assert solvers["pingoo"]["captcha_type"] == "jwt_cookie_sha256_pow"
+    assert solvers["akamai_bm"]["captcha_type"] == "akamai_bm_sensor_experimental"
     assert solvers["vercel_botid"]["captcha_type"] == "x_is_human_aes_gcm_fingerprint"
     assert solvers["fcaptcha"]["captcha_type"] == "signals_bound_pow"
     assert solvers["friendlycaptcha"]["captcha_type"] == "proof_of_work"
@@ -168,6 +170,7 @@ def test_new_protocol_solvers_are_top_level_sdk_exports() -> None:
     assert antibot_sdk.AcwScV2Solver
     assert antibot_sdk.GuardianWafSolver
     assert antibot_sdk.PingooSolver
+    assert antibot_sdk.AkamaiBmSolver
     assert antibot_sdk.VercelBotIdSolver
     assert antibot_sdk.balooproxy_access_hash
     assert antibot_sdk.derive_balooproxy_stage2_challenge
@@ -179,6 +182,9 @@ def test_new_protocol_solvers_are_top_level_sdk_exports() -> None:
     assert antibot_sdk.extract_acw_arg1
     assert antibot_sdk.solve_pingoo_nonce
     assert antibot_sdk.pingoo_hash_hex
+    assert antibot_sdk.extract_bm_sz_keys
+    assert antibot_sdk.akamai_encrypt_sensor
+    assert antibot_sdk.encode_akamai_bm_minimal_sensor_json
     assert antibot_sdk.generate_x_is_human
     assert antibot_sdk.generate_x_is_human_raw_vm
     assert antibot_sdk.parse_botid_script

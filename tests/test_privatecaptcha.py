@@ -51,10 +51,12 @@ def test_privatecaptcha_parse_solve_and_verify_fixture() -> None:
 
     assert solution is not None
     assert [s.hex() for s in solution.solutions] == ["000000000000000c", "0100000000000089"]
-    assert solution.payload == FIXTURE_PAYLOAD
+    assert solution.payload.endswith(f".{FIXTURE_PUZZLE}")
     parsed_solutions, metadata = parse_privatecaptcha_solutions(solution.solutions_b64)
     assert metadata["version"] == 1
     assert metadata["error_code"] == 0
+    assert metadata["elapsed_ms"] >= 0
+    assert [s.hex() for s in parsed_solutions] == ["000000000000000c", "0100000000000089"]
     assert verify_privatecaptcha_solutions(puzzle, parsed_solutions)
     assert verify_privatecaptcha_payload(solution.payload)
 
@@ -130,5 +132,7 @@ def test_privatecaptcha_solver_protocol_flow_local_server() -> None:
     assert ret.randstr == str(0x1122334455667788)
     assert ret.verify_code == "validated"
     assert ret.diagnostics["difficulty"] == 64
-    assert _PrivateCaptchaHandler.calls[0]["payload"] == FIXTURE_PAYLOAD
+    assert _PrivateCaptchaHandler.calls[0]["payload"] == ret.raw["solution"]["payload"]
+    assert _PrivateCaptchaHandler.calls[0]["payload"].endswith(f".{FIXTURE_PUZZLE}")
+    assert verify_privatecaptcha_payload(_PrivateCaptchaHandler.calls[0]["payload"])
     assert _PrivateCaptchaHandler.calls[0]["api_key"] == "api-key"
