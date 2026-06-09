@@ -4,12 +4,12 @@
 
 ## 功能
 
-| Provider | 类型 | SDK | CLI |
+| Provider | 能力 | SDK | CLI |
 | --- | --- | --- | --- |
 | Cloudflare | 浏览器验证流 | `solve_cloudflare()` / `open()` | `antibot run` / `antibot solve cloudflare` |
 | Tencent Captcha | 滑块验证码 | `solve_tencent()` | `antibot solve tencent` |
 | Aliyun Captcha V3 | 滑块验证码 | `solve_aliyun()` | `antibot solve aliyun` |
-| GeeTest v4 | 人机验证 | `solve_geetest()` | `antibot solve geetest` |
+| GeeTest v4 | `ai` / `slide` / `winlinze` / `match` | `solve_geetest()` | `antibot solve geetest` |
 
 ## 安装
 
@@ -68,6 +68,7 @@ uv run antibot solve aliyun \
 ```bash
 uv run antibot solve geetest \
   --target-url 'https://www.geetest.com/en/adaptive-captcha-demo' \
+  --variant ai \
   --headless true \
   --timeout 60 \
   --raw
@@ -77,7 +78,26 @@ uv run antibot solve geetest \
 uv run antibot solve geetest \
   --target-url 'https://gt4.geetest.com/demov4/slide-popup-zh.html' \
   --click-selector '#btn' \
+  --variant slide \
   --timeout 75 \
+  --raw
+```
+
+```bash
+uv run antibot solve geetest \
+  --target-url 'https://www.geetest.com/en/adaptive-captcha-demo' \
+  --variant winlinze \
+  --headless true \
+  --timeout 90 \
+  --raw
+```
+
+```bash
+uv run antibot solve geetest \
+  --target-url 'https://www.geetest.com/en/adaptive-captcha-demo' \
+  --variant match \
+  --headless true \
+  --timeout 90 \
   --raw
 ```
 
@@ -86,7 +106,7 @@ uv run antibot solve geetest \
 ```bash
 uv run antibot auto 'https://cloud.tencent.com/product/captcha' --raw
 uv run antibot auto 'https://qoder.com/users/sign-up' --raw
-uv run antibot auto 'https://www.geetest.com/en/adaptive-captcha-demo' --raw
+uv run antibot auto 'https://www.geetest.com/en/adaptive-captcha-demo' --provider geetest --variant winlinze --raw
 uv run antibot auto 'https://example.com' --provider cloudflare --raw
 ```
 
@@ -185,10 +205,11 @@ async def main():
     async with AntibotClient() as client:
         ret = await client.solve_geetest(
             target_url="https://www.geetest.com/en/adaptive-captcha-demo",
+            variant="match",
             headless=True,
-            timeout_sec=60,
+            timeout_sec=90,
         )
-        print(ret.ok, ret.ticket, ret.verify_code)
+        print(ret.ok, ret.ticket, ret.randstr, ret.diagnostics)
 
 asyncio.run(main())
 ```

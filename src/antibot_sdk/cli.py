@@ -163,13 +163,19 @@ def _add_geetest_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--timeout", type=int, default=60)
     parser.add_argument("--wait-after-load-ms", type=int, default=2500)
     parser.add_argument("--click-selector", "--trigger", dest="click_selector", action="append", default=[])
+    parser.add_argument("--variant", default="auto", choices=["auto", "ai", "slide", "icon", "gobang", "winlinze", "match", "iconcrush", "observe"])
     parser.add_argument("--slide-attempts", type=int, default=3)
+    parser.add_argument("--winlinze-attempts", "--match-attempts", dest="winlinze_attempts", type=int, default=2)
     parser.add_argument("--no-slide-solve", action="store_true")
+    parser.add_argument("--no-auto-trigger", action="store_true")
     parser.add_argument("--output-dir")
     parser.add_argument("--save-html", action="store_true")
     parser.add_argument("--screenshot")
     parser.add_argument("--output-json")
     parser.add_argument("--raw-events", action="store_true")
+    parser.add_argument("--user-agent")
+    parser.add_argument("--locale", default="zh-CN")
+    parser.add_argument("--timezone-id", default="Asia/Shanghai")
     parser.add_argument("--raw", action="store_true")
 
 
@@ -215,13 +221,19 @@ def _geetest_kwargs(
         "timeout_sec": getattr(args, "timeout", None) or 60,
         "wait_after_load_ms": getattr(args, "wait_after_load_ms", 2500),
         "click_selectors": getattr(args, "click_selector", None) or None,
+        "variant": getattr(args, "variant", "auto"),
+        "auto_trigger": not bool(getattr(args, "no_auto_trigger", False)),
         "slide_max_attempts": getattr(args, "slide_attempts", 3),
+        "winlinze_max_attempts": getattr(args, "winlinze_attempts", 2),
         "slide_solve": not bool(getattr(args, "no_slide_solve", False)),
         "output_dir": getattr(args, "output_dir", None),
         "save_html": bool(getattr(args, "save_html", False)),
         "screenshot": getattr(args, "screenshot", None),
         "output_json": getattr(args, "output_json", None),
         "raw_events": bool(getattr(args, "raw_events", False)),
+        "user_agent": getattr(args, "user_agent", None),
+        "locale": getattr(args, "locale", "zh-CN"),
+        "timezone_id": getattr(args, "timezone_id", "Asia/Shanghai"),
     }
 
 
@@ -251,13 +263,19 @@ async def amain(argv: list[str] | None = None) -> int:
     auto.add_argument("--browser-binary")
     auto.add_argument("--wait-after-load-ms", type=int, default=2500)
     auto.add_argument("--click-selector", "--trigger", dest="click_selector", action="append", default=[])
+    auto.add_argument("--variant", default="auto")
     auto.add_argument("--slide-attempts", type=int, default=3)
+    auto.add_argument("--winlinze-attempts", "--match-attempts", dest="winlinze_attempts", type=int, default=2)
     auto.add_argument("--no-slide-solve", action="store_true")
+    auto.add_argument("--no-auto-trigger", action="store_true")
     auto.add_argument("--output-dir")
     auto.add_argument("--save-html", action="store_true")
     auto.add_argument("--screenshot")
     auto.add_argument("--output-json")
     auto.add_argument("--raw-events", action="store_true")
+    auto.add_argument("--user-agent")
+    auto.add_argument("--locale", default="zh-CN")
+    auto.add_argument("--timezone-id", default="Asia/Shanghai")
 
     solve = sub.add_parser("solve")
     solve_sub = solve.add_subparsers(dest="provider", required=True)

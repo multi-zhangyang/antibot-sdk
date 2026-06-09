@@ -37,7 +37,14 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "captcha_type": "geetest_v4",
         "status": "active",
         "output": "pass_token / lot_number / captcha_output / flow events",
-        "scope": "GeeTest v4：Playwright 驱动真实页面，hook initGeetest4，捕获 gcaptcha4 load/verify，滑块模式抓取 bg/slice 并用 CV 缺口匹配生成拖拽轨迹。",
+        "scope": "GeeTest v4：Playwright 驱动真实页面，hook initGeetest4，捕获 gcaptcha4 load/verify；支持 ai 直通、slide 滑块 CV、winlinze/Gobang 棋盘规则解、match/IconCrush 三消规则解。",
+        "variants": {
+            "ai": "active",
+            "slide": "active",
+            "winlinze": "active",
+            "match": "active",
+            "icon": "observe",
+        },
     },
 }
 

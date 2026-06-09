@@ -80,7 +80,42 @@ def test_parse_geetest_v4_event_load_jsonp_and_query_fields() -> None:
     assert event["risk_type"] == "slide"
     assert event["process_token"] == "process-token"
     assert event["payload"] == "payload-body"
+    assert event["response_payload"]["status"] == "success"
+    assert event["top_status"] == "success"
     assert event["query"]["client_type"] == "web"
+
+
+def test_parse_geetest_v4_event_normalizes_visual_challenge_fields() -> None:
+    url = "https://gcaptcha4.geetest.com/load?callback=cb&captcha_id=cid&risk_type=winlinze"
+    text = _jsonp(
+        json_payload := (
+            "{"
+            '"status":"success",'
+            '"data":{'
+            '"lot_number":"lot-win",'
+            '"captcha_type":"winlinze",'
+            '"imgs":["img0.png","img1.png"],'
+            '"ques":[[1,1,1,1,0],[2,3,4,1,2],[3,4,2,1,3],[4,2,3,1,4],[2,2,3,1,3]],'
+            '"payload":"payload-win",'
+            '"process_token":"process-win",'
+            '"payload_protocol":1,'
+            '"pow_detail":{"bits":0}'
+            "}"
+            "}"
+        )
+    )
+    assert "winlinze" in json_payload
+
+    event = parse_geetest_v4_event(url, text)
+
+    assert event is not None
+    assert event["captcha_type"] == "winlinze"
+    assert event["risk_type"] == "winlinze"
+    assert event["imgs"] == ["img0.png", "img1.png"]
+    assert event["ques"][0][-1] == 0
+    assert event["challenge"]["assets"]["imgs"] == ["img0.png", "img1.png"]
+    assert event["challenge"]["assets"]["ques"][0][-1] == 0
+    assert event["challenge"]["process_token"] == "process-win"
 
 
 def test_parse_geetest_v4_event_verify_jsonp_extracts_seccode() -> None:
@@ -162,6 +197,71 @@ def test_geetest_v4_success_from_events_returns_latest_success() -> None:
     assert success["result"] == "success"
     assert success["risk_type"] == "slide"
     assert success["payload"] == "payload-lot-new"
+
+
+def test_geetest_v4_success_from_events_can_filter_variant() -> None:
+    old_ai = _success_event("pass-ai", "lot-ai")
+    old_ai["risk_type"] = "ai"
+    new_match = _success_event("pass-match", "lot-match")
+    new_match["risk_type"] = "match"
+
+    success = geetest.geetest_v4_success_from_events([old_ai, new_match], {"match"})
+
+    assert success is not None
+    assert success["pass_token"] == "pass-match"
+    assert geetest.geetest_v4_success_from_events([old_ai], {"match"}) is None
+
+
+def test_geetest_v4_success_from_events_accepts_seccode_without_result() -> None:
+    event = _success_event("pass-no-result", "lot-no-result")
+    event["data"].pop("result")
+    event.pop("result", None)
+
+    success = geetest_v4_success_from_events([event])
+
+    assert success is not None
+    assert success["pass_token"] == "pass-no-result"
+
+
+def test_find_geetest_winlinze_move_solves_official_matrix_shape() -> None:
+    find_move = _require_symbol("find_geetest_winlinze_move")
+    board = [
+        [1, 1, 4, 4, 3],
+        [1, 0, 3, 4, 0],
+        [2, 3, 0, 0, 3],
+        [0, 1, 2, 4, 1],
+        [2, 2, 0, 4, 0],
+    ]
+
+    move = find_move(board)
+
+    assert move == {
+        "source": {"row": 0, "col": 2},
+        "target": {"row": 2, "col": 3},
+        "value": 4,
+        "line": {
+            "name": "col-3",
+            "cells": [
+                {"row": 0, "col": 3},
+                {"row": 1, "col": 3},
+                {"row": 2, "col": 3},
+                {"row": 3, "col": 3},
+                {"row": 4, "col": 3},
+            ],
+        },
+    }
+
+
+def test_find_geetest_match_swap_solves_iconcrush_matrix() -> None:
+    find_swap = _require_symbol("find_geetest_match_swap")
+    board = [[2, 0, 3], [1, 0, 1], [0, 2, 3]]
+
+    swap = find_swap(board)
+
+    assert swap is not None
+    assert swap["source"] == {"x": 2, "y": 0}
+    assert swap["target"] == {"x": 2, "y": 1}
+    assert swap["line"]["name"] == "y-1"
 
 
 def test_latest_geetest_success_accepts_mixed_validates_and_picks_newest() -> None:

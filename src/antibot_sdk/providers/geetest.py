@@ -18,6 +18,7 @@ from ..proxy import parse_proxy, redacted_proxy
 
 DEFAULT_GEETEST_DEMO_URL = "https://www.geetest.com/en/adaptive-captcha-demo"
 DEFAULT_GEETEST_SLIDE_DEMO_URL = "https://gt4.geetest.com/demov4/slide-popup-zh.html"
+DEFAULT_GEETEST_GOBANG_DEMO_URL = "https://gt4.geetest.com/demov4/winlinze-popup-en.html"
 GEETEST_HOST_MARKERS = (
     "gcaptcha4.geetest.com",
     "static.geetest.com/v4",
@@ -27,8 +28,34 @@ GEETEST_HOST_MARKERS = (
 VERIFY_PATH = "/verify"
 LOAD_PATH = "/load"
 GEETEST_SUCCESS_KEYS = ("lot_number", "captcha_output", "pass_token", "gen_time")
+GEETEST_VARIANT_ALIASES = {
+    "auto": "auto",
+    "observe": "observe",
+    "ai": "ai",
+    "no-captcha": "ai",
+    "nocaptcha": "ai",
+    "no_captcha": "ai",
+    "slide": "slide",
+    "slider": "slide",
+    "icon": "icon",
+    "gobang": "winlinze",
+    "winlinze": "winlinze",
+    "iconcrush": "match",
+    "icon_crush": "match",
+    "match": "match",
+}
+GEETEST_DEMO_VARIANT_TEXT = {
+    "ai": "No CAPTCHA",
+    "slide": "Slide CAPTCHA",
+    "icon": "Icon CAPTCHA",
+    "winlinze": "Gobang CAPTCHA",
+    "match": "IconCrush CAPTCHA",
+}
 
 DEFAULT_TRIGGER_SELECTORS = (
+    ".config-right #captcha .geetest_btn_click[aria-label='Click to verify']",
+    ".config-right #captcha .geetest_btn_click",
+    ".config-right #captcha .geetest_holder",
     "text=Click to verify",
     "text=Verify",
     "text=点击验证",
@@ -265,8 +292,12 @@ def parse_geetest_v4_event(url: str, text: str | None = None) -> dict[str, Any] 
         except Exception as exc:
             event["parse_error"] = f"{type(exc).__name__}: {exc}"
             return event
-        event["payload"] = payload
+        event["response_payload"] = payload
         data = payload.get("data") if isinstance(payload, dict) else None
+        if isinstance(payload, dict):
+            for key in ("status", "code", "msg", "message"):
+                if payload.get(key) is not None:
+                    event[f"top_{key}"] = payload.get(key)
         if isinstance(data, dict):
             event["data"] = data
             for key in (
@@ -281,9 +312,18 @@ def parse_geetest_v4_event(url: str, text: str | None = None) -> dict[str, Any] 
                 "css",
                 "static_path",
                 "gct_path",
+                "imgs",
+                "ques",
+                "slice",
+                "bg",
+                "ypos",
+                "arrow",
             ):
                 if data.get(key) is not None:
                     event[key] = data.get(key)
+            challenge = normalize_geetest_challenge(data)
+            if challenge:
+                event["challenge"] = challenge
             if data.get("result") is not None:
                 event["result"] = data.get("result")
             seccode = data.get("seccode")
@@ -296,6 +336,31 @@ def parse_geetest_v4_event(url: str, text: str | None = None) -> dict[str, Any] 
         if query.get(key) is not None and event.get(key) is None:
             event[key] = query.get(key)
     return event
+
+
+def normalize_geetest_variant(value: str | None) -> str:
+    if not value:
+        return "auto"
+    return GEETEST_VARIANT_ALIASES.get(str(value).strip().lower(), str(value).strip().lower())
+
+
+def normalize_geetest_challenge(data: dict[str, Any]) -> dict[str, Any]:
+    """Keep GeeTest v4 visual challenge fields in one stable structure."""
+
+    challenge: dict[str, Any] = {}
+    captcha_type = data.get("captcha_type") or data.get("risk_type")
+    if captcha_type is not None:
+        challenge["captcha_type"] = captcha_type
+    assets: dict[str, Any] = {}
+    for key in ("imgs", "ques", "slice", "bg", "ypos", "arrow"):
+        if data.get(key) is not None:
+            assets[key] = data.get(key)
+    if assets:
+        challenge["assets"] = assets
+    for key in ("lot_number", "process_token", "payload", "payload_protocol", "pow_detail"):
+        if data.get(key) is not None:
+            challenge[key] = data.get(key)
+    return challenge
 
 
 def is_geetest_success_payload(value: Any) -> bool:
@@ -316,13 +381,23 @@ def latest_geetest_success(state: dict[str, Any] | list[dict[str, Any]] | None) 
     return None
 
 
-def geetest_v4_success_from_events(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+def geetest_v4_success_from_events(
+    events: list[dict[str, Any]],
+    variants: set[str] | None = None,
+) -> dict[str, Any] | None:
     for event in reversed(events):
         if event.get("kind") != "verify":
             continue
+        if variants:
+            event_variant = normalize_geetest_variant(
+                str(event.get("risk_type") or event.get("captcha_type") or "")
+            )
+            if event_variant not in variants:
+                continue
         data = event.get("data") if isinstance(event.get("data"), dict) else {}
         seccode = event.get("seccode") if isinstance(event.get("seccode"), dict) else {}
-        if data.get("result") == "success" and seccode.get("pass_token"):
+        result = str(data.get("result") or event.get("result") or event.get("top_status") or "").lower()
+        if (result == "success" or seccode.get("pass_token")) and seccode.get("pass_token"):
             solution = {
                 "captcha_id": seccode.get("captcha_id") or event.get("captcha_id"),
                 "lot_number": seccode.get("lot_number") or event.get("lot_number"),
@@ -340,6 +415,16 @@ def geetest_v4_success_from_events(events: list[dict[str, Any]]) -> dict[str, An
     return None
 
 
+def geetest_v4_success_for_variant(
+    events: list[dict[str, Any]],
+    requested_variant: str = "auto",
+) -> dict[str, Any] | None:
+    variant = normalize_geetest_variant(requested_variant)
+    if variant in {"auto", "observe"}:
+        return geetest_v4_success_from_events(events)
+    return geetest_v4_success_from_events(events, {variant})
+
+
 def _headless(value: bool | str | None) -> bool:
     if value is None:
         return True
@@ -351,6 +436,93 @@ def _headless(value: bool | str | None) -> bool:
 def _interesting_url(url: str) -> bool:
     u = url.lower()
     return any(x in u for x in ("geetest", "gcaptcha4", "/gt4/", "captcha_v4", "captcha4"))
+
+
+def _latest_load_event(events: list[dict[str, Any]], *variants: str) -> dict[str, Any] | None:
+    wanted = {normalize_geetest_variant(v) for v in variants if v}
+    for event in reversed(events):
+        if event.get("kind") != "load":
+            continue
+        variant = normalize_geetest_variant(
+            str(event.get("captcha_type") or event.get("risk_type") or "")
+        )
+        if not wanted or variant in wanted:
+            return event
+    return None
+
+
+def find_geetest_winlinze_move(board: list[list[int]]) -> dict[str, Any] | None:
+    """Find the deterministic GeeTest Gobang/winlinze move from the 5x5 matrix."""
+
+    if len(board) != 5 or any(len(row) != 5 for row in board):
+        raise ValueError("winlinze board must be 5x5")
+    lines: list[tuple[str, list[tuple[int, int]]]] = []
+    lines.extend((f"row-{row}", [(row, col) for col in range(5)]) for row in range(5))
+    lines.extend((f"col-{col}", [(row, col) for row in range(5)]) for col in range(5))
+    lines.append(("diag-main", [(idx, idx) for idx in range(5)]))
+    lines.append(("diag-anti", [(idx, 4 - idx) for idx in range(5)]))
+
+    for line_name, cells in lines:
+        values = [int(board[row][col]) for row, col in cells]
+        zeros = [cells[idx] for idx, value in enumerate(values) if value == 0]
+        non_zero = [value for value in values if value != 0]
+        if len(zeros) != 1 or len(non_zero) != 4 or len(set(non_zero)) != 1:
+            continue
+        value = non_zero[0]
+        line_set = set(cells)
+        for row in range(5):
+            for col in range(5):
+                if (row, col) in line_set:
+                    continue
+                if int(board[row][col]) == value:
+                    return {
+                        "source": {"row": row, "col": col},
+                        "target": {"row": zeros[0][0], "col": zeros[0][1]},
+                        "value": value,
+                        "line": {"name": line_name, "cells": [{"row": r, "col": c} for r, c in cells]},
+                    }
+    return None
+
+
+def find_geetest_match_swap(board: list[list[int]]) -> dict[str, Any] | None:
+    """Find a GeeTest IconCrush/match adjacent swap for a 3x3 matrix."""
+
+    if len(board) != 3 or any(len(row) != 3 for row in board):
+        raise ValueError("match board must be 3x3")
+
+    def lines_after(candidate: list[list[int]]) -> list[dict[str, Any]]:
+        lines: list[dict[str, Any]] = []
+        for x in range(3):
+            values = [int(candidate[x][y]) for y in range(3)]
+            if len(set(values)) == 1:
+                lines.append(
+                    {"name": f"x-{x}", "cells": [{"x": x, "y": y} for y in range(3)], "value": values[0]}
+                )
+        for y in range(3):
+            values = [int(candidate[x][y]) for x in range(3)]
+            if len(set(values)) == 1:
+                lines.append(
+                    {"name": f"y-{y}", "cells": [{"x": x, "y": y} for x in range(3)], "value": values[0]}
+                )
+        return lines
+
+    original_lines = {line["name"] for line in lines_after(board)}
+    for x in range(3):
+        for y in range(3):
+            for nx, ny in ((x + 1, y), (x, y + 1)):
+                if nx >= 3 or ny >= 3:
+                    continue
+                candidate = [list(row) for row in board]
+                candidate[x][y], candidate[nx][ny] = candidate[nx][ny], candidate[x][y]
+                new_lines = [line for line in lines_after(candidate) if line["name"] not in original_lines]
+                if new_lines:
+                    return {
+                        "source": {"x": x, "y": y},
+                        "target": {"x": nx, "y": ny},
+                        "line": new_lines[0],
+                        "board_after": candidate,
+                    }
+    return None
 
 
 def _css_url(value: str | None) -> str:
@@ -567,8 +739,10 @@ class GeetestV4Solver:
         output_json: str | None = None,
         raw_events: bool = False,
         auto_trigger: bool = True,
+        variant: str = "auto",
         slide_solve: bool = True,
         slide_max_attempts: int = 3,
+        winlinze_max_attempts: int = 2,
         output_dir: str | None = None,
         save_html: bool = False,
         user_agent: str | None = None,
@@ -582,11 +756,13 @@ class GeetestV4Solver:
         response_tasks: list[asyncio.Task] = []
         success_event = asyncio.Event()
         click_selectors = click_selectors or list(DEFAULT_TRIGGER_SELECTORS)
+        requested_variant = normalize_geetest_variant(variant)
         output_root = Path(output_dir or tempfile.mkdtemp(prefix="antibot-geetest-"))
         artifacts: dict[str, str] = {"outputDir": str(output_root)}
         raw: dict[str, Any] = {
             "at": datetime.now(timezone.utc).isoformat(),
             "target_url": target_url,
+            "requested_variant": requested_variant,
             "net": net,
             "events": events,
             "trigger_selectors": click_selectors,
@@ -616,8 +792,17 @@ class GeetestV4Solver:
             event["status"] = getattr(resp, "status", None)
             if len(events) < 400:
                 events.append(event)
-            if geetest_v4_success_from_events(events):
+            if geetest_v4_success_for_variant(events, requested_variant):
                 success_event.set()
+
+        async def drain_response_tasks() -> None:
+            nonlocal response_tasks
+            if not response_tasks:
+                return
+            done = [task for task in response_tasks if task.done()]
+            if done:
+                await asyncio.gather(*done, return_exceptions=True)
+                response_tasks = [task for task in response_tasks if not task.done()]
 
         browser = None
         playwright = None
@@ -627,7 +812,10 @@ class GeetestV4Solver:
         title = ""
         state: dict[str, Any] | None = None
         slide_attempts: list[dict[str, Any]] = []
+        winlinze_attempts: list[dict[str, Any]] = []
+        match_attempts: list[dict[str, Any]] = []
         trigger_clicks: list[dict[str, Any]] = []
+        variant_selection: dict[str, Any] = {}
         show_calls: list[dict[str, Any]] = []
         error: dict[str, str] = {}
 
@@ -640,7 +828,10 @@ class GeetestV4Solver:
             raw["net"] = net[-120:] if raw_events else _compact_net(net)
             raw["state"] = _compact_state(state) if not raw_events else state or {}
             raw["slide_attempts"] = slide_attempts
+            raw["winlinze_attempts"] = winlinze_attempts
+            raw["match_attempts"] = match_attempts
             raw["trigger_clicks"] = trigger_clicks
+            raw["variant_selection"] = variant_selection
             raw["show_captcha_calls"] = show_calls
             raw["final_url"] = final_url
             raw["title"] = title
@@ -711,16 +902,54 @@ class GeetestV4Solver:
             final_url = page.url
             title = await page.title()
 
+            if requested_variant not in {"auto", "observe"}:
+                variant_selection = await self._select_demo_variant(page, requested_variant)
+                await drain_response_tasks()
+
             if auto_trigger:
-                show_calls = await self._show_all_captchas(page)
-                trigger_clicks = await self._click_triggers(page, click_selectors)
+                if requested_variant in {"auto", "observe", "ai"}:
+                    show_calls = await self._show_all_captchas(page)
+                    trigger_clicks = await self._click_triggers(page, click_selectors)
+                    await drain_response_tasks()
 
             state = await self._snapshot(page)
-            hook_success = latest_geetest_success(state)
+            hook_success = self._hook_success_for_requested(state, requested_variant)
             if hook_success:
                 success_event.set()
 
-            if slide_solve and not hook_success and not geetest_v4_success_from_events(events):
+            current_variant = self._current_variant(events, requested_variant=requested_variant)
+            if (
+                current_variant == "winlinze"
+                and not hook_success
+                and not geetest_v4_success_for_variant(events, requested_variant)
+            ):
+                remaining = max(3, int(deadline - time.monotonic()))
+                winlinze_attempts = await self._solve_winlinze_challenge(
+                    page,
+                    events=events,
+                    output_root=output_root,
+                    max_attempts=max(1, int(winlinze_max_attempts)),
+                    total_timeout_sec=remaining,
+                )
+            if (
+                current_variant == "match"
+                and not hook_success
+                and not geetest_v4_success_for_variant(events, requested_variant)
+            ):
+                remaining = max(3, int(deadline - time.monotonic()))
+                match_attempts = await self._solve_match_challenge(
+                    page,
+                    events=events,
+                    output_root=output_root,
+                    max_attempts=max(1, int(winlinze_max_attempts)),
+                    total_timeout_sec=remaining,
+                )
+            if (
+                slide_solve
+                and current_variant in {"auto", "slide"}
+                and not hook_success
+                and not geetest_v4_success_for_variant(events, requested_variant)
+            ):
                 remaining = max(3, int(deadline - time.monotonic()))
                 slide_attempts = await self._solve_slide_challenge(
                     page,
@@ -730,14 +959,10 @@ class GeetestV4Solver:
                 )
 
             while time.monotonic() < deadline:
-                if response_tasks:
-                    done = [task for task in response_tasks if task.done()]
-                    if done:
-                        await asyncio.gather(*done, return_exceptions=True)
-                        response_tasks = [task for task in response_tasks if not task.done()]
+                await drain_response_tasks()
                 state = await self._snapshot(page)
-                hook_success = latest_geetest_success(state)
-                if hook_success or geetest_v4_success_from_events(events):
+                hook_success = self._hook_success_for_requested(state, requested_variant)
+                if hook_success or geetest_v4_success_for_variant(events, requested_variant):
                     success_event.set()
                     break
                 try:
@@ -784,7 +1009,7 @@ class GeetestV4Solver:
                 except Exception:
                     pass
 
-        solution = self._solution(events, state)
+        solution = self._solution(events, state, requested_variant=requested_variant)
         raw["solution"] = solution
         raw["ok"] = bool(solution)
         await write_artifacts()
@@ -796,6 +1021,109 @@ class GeetestV4Solver:
             started=started,
             error=error,
         )
+
+    def _hook_success_for_requested(
+        self,
+        state: dict[str, Any] | None,
+        requested_variant: str,
+    ) -> dict[str, Any] | None:
+        # Visual puzzle variants should be proven by their own /verify risk_type.
+        # Hook validates do not always carry the variant, and old demo instances can
+        # still emit a default ai validate after a tab switch.
+        variant = normalize_geetest_variant(requested_variant)
+        if variant in {"auto", "observe", "ai"}:
+            return latest_geetest_success(state)
+        return None
+
+    def _current_variant(self, events: list[dict[str, Any]], *, requested_variant: str) -> str:
+        variant = normalize_geetest_variant(requested_variant)
+        if variant not in {"auto", "observe"}:
+            return variant
+        latest = _latest_load_event(events)
+        if latest:
+            return normalize_geetest_variant(
+                str(latest.get("captcha_type") or latest.get("risk_type") or "")
+            )
+        return variant
+
+    async def _select_demo_variant(self, page: Any, variant: str) -> dict[str, Any]:
+        variant = normalize_geetest_variant(variant)
+        text = GEETEST_DEMO_VARIANT_TEXT.get(variant)
+        index = {value: key for key, value in enumerate(["ai", "slide", "icon", "winlinze", "match"])}.get(
+            variant
+        )
+        ret: dict[str, Any] = {"variant": variant}
+        if index is None or not text:
+            ret["skipped"] = "no_demo_tab_mapping"
+            return ret
+        selector = f".type-config .tab-item-{index}"
+        ret["selector"] = selector
+        try:
+            await page.evaluate(
+                """(selector) => {
+                  const el = document.querySelector(selector);
+                  if (el) el.scrollIntoView({ block: 'center', inline: 'center' });
+                }""",
+                selector,
+            )
+            await page.wait_for_timeout(250)
+            loc = page.locator(selector).first
+            if await loc.count():
+                await loc.click(timeout=3500, force=True)
+                ret["mode"] = "locator-force"
+            else:
+                ret["missing"] = True
+                return ret
+        except Exception as exc:
+            ret["locator_error"] = str(exc)
+            try:
+                js_ret = await page.evaluate(
+                    """async ({ selector, text }) => {
+                      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+                      const candidates = [
+                        document.querySelector(selector),
+                        ...Array.from(document.querySelectorAll('.type-config .tab-item')),
+                      ].filter(Boolean);
+                      const el = candidates.find((node) =>
+                        (node.innerText || node.textContent || '').includes(text)
+                      ) || candidates[0];
+                      if (!el) return { ok: false, error: 'tab not found' };
+                      el.scrollIntoView({ block: 'center', inline: 'center' });
+                      await sleep(120);
+                      const r = el.getBoundingClientRect();
+                      const x = r.left + r.width / 2;
+                      const y = r.top + r.height / 2;
+                      el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x, clientY: y }));
+                      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: x, clientY: y }));
+                      el.click();
+                      el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x, clientY: y }));
+                      return { ok: true, text: el.innerText || el.textContent || '' };
+                    }""",
+                    {"selector": selector, "text": text},
+                )
+                ret["mode"] = "dom-dispatch"
+                ret["dom"] = js_ret
+            except Exception as exc2:
+                ret["dom_error"] = str(exc2)
+        try:
+            await page.wait_for_function(
+                """({ selector, variant }) => {
+                  const active = document.querySelector(selector + ' > button.on')
+                    || document.querySelector(selector + ' button.on');
+                  const state = window.__ANTIBOT_GEETEST;
+                  const configs = state && state.configs || [];
+                  const latest = configs.length ? configs[configs.length - 1].config || {} : {};
+                  return Boolean(active) || latest.riskType === variant || latest.risk_type === variant;
+                }""",
+                arg={"selector": selector, "variant": variant},
+                timeout=6000,
+            )
+            ret["active"] = True
+        except Exception as exc:
+            ret["active"] = False
+            ret["active_error"] = str(exc)
+        await page.wait_for_timeout(900)
+        return ret
 
     async def _show_all_captchas(self, page: Any) -> list[dict[str, Any]]:
         try:
@@ -813,12 +1141,12 @@ class GeetestV4Solver:
         ret: list[dict[str, Any]] = []
         for selector in [s for s in selectors if s.startswith("text=")]:
             try:
-                loc = page.locator(selector).first()
+                loc = page.locator(selector).first
                 if await loc.count():
                     await loc.click(timeout=1800)
                     ret.append({"selector": selector, "mode": "locator"})
                     await page.wait_for_timeout(300)
-                    if await self._slide_visible(page):
+                    if await self._any_challenge_visible(page):
                         return ret
             except Exception as exc:
                 ret.append({"selector": selector, "mode": "locator", "error": str(exc)})
@@ -835,7 +1163,11 @@ class GeetestV4Solver:
                     return r.width > 3 && r.height > 3 && cs.display !== 'none'
                       && cs.visibility !== 'hidden' && cs.opacity !== '0';
                   };
-                  const challengeVisible = () => visible(document.querySelector('.geetest_bg'))
+                  const challengeVisible = () => visible(document.querySelector('.geetest_box'))
+                    || visible(document.querySelector('[class*="geetest_box"]'))
+                    || visible(document.querySelector('.geetest_subitem'))
+                    || visible(document.querySelector('[class*="geetest_subitem"]'))
+                    || visible(document.querySelector('.geetest_bg'))
                     || visible(document.querySelector('[class*="geetest_bg"]'));
                   if (challengeVisible()) return ret;
                   for (const sel of selectors) {
@@ -874,6 +1206,315 @@ class GeetestV4Solver:
         except Exception as exc:
             ret.append({"mode": "dom", "error": str(exc)})
         return ret
+
+    async def _wait_variant_load(
+        self,
+        events: list[dict[str, Any]],
+        variant: str,
+        *,
+        timeout_sec: float,
+    ) -> dict[str, Any] | None:
+        deadline = time.monotonic() + max(0.2, timeout_sec)
+        variant = normalize_geetest_variant(variant)
+        while time.monotonic() < deadline:
+            event = _latest_load_event(events, variant)
+            if event:
+                return event
+            await asyncio.sleep(0.15)
+        return _latest_load_event(events, variant)
+
+    async def _solve_winlinze_challenge(
+        self,
+        page: Any,
+        *,
+        events: list[dict[str, Any]],
+        output_root: Path,
+        max_attempts: int,
+        total_timeout_sec: int,
+    ) -> list[dict[str, Any]]:
+        attempts: list[dict[str, Any]] = []
+        deadline = time.monotonic() + max(1, total_timeout_sec)
+        for attempt_no in range(1, max_attempts + 1):
+            attempt: dict[str, Any] = {"attempt": attempt_no, "mode": "winlinze"}
+            try:
+                await self._ensure_challenge_visible(page, "winlinze")
+                load_event = await self._wait_variant_load(
+                    events,
+                    "winlinze",
+                    timeout_sec=max(1.0, min(8.0, deadline - time.monotonic())),
+                )
+                if not load_event:
+                    attempt.update({"ok": False, "error": "winlinze load event not observed"})
+                    attempts.append(attempt)
+                    break
+                board = (load_event.get("data") or {}).get("ques")
+                if not isinstance(board, list):
+                    attempt.update({"ok": False, "error": "winlinze board missing"})
+                    attempts.append(attempt)
+                    break
+                move = find_geetest_winlinze_move(board)
+                attempt["board"] = board
+                attempt["move"] = move
+                if not move:
+                    attempt.update({"ok": False, "error": "winlinze move not found"})
+                    attempts.append(attempt)
+                    break
+                cells = [
+                    (move["source"]["row"], move["source"]["col"]),
+                    (move["target"]["row"], move["target"]["col"]),
+                ]
+                rects = await self._cell_rects(page, "winlinze", cells)
+                attempt["rects"] = rects
+                if len(rects) != 2:
+                    attempt.update({"ok": False, "error": "winlinze cell rect missing"})
+                    attempts.append(attempt)
+                    break
+                await self._click_cell_pair(page, rects)
+                await page.wait_for_timeout(1800)
+                await self._collect_validates(page, "after-winlinze")
+                outcome = await self._visual_outcome(page)
+                attempt["outcome"] = outcome
+                attempt["ok"] = bool(outcome.get("successText"))
+                try:
+                    shot = output_root / f"geetest_winlinze_{attempt_no}.png"
+                    await page.screenshot(path=str(shot), full_page=True)
+                    attempt["screenshot"] = str(shot)
+                except Exception:
+                    pass
+                attempts.append(attempt)
+                if attempt["ok"]:
+                    break
+            except Exception as exc:
+                attempt["ok"] = False
+                attempt["error"] = str(exc)
+                attempt["errorType"] = type(exc).__name__
+                attempts.append(attempt)
+        return attempts
+
+    async def _solve_match_challenge(
+        self,
+        page: Any,
+        *,
+        events: list[dict[str, Any]],
+        output_root: Path,
+        max_attempts: int,
+        total_timeout_sec: int,
+    ) -> list[dict[str, Any]]:
+        attempts: list[dict[str, Any]] = []
+        deadline = time.monotonic() + max(1, total_timeout_sec)
+        for attempt_no in range(1, max_attempts + 1):
+            attempt: dict[str, Any] = {"attempt": attempt_no, "mode": "match"}
+            try:
+                await self._ensure_challenge_visible(page, "match")
+                load_event = await self._wait_variant_load(
+                    events,
+                    "match",
+                    timeout_sec=max(1.0, min(8.0, deadline - time.monotonic())),
+                )
+                if not load_event:
+                    attempt.update({"ok": False, "error": "match load event not observed"})
+                    attempts.append(attempt)
+                    break
+                board = (load_event.get("data") or {}).get("ques")
+                if not isinstance(board, list):
+                    attempt.update({"ok": False, "error": "match board missing"})
+                    attempts.append(attempt)
+                    break
+                move = find_geetest_match_swap(board)
+                attempt["board"] = board
+                attempt["move"] = move
+                if not move:
+                    attempt.update({"ok": False, "error": "match swap not found"})
+                    attempts.append(attempt)
+                    break
+                cells = [
+                    (move["source"]["x"], move["source"]["y"]),
+                    (move["target"]["x"], move["target"]["y"]),
+                ]
+                rects = await self._cell_rects(page, "match", cells)
+                attempt["rects"] = rects
+                if len(rects) != 2:
+                    attempt.update({"ok": False, "error": "match cell rect missing"})
+                    attempts.append(attempt)
+                    break
+                await self._click_cell_pair(page, rects)
+                await page.wait_for_timeout(1800)
+                await self._collect_validates(page, "after-match")
+                outcome = await self._visual_outcome(page)
+                attempt["outcome"] = outcome
+                attempt["ok"] = bool(outcome.get("successText"))
+                try:
+                    shot = output_root / f"geetest_match_{attempt_no}.png"
+                    await page.screenshot(path=str(shot), full_page=True)
+                    attempt["screenshot"] = str(shot)
+                except Exception:
+                    pass
+                attempts.append(attempt)
+                if attempt["ok"]:
+                    break
+            except Exception as exc:
+                attempt["ok"] = False
+                attempt["error"] = str(exc)
+                attempt["errorType"] = type(exc).__name__
+                attempts.append(attempt)
+        return attempts
+
+    async def _ensure_challenge_visible(self, page: Any, variant: str) -> None:
+        variant = normalize_geetest_variant(variant)
+        variant_class = {"winlinze": "winlinze", "match": "match", "icon": "click"}.get(variant, variant)
+        try:
+            await page.wait_for_function(
+                """(variantClass) => {
+                  const visible = (el) => {
+                    if (!el) return false;
+                    const r = el.getBoundingClientRect();
+                    const cs = getComputedStyle(el);
+                    return r.width > 20 && r.height > 20 && cs.display !== 'none'
+                      && cs.visibility !== 'hidden' && cs.opacity !== '0';
+                  };
+                  return visible(document.querySelector(`[class*="geetest_${variantClass}"]`))
+                    || visible(document.querySelector('.geetest_box'))
+                    || visible(document.querySelector('[class*="geetest_box"]'));
+                }""",
+                arg=variant_class,
+                timeout=5500,
+            )
+        except Exception:
+            await page.evaluate(
+                """async () => {
+                  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+                  const visible = (el) => {
+                    if (!el) return false;
+                    const r = el.getBoundingClientRect();
+                    const cs = getComputedStyle(el);
+                    return r.width > 3 && r.height > 3 && cs.display !== 'none'
+                      && cs.visibility !== 'hidden' && cs.opacity !== '0';
+                  };
+                  const challengeVisible = () => visible(document.querySelector('.geetest_box'))
+                    || visible(document.querySelector('[class*="geetest_box"]'))
+                    || visible(document.querySelector('.geetest_subitem'))
+                    || visible(document.querySelector('[class*="geetest_subitem"]'));
+                  const selectors = [
+                    '.config-right #captcha .geetest_btn_click',
+                    '.config-right #captcha .geetest_holder',
+                    '[class*="geetest_btn_click"]',
+                    '[class*="geetest_holder"]',
+                    '#captcha',
+                    '#btn',
+                  ];
+                  for (const sel of selectors) {
+                    const nodes = Array.from(document.querySelectorAll(sel)).slice(0, 6);
+                    for (const el of nodes) {
+                      if (!visible(el)) continue;
+                      const r = el.getBoundingClientRect();
+                      const x = r.left + r.width / 2;
+                      const y = r.top + r.height / 2;
+                      try {
+                        el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x, clientY: y }));
+                        el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: x, clientY: y }));
+                        el.click();
+                        el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x, clientY: y }));
+                        await sleep(450);
+                        if (challengeVisible()) return;
+                      } catch {}
+                    }
+                  }
+                }"""
+            )
+            await page.wait_for_timeout(500)
+
+    async def _cell_rects(
+        self,
+        page: Any,
+        variant: str,
+        cells: list[tuple[int, int]],
+    ) -> list[dict[str, Any]]:
+        variant = normalize_geetest_variant(variant)
+        variant_class = "winlinze" if variant == "winlinze" else "match"
+        return await page.evaluate(
+            """({ variantClass, cells }) => {
+              const visible = (el) => {
+                if (!el) return false;
+                const r = el.getBoundingClientRect();
+                const cs = getComputedStyle(el);
+                return r.width > 3 && r.height > 3 && cs.display !== 'none'
+                  && cs.visibility !== 'hidden' && cs.opacity !== '0';
+              };
+              const root = document.querySelector(`[class*="geetest_${variantClass}"]`) || document;
+              const ret = [];
+              for (const [a, b] of cells) {
+                const selectors = [
+                  `.geetest_item-${a}-${b}`,
+                  `[class*="geetest_item-${a}-${b}"]`,
+                ];
+                let el = null;
+                for (const sel of selectors) {
+                  const nodes = Array.from(root.querySelectorAll(sel));
+                  el = nodes.find(visible) || null;
+                  if (el) break;
+                }
+                if (!el) continue;
+                const r = el.getBoundingClientRect();
+                ret.push({
+                  a, b,
+                  selector: `.geetest_item-${a}-${b}`,
+                  x: r.x,
+                  y: r.y,
+                  width: r.width,
+                  height: r.height,
+                  cx: r.x + r.width / 2,
+                  cy: r.y + r.height / 2,
+                  className: String(el.className || ''),
+                });
+              }
+              return ret;
+            }""",
+            {"variantClass": variant_class, "cells": cells},
+        )
+
+    async def _click_cell_pair(self, page: Any, rects: list[dict[str, Any]]) -> None:
+        for idx, rect in enumerate(rects[:2]):
+            x = float(rect["cx"]) + random.uniform(-2.5, 2.5)
+            y = float(rect["cy"]) + random.uniform(-2.5, 2.5)
+            await page.mouse.move(x, y)
+            await page.wait_for_timeout(random.randint(80, 180))
+            await page.mouse.click(x, y)
+            if idx == 0:
+                await page.wait_for_timeout(random.randint(180, 420))
+
+    async def _collect_validates(self, page: Any, source: str) -> None:
+        try:
+            await page.evaluate(
+                """(source) => window.__ANTIBOT_GEETEST && window.__ANTIBOT_GEETEST.collectValidates
+                  ? window.__ANTIBOT_GEETEST.collectValidates(source)
+                  : []""",
+                source,
+            )
+        except Exception:
+            pass
+
+    async def _visual_outcome(self, page: Any) -> dict[str, Any]:
+        return await page.evaluate(
+            r"""() => {
+              const text = (document.body && document.body.innerText || '').replace(/\s+/g, ' ').trim();
+              const validates = window.__ANTIBOT_GEETEST && window.__ANTIBOT_GEETEST.validates || [];
+              let latest = null;
+              for (let i = validates.length - 1; i >= 0; i--) {
+                const value = validates[i] && validates[i].value;
+                if (value && value.lot_number && value.captcha_output && value.pass_token && value.gen_time) {
+                  latest = value;
+                  break;
+                }
+              }
+              return {
+                successText: /Verification Success|验证成功|验证通过|success/i.test(text),
+                fail: /验证失败|请重试|try again|fail/i.test(text),
+                payloadOk: Boolean(latest),
+                latestValidate: latest,
+                text: text.slice(0, 600),
+              };
+            }"""
+        )
 
     async def _solve_slide_challenge(
         self,
@@ -963,6 +1604,30 @@ class GeetestV4Solver:
                       && cs.visibility !== 'hidden' && cs.opacity !== '0';
                   };
                   return visible(document.querySelector('.geetest_bg'))
+                    || visible(document.querySelector('[class*="geetest_bg"]'));
+                }""",
+                timeout=timeout_ms,
+            )
+            return True
+        except Exception:
+            return False
+
+    async def _any_challenge_visible(self, page: Any, timeout_ms: int = 1) -> bool:
+        try:
+            await page.wait_for_function(
+                """() => {
+                  const visible = (el) => {
+                    if (!el) return false;
+                    const r = el.getBoundingClientRect();
+                    const cs = getComputedStyle(el);
+                    return r.width > 20 && r.height > 20 && cs.display !== 'none'
+                      && cs.visibility !== 'hidden' && cs.opacity !== '0';
+                  };
+                  return visible(document.querySelector('.geetest_box'))
+                    || visible(document.querySelector('[class*="geetest_box"]'))
+                    || visible(document.querySelector('.geetest_subitem'))
+                    || visible(document.querySelector('[class*="geetest_subitem"]'))
+                    || visible(document.querySelector('.geetest_bg'))
                     || visible(document.querySelector('[class*="geetest_bg"]'));
                 }""",
                 timeout=timeout_ms,
@@ -1243,11 +1908,12 @@ class GeetestV4Solver:
         self,
         events: list[dict[str, Any]],
         state: dict[str, Any] | None,
+        requested_variant: str = "auto",
     ) -> dict[str, Any] | None:
-        verify_solution = geetest_v4_success_from_events(events)
+        verify_solution = geetest_v4_success_for_variant(events, requested_variant)
         if verify_solution:
             return verify_solution
-        hook_solution = latest_geetest_success(state)
+        hook_solution = self._hook_success_for_requested(state, requested_variant)
         if not hook_solution:
             return None
         solution = dict(hook_solution)
@@ -1284,10 +1950,15 @@ class GeetestV4Solver:
         ok = bool(solution)
         state = raw.get("state") if isinstance(raw.get("state"), dict) else {}
         slide_attempts = raw.get("slide_attempts") if isinstance(raw.get("slide_attempts"), list) else []
+        winlinze_attempts = (
+            raw.get("winlinze_attempts") if isinstance(raw.get("winlinze_attempts"), list) else []
+        )
+        match_attempts = raw.get("match_attempts") if isinstance(raw.get("match_attempts"), list) else []
         diagnostics = {
             "target_url": raw.get("target_url"),
             "final_url": raw.get("final_url"),
             "title": raw.get("title"),
+            "requested_variant": raw.get("requested_variant"),
             "captcha_id": (solution or {}).get("captcha_id"),
             "lot_number": (solution or {}).get("lot_number"),
             "risk_type": (solution or {}).get("risk_type"),
@@ -1303,6 +1974,10 @@ class GeetestV4Solver:
             "validates": len(state.get("validates") or []) if isinstance(state, dict) else 0,
             "slide_attempts": len(slide_attempts),
             "slide_solved": any((attempt or {}).get("ok") for attempt in slide_attempts),
+            "winlinze_attempts": len(winlinze_attempts),
+            "winlinze_solved": any((attempt or {}).get("ok") for attempt in winlinze_attempts),
+            "match_attempts": len(match_attempts),
+            "match_solved": any((attempt or {}).get("ok") for attempt in match_attempts),
             "net_events": raw.get("net_count_total", len(raw.get("net") or [])),
             "proxy": redacted_proxy(proxy_server),
         }
