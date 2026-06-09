@@ -11,6 +11,7 @@ from .providers.altcha import AltchaSolver
 from .providers.anubis import AnubisSolver
 from .providers.auro import AuroSolver
 from .providers.browser import BrowserAutomation
+from .providers.botcha import BotchaSolver
 from .providers.btx import BtxSolver
 from .providers.cap import CapSolver
 from .providers.capybara import CapybaraSolver
@@ -64,6 +65,7 @@ class AntibotClient:
         self.browser_binary = browser_binary
         self.browser = BrowserAutomation()
         self.activehashcash = ActiveHashcashSolver()
+        self.botcha = BotchaSolver()
         self.btx = BtxSolver()
         self.cap = CapSolver()
         self.capybara = CapybaraSolver()
@@ -152,6 +154,9 @@ class AntibotClient:
 
     async def solve_crovly(self, **kwargs: Any) -> CaptchaResult:
         return await self.crovly.solve(**kwargs)
+
+    async def solve_botcha(self, **kwargs: Any) -> CaptchaResult:
+        return await self.botcha.solve(**kwargs)
 
     async def solve_altcha(self, **kwargs: Any) -> CaptchaResult:
         return await self.altcha.solve(**kwargs)
@@ -303,6 +308,52 @@ class AntibotClient:
             }
             ah_kwargs.setdefault("challenge_url", target_url)
             return await self.solve_activehashcash(**ah_kwargs)
+        if provider == "botcha":
+            botcha_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "mode",
+                    "base_url",
+                    "app_id",
+                    "audience",
+                    "challenge_json",
+                    "challenge_file",
+                    "challenge_url",
+                    "verify_url",
+                    "submit",
+                    "difficulty",
+                    "rtt_adjust",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                }
+                and v is not None
+            }
+            target_lower = target_url.lower()
+            if not botcha_kwargs.get("base_url") and not botcha_kwargs.get("challenge_url"):
+                if target_lower.rstrip("/").endswith("/v1/token"):
+                    botcha_kwargs["mode"] = "token"
+                    botcha_kwargs["challenge_url"] = target_url
+                    botcha_kwargs["base_url"] = target_url[: target_lower.rindex("/v1/token")]
+                elif target_lower.rstrip("/").endswith("/v1/token/verify"):
+                    botcha_kwargs["mode"] = "token"
+                    botcha_kwargs["verify_url"] = target_url
+                    botcha_kwargs["base_url"] = target_url[: target_lower.rindex("/v1/token/verify")]
+                elif target_lower.rstrip("/").endswith("/api/challenge"):
+                    botcha_kwargs["mode"] = "standard"
+                    botcha_kwargs["challenge_url"] = target_url
+                    botcha_kwargs["base_url"] = target_url[: target_lower.rindex("/api/challenge")]
+                elif target_lower.rstrip("/").endswith("/api/speed-challenge"):
+                    botcha_kwargs["mode"] = "speed"
+                    botcha_kwargs["challenge_url"] = target_url
+                    botcha_kwargs["base_url"] = target_url[: target_lower.rindex("/api/speed-challenge")]
+                else:
+                    botcha_kwargs["base_url"] = target_url
+            botcha_kwargs.setdefault("submit", True)
+            return await self.solve_botcha(**botcha_kwargs)
         if provider == "btx":
             btx_kwargs = {
                 k: v

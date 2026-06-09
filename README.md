@@ -1,6 +1,6 @@
 # antibot-sdk
 
-`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
+`antibot-sdk` 是一个把 **浏览器自动化 / Cloudflare/Turnstile 流程 / hCaptcha / 腾讯滑块验证码 / 阿里云滑块验证码 / AJ-Captcha 协议滑块 / ActiveHashcash Rails Hashcash PoW / ALTCHA PoW / Anubis PoW / Auro AES-GCM 行为 PoW / FriendlyCaptcha PoW / powCAPTCHA signals-bound PoW / FCaptcha signals-bound PoW / TrustCaptcha fingerprint 多任务 PoW / @strav/captcha stateless HMAC PoW / JustNoCaptcha multi-puzzle FNV PoW / Capybara-Captcha payload-bound PoW / PrivateCaptcha Compute PoW / Portcullis Argon2 PoW / Cap PoW / crypto-puzzle RSW Time-lock / Captxa JA4-bound PoW / Swetrix CAPTCHA PoW / Crovly fingerprint 行为 PoW / chpio pow-captcha Target PoW / Impost Argon2id PoW / Kerberus u128-score PoW / Lapti SHA3 token PoW / PaulDotSH bcrypt PoW / guns.lol seal PoW/BLAKE3 / H33 BotShield PoW / HashGuard JWT PoW / mCaptcha PoW / Wicketkeeper JWT PoW / yourcaptcha 行为 PoW / silent-challenge 被动 PoW / P-Captcha 二次剩余 PoW / pow_captcha Buffer PoW / PoW Bot Deterrent scrypt PoW / POWChallenge Argon2id Memory PoW / PowForge signed SHA-256 token PoW / BTX MatMul service-challenge PoW / BOTCHA AI speed challenge / pow-reaction JWT 多轮 PoW / Prosopo Procaptcha PoW / Tollbooth SHA256-Balloon/Navigator Attestation / GeeTest v4 / 网易易盾滑动拼图** 收敛到一起的 Python SDK + CLI 工具集。
 
 这个项目不是 Codex skill，而是独立 SDK，目标是把三个已有方向统一成一个可复用、可压测、可继续扩展的工程：
 
@@ -48,6 +48,7 @@
 - POWChallenge / powchallenge-server：新增 Argon2id memory-hard PoW 协议 solver，解析 `GET /challenge` 的 `req_id/challenge/difficulty`，复现 `t=1,m=19456KiB,p=1` 前导零 bit 校验，可提交 `/verify`，不启动浏览器。
 - PowForge CAPTCHA：新增 signed salt + SHA-256 PoW token solver，获取 `/api/challenge` 的 `salt/difficulty/signature/id`，复现 worker 的 `SHA256(salt+nonce)` leading-zero bit，提交 `/api/verify` 换 `pf_token`，可选 `/api/token/verify`，不启动浏览器。
 - BTX MatMul service-challenge：新增 M31 有限域矩阵 PoW 原型，复现 header sigma、noise rank、block transcript SHA-256d 与 `digest_le <= target`，输出 `X-BTX-*` proof headers；纯 Python 默认小/中维度，不启动浏览器。
+- BOTCHA：新增 AI-agent speed challenge 协议 solver，复现 `sha256_first8` 任务、`/v1/token -> /v1/token/verify` JWT flow，并兼容 `/api/challenge` prime+salt puzzle；不启动浏览器。
 - pow-reaction：新增 JWT 签名多轮 PoW 协议 solver，解析 HS256 challenge、clientId/context 绑定和 rounds，复现 `SHA256(round+"."+nonce)` 前导零 bit，可提交 reactions endpoint，不启动浏览器。
 - Prosopo Procaptcha PoW：新增纯协议 PoW solver，复现 `@prosopo/util` 的 `SHA256(nonce+challenge)` 前导十六进制零搜索，可构造 signed timestamp submit body 并提交 provider endpoint，不启动浏览器。
 - Tollbooth / libcaptcha：新增 SHA-256 与 SHA256-Balloon memory-hard PoW solver，同时支持 navigator-attestation 的 HTTP poll 稀疏 signals token flow，输出 verify form / clearance token，不启动浏览器。
@@ -103,6 +104,7 @@
 | POWChallenge / powchallenge-server | 协议 solver | `argon2id_memory_pow` | alpha | verify body / validated message |
 | PowForge CAPTCHA | 协议 solver | `signed_sha256_pow_token` | alpha | `pf_token` / validated token |
 | BTX MatMul Service Challenge | 协议 solver | `matmul_service_pow` | prototype | `X-BTX-*` proof headers / proof JSON |
+| BOTCHA | 协议 solver | `ai_speed_challenge` | alpha | answers / access_token / badge |
 | pow-reaction | 协议 solver | `signed_multi_round_pow` | alpha | `{challenge, solutions, reaction}` / success |
 | Prosopo Procaptcha PoW | 协议 solver | `prosopo_pow` | alpha | submit body / `verified=true` |
 | Tollbooth / libcaptcha | 协议 solver | `tollbooth_protocol` | alpha | verify form / clearance token |
@@ -2703,6 +2705,48 @@ antibot stress btx \
 
 ---
 
+### 22.4.1 BOTCHA AI speed challenge / token flow
+
+BOTCHA 不是图片验证码，而是面向 AI-agent / bot-admission 的轻量计算 challenge。当前 SDK 走纯协议层：拉取 speed/token challenge，本地复现 `sha256_first8` 答案，并在 app-scoped 场景把答案提交到 `/v1/token/verify` 换 `access_token`；同时兼容 legacy `/api/challenge` 的 prime+salt puzzle。
+
+核心算法：
+
+```text
+# /api/speed-challenge 或 /v1/token
+answer_i = SHA256(str(problem.num)).hexdigest()[:8]
+POST /api/speed-challenge {id, answers[]}
+POST /v1/token/verify {id, answers[], app_id, audience?} -> access_token
+
+# /api/challenge legacy puzzle
+material = ''.join(first_N_primes) + salt
+answer = SHA256(material).hexdigest()[:16]
+POST /api/challenge {id, answer}
+```
+
+命令示例：
+
+```bash
+antibot solve botcha --mode speed --submit --timeout 10
+antibot solve botcha --mode standard --difficulty easy --submit --timeout 10
+antibot solve botcha --mode token --app-id 'app_xxx' --submit
+
+antibot solve botcha \
+  --challenge-json '{"id":"botcha-speed-fixture","problems":[{"num":123456,"operation":"sha256_first8"},{"num":789012,"operation":"sha256_first8"},{"num":42,"operation":"sha256_first8"}],"timeLimit":"500ms"}'
+
+antibot stress botcha \
+  --challenge-json '{"id":"botcha-speed-fixture","problems":[{"num":123456,"operation":"sha256_first8"},{"num":789012,"operation":"sha256_first8"},{"num":42,"operation":"sha256_first8"}],"timeLimit":"500ms"}' \
+  --runs 20 \
+  --concurrency 4
+```
+
+当前定位：
+
+- 这是公开 speed/token 计算 challenge solver，不启动浏览器；
+- `/api/speed-challenge` 与 `/api/challenge` 已做 live submit；
+- `/v1/token` live 需要有效 `app_id`，无注册 app 时会返回 `APP_REGISTRATION_REQUIRED`，SDK 保留 token flow mock/fixture 闭环。
+
+---
+
 ### 22.5 pow-reaction JWT signed multi-round PoW
 
 `pow-reaction` 是一个把“反刷 reaction/表单动作”做成 PoW captcha 的 Svelte 组件。它的关键不在图像，而在 **签名 challenge + clientId/context 绑定 + 多轮 PoW + redeem 防重放**：
@@ -3373,6 +3417,7 @@ SDK 可以根据 URL 粗略判断 provider：
 - POWChallenge / powchallenge-server 相关 URL -> `powchallenge`
 - PowForge / `captcha.powforge.dev` / `pf_token` 相关 URL -> `powforge`
 - BTX / `matmulservicechallenge` / `X-BTX-Challenge` / `matmul_service_challenge` 相关 URL -> `btx`
+- BOTCHA / `botcha.ai` / `/v1/token` / `/v1/token/verify` / `/api/speed-challenge` -> `botcha`
 - pow-reaction / `/reactions/challenge` 相关 URL -> `powreaction`
 - Prosopo / Procaptcha / `/v1/prosopo/provider/client/captcha/pow` 相关 URL -> `procaptcha`
 - Tollbooth / libcaptcha / `/.tollbooth/verify` / `sha256-balloon` 相关 URL -> `tollbooth`
@@ -3609,6 +3654,12 @@ antibot solve btx --challenge-url 'https://target.example/gated-api' --submit-ur
 antibot solve btx --challenge-json @/tmp/btx-challenge.json --max-attempts 100000 --timeout 30
 antibot stress btx --challenge-json @/tmp/btx-challenge.json --runs 10 --concurrency 2
 
+# BOTCHA AI speed/token flow
+antibot solve botcha --mode speed --submit --timeout 10
+antibot solve botcha --mode standard --difficulty easy --submit --timeout 10
+antibot solve botcha --mode token --app-id 'app_xxx' --submit
+antibot stress botcha --challenge-json '{"id":"botcha-speed-fixture","problems":[{"num":123456,"operation":"sha256_first8"},{"num":789012,"operation":"sha256_first8"},{"num":42,"operation":"sha256_first8"}],"timeLimit":"500ms"}' --runs 20 --concurrency 4
+
 # ALTCHA
 antibot solve altcha --challenge-url 'https://target.example/altcha/challenge'
 antibot stress altcha --challenge-url 'https://target.example/altcha/challenge' --runs 50 --concurrency 5
@@ -3813,7 +3864,7 @@ aliyun_puzzle_selected.png
 qoder_precaptcha.png
 ```
 
-Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / H33 BotShield / FCaptcha / TrustCaptcha / @strav/captcha / Cap / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
+Turnstile / hCaptcha / reCAPTCHA / AJ-Captcha / ALTCHA / Anubis / FriendlyCaptcha / H33 BotShield / BOTCHA / FCaptcha / TrustCaptcha / @strav/captcha / Cap / Captxa / Swetrix / Crovly / HashGuard / yourcaptcha / silent-challenge / P-Captcha / pow_captcha / PoW Bot / pow-reaction / GeeTest / Yidun 会保留：
 
 ```text
 turnstile_run.json / hcaptcha_run.json / recaptcha_run.json / geetest_run.json
@@ -3823,6 +3874,7 @@ ajcaptcha_run.json / ajcaptcha_original.png / ajcaptcha_jigsaw.png
 altcha_run.json
 anubis_run.json
 friendlycaptcha_run.json
+botcha_run.json
 fcaptcha_run.json
 cap_run.json
 lapti_run.json
@@ -3902,6 +3954,7 @@ src/antibot_sdk/
     crovly.py               # Crovly fingerprint/behavior-bound SHA-256 bit PoW solver
     chpiopow.py             # chpio/pow-captcha signed target-match PoW protocol solver
     h33botshield.py        # H33 BotShield challenge/solve SHA-256 bit PoW token solver
+    botcha.py              # BOTCHA sha256_first8 speed/token flow + prime puzzle solver
     hashguard.py            # HashGuard target-threshold SHA-256 PoW + JWT proof-token solver
     trustcaptcha.py         # TrustCaptcha fingerprint/integrity + multi-task SHA-256 PoW solver
     stravcaptcha.py         # @strav/captcha stateless HMAC token + hashcash PoW solver
@@ -3956,6 +4009,7 @@ tests/
   test_procaptcha.py
   test_tollbooth.py
   test_hashguard.py
+  test_botcha.py
   test_justnocaptcha.py
   test_capybara.py
   test_vulcan.py
@@ -3973,7 +4027,7 @@ tests/
 最近一轮关键验证：
 
 ```text
-pytest: 171 passed
+pytest: 175 passed
 ruff check src tests: passed
 uv build: success
 Vulcan fixture/html/CLI/stress: chained SHA256 uint32-target PoW，solution=1136;5242;945，4/4 stress 验证通过
@@ -3991,6 +4045,7 @@ Lapti fixture/mock/stress: SHA3(data+SECRET) token + SHA3(token+nonce) byte-zero
 Captxa fixture/mock/stress: browser metrics + JA4-bound opaque token + SHA-256 PoW simple mode 验证通过
 FCaptcha fixture/mock/stress: signalsHash-bound PoW、本地 /api/pow/challenge + /api/verify 验证通过
 H33 BotShield live/script/mock/CLI：确认 script.js challenge/solve 链路、x-h33 post-quantum receipt headers、SHA256(nonce+counter) leading-zero-bit PoW；live submit ok=true，成功返回 h33_bot_token。
+BOTCHA source/live/CLI/stress：dupe-com/botcha packages/go/challenge.go + src/challenges/speed.ts 交叉确认 sha256_first8；/api/speed-challenge live submit ok=true；/api/challenge live prime+salt submit ok=true；fixture answers [8d969eef,29be3ceb,73475cb4] 验证通过。
 
 H33 BotShield：
 
@@ -3999,6 +4054,17 @@ H33 BotShield：
 响应头保留 x-h33-substrate / x-h33-receipt / x-h33-algorithms=ML-DSA-65,FALCON-512,SPHINCS+-SHA2-128f。
 PoW = SHA256(nonce+counter) leading-zero-bit，fixture difficulty=12 -> solution=9893。
 live api.h33.ai submit：ok=true，成功返回 session_token / h33_bot_token。
+```
+
+BOTCHA：
+
+```text
+dupe-com/botcha packages/go/challenge.go + src/challenges/speed.ts：确认 speed/token answer = SHA256(str(num)).hexdigest()[:8]。
+legacy /api/challenge：确认 first_N_primes concat + salt 后取 SHA256 前 16 hex。
+/api/speed-challenge live submit：ok=true，solveTimeMs≈348。
+/api/challenge live submit：ok=true，solveTime≈265。
+fixture answers：123456 -> 8d969eef，789012 -> 29be3ceb，42 -> 73475cb4。
+/v1/token：无 app_id 会 401 APP_REGISTRATION_REQUIRED；本地 mock token flow 已验证 access_token 输出。
 ```
 powCAPTCHA widget.js 逆向确认 /challenges/create + gzip JSON + fingerprint/signals；PoW = SHA256(signature+problem+nonce) hex-prefix；本地 mock create + verify：ok=true，成功输出 powcaptcha-response token；fixture nonce [2,209] 验证通过。
 PoW Bot Deterrent fixture/mock/stress: scrypt-WASM PoW、本地 /GetChallenges + /Verify 验证通过

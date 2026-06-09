@@ -128,6 +128,7 @@ async def amain(argv: list[str] | None = None) -> int:
             "auto",
             "ajcaptcha",
             "activehashcash",
+            "botcha",
             "btx",
             "altcha",
             "anubis",
@@ -413,6 +414,23 @@ async def amain(argv: list[str] | None = None) -> int:
     h33.add_argument("--proxy")
     h33.add_argument("--output-dir")
     h33.add_argument("--raw", action="store_true")
+
+    botcha = solve_sub.add_parser("botcha")
+    botcha.add_argument("--mode", choices=["auto", "speed", "token", "standard"], default="speed")
+    botcha.add_argument("--base-url", default="https://botcha.ai")
+    botcha.add_argument("--app-id", help="BOTCHA app_id for /v1/token flow")
+    botcha.add_argument("--audience")
+    botcha.add_argument("--challenge-json", help="inline challenge JSON, or @/path")
+    botcha.add_argument("--challenge-file")
+    botcha.add_argument("--challenge-url")
+    botcha.add_argument("--verify-url")
+    botcha.add_argument("--submit", action="store_true", help="POST solved body to verify/token endpoint")
+    botcha.add_argument("--difficulty", default="medium", choices=["easy", "medium", "hard"], help="legacy /api/challenge difficulty")
+    botcha.add_argument("--rtt-adjust", action="store_true", help="append ts=now for RTT-aware timeout endpoints")
+    botcha.add_argument("--timeout", type=int, default=10)
+    botcha.add_argument("--proxy")
+    botcha.add_argument("--output-dir")
+    botcha.add_argument("--raw", action="store_true")
 
     fc = solve_sub.add_parser("fcaptcha")
     fc_source = fc.add_mutually_exclusive_group(required=True)
@@ -1395,6 +1413,26 @@ async def amain(argv: list[str] | None = None) -> int:
     sh33.add_argument("--output-dir")
     sh33.add_argument("--output-json")
     sh33.add_argument("--full", action="store_true")
+
+    sbotcha = stress_sub.add_parser("botcha")
+    sbotcha.add_argument("--mode", choices=["auto", "speed", "token", "standard"], default="speed")
+    sbotcha.add_argument("--base-url", default="https://botcha.ai")
+    sbotcha.add_argument("--app-id")
+    sbotcha.add_argument("--audience")
+    sbotcha.add_argument("--challenge-json")
+    sbotcha.add_argument("--challenge-file")
+    sbotcha.add_argument("--challenge-url")
+    sbotcha.add_argument("--verify-url")
+    sbotcha.add_argument("--submit", action="store_true")
+    sbotcha.add_argument("--difficulty", default="medium", choices=["easy", "medium", "hard"])
+    sbotcha.add_argument("--rtt-adjust", action="store_true")
+    sbotcha.add_argument("--runs", type=int, default=10)
+    sbotcha.add_argument("--concurrency", type=int, default=2)
+    sbotcha.add_argument("--timeout", type=int, default=10)
+    sbotcha.add_argument("--proxy")
+    sbotcha.add_argument("--output-dir")
+    sbotcha.add_argument("--output-json")
+    sbotcha.add_argument("--full", action="store_true")
 
     sfc = stress_sub.add_parser("fcaptcha")
     sfc_source = sfc.add_mutually_exclusive_group(required=True)
@@ -2647,6 +2685,25 @@ async def amain(argv: list[str] | None = None) -> int:
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "botcha":
+        ret = await client.solve_botcha(
+            mode=args.mode,
+            base_url=args.base_url,
+            app_id=args.app_id,
+            audience=args.audience,
+            challenge_json=args.challenge_json,
+            challenge_file=args.challenge_file,
+            challenge_url=args.challenge_url,
+            verify_url=args.verify_url,
+            submit=args.submit,
+            difficulty=args.difficulty,
+            rtt_adjust=args.rtt_adjust,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
     if args.cmd == "solve" and args.provider == "fcaptcha":
         ret = await client.solve_fcaptcha(
             base_url=args.base_url,
@@ -3793,6 +3850,33 @@ async def amain(argv: list[str] | None = None) -> int:
                 start=args.start,
                 max_attempts=args.max_attempts,
                 workers=args.workers,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+    if args.cmd == "stress" and args.provider == "botcha":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="botcha",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_botcha(
+                mode=args.mode,
+                base_url=args.base_url,
+                app_id=args.app_id,
+                audience=args.audience,
+                challenge_json=args.challenge_json,
+                challenge_file=args.challenge_file,
+                challenge_url=args.challenge_url,
+                verify_url=args.verify_url,
+                submit=args.submit,
+                difficulty=args.difficulty,
+                rtt_adjust=args.rtt_adjust,
                 timeout_sec=args.timeout,
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,

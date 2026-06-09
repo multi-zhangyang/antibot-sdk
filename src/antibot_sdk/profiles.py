@@ -142,6 +142,11 @@ def detect_provider_for_url(url: str | None) -> str:
         return "powforge"
     if any(
         x in u or x in host
+        for x in ("botcha.ai", "dupe-com/botcha", "/v1/token/verify", "/api/speed-challenge", "x-botcha-landing-token")
+    ):
+        return "botcha"
+    if any(
+        x in u or x in host
         for x in ("btx", "matmulservicechallenge", "x-btx-challenge", "matmul_service_challenge")
     ):
         return "btx"
@@ -368,6 +373,14 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "m31-matmul-transcript-sha256d-service-challenge-solver",
                 "successFields": ["X-BTX-Proof-Nonce", "X-BTX-Proof-Digest"],
                 "endpoints": ["HTTP 402 with X-BTX-Challenge", "retry target accepting X-BTX proof headers"],
+            }
+        },
+        "botcha": {
+            "ai_speed_challenge": {
+                "patterns": ["botcha.ai", "/v1/token", "/v1/token/verify", "/api/speed-challenge"],
+                "mode": "sha256-first8-speed-token-flow-solver",
+                "successFields": ["answers", "access_token", "badge"],
+                "endpoints": ["/v1/token", "/v1/token/verify", "/api/speed-challenge", "/api/challenge"],
             }
         },
         "capybara": {
