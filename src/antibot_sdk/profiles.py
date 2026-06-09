@@ -105,6 +105,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "browser"
     u = url.lower()
     host = (urlparse(url).hostname or "").lower()
+    if any(x in u or x in host for x in ("acw_sc__v2", "acwscv2", "arg1=", "yundunwaf")):
+        return "acwscv2"
     if aliyun_profile_for_url(url, "auto") or "aliyun" in u or "alibaba" in u:
         return "aliyun"
     if any(x in u or x in host for x in ("ajcaptcha", "anji-plus", "/captcha/get", "/captcha/check")):
@@ -149,6 +151,8 @@ def detect_provider_for_url(url: str | None) -> str:
         return "basedflare"
     if any(x in u or x in host for x in ("pingoo", "__pingoo/captcha", "__pingoo_captcha", "__pingoo_captcha_verified")):
         return "pingoo"
+    if any(x in u or x in host for x in ("vercel-botid", "botid", "x-is-human", "/_vercel/botid", "/botid/")):
+        return "vercel_botid"
     if any(x in u or x in host for x in ("guns.lol", "_gs_sets", "_2xa", "seal_pow_blake3")):
         return "gunslol"
     if any(x in u or x in host for x in ("h33.ai", "botshield", "h33_bot_token", "/v1/botshield/")):
@@ -411,6 +415,22 @@ def list_profiles() -> dict[str, Any]:
                 "mode": "jwt-cookie-bound-sha256-prefix-pow",
                 "successFields": ["nonce", "hash", "__pingoo_captcha_verified cookie"],
                 "endpoints": ["GET /__pingoo/captcha/api/init", "POST /__pingoo/captcha/api/verify"],
+            }
+        },
+        "vercel_botid": {
+            "x_is_human_aes_gcm_fingerprint": {
+                "patterns": ["Vercel BotID", "X-Is-Human", "botid c.js", "/_vercel/botid"],
+                "mode": "pbkdf2-aes-gcm-fingerprint-header-generator",
+                "successFields": ["X-Is-Human header"],
+                "endpoints": ["GET BotID c.js", "caller submits protected request with X-Is-Human"],
+            }
+        },
+        "acwscv2": {
+            "aliyun_acw_sc_v2_js_cookie": {
+                "patterns": ["acw_sc__v2", "var arg1=", "_0x4818", "yundunwaf"],
+                "mode": "obfuscated-js-cookie-protocol-solver",
+                "successFields": ["acw_sc__v2 cookie"],
+                "endpoints": ["GET protected page", "retry protected page with acw_sc__v2 cookie"],
             }
         },
         "friendlycaptcha": {

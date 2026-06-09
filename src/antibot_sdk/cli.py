@@ -150,7 +150,9 @@ async def amain(argv: list[str] | None = None) -> int:
             "wargon2",
             "balooproxy",
             "basedflare",
+            "acwscv2",
             "pingoo",
+            "vercel_botid",
             "aliyun",
             "tencent",
             "friendlycaptcha",
@@ -183,7 +185,6 @@ async def amain(argv: list[str] | None = None) -> int:
             "powbot",
             "powchallenge",
             "powforge",
-            "powxy",
             "powreaction",
             "procaptcha",
             "tollbooth",
@@ -478,6 +479,19 @@ async def amain(argv: list[str] | None = None) -> int:
     bf.add_argument("--output-dir")
     bf.add_argument("--raw", action="store_true")
 
+    acw = solve_sub.add_parser("acwscv2")
+    acw.add_argument("--base-url", help="protected page; solver GETs page and retries with cookie when --submit")
+    acw.add_argument("--target-url", help="alias for protected page URL")
+    acw.add_argument("--submit-url", help="explicit retry URL when different from protected page")
+    acw.add_argument("--challenge-html", help="inline ACW SC V2 challenge HTML, or @/path")
+    acw.add_argument("--challenge-file")
+    acw.add_argument("--submit", action="store_true", help="retry with generated acw_sc__v2 cookie")
+    acw.add_argument("--timeout", type=int, default=10)
+    acw.add_argument("--proxy")
+    acw.add_argument("--output-dir")
+    acw.add_argument("--user-agent")
+    acw.add_argument("--raw", action="store_true")
+
     pingo = solve_sub.add_parser("pingoo")
     pingo.add_argument("--base-url", help="protected origin; infers /__pingoo/captcha/api/init")
     pingo.add_argument("--init-url", help="explicit Pingoo init endpoint")
@@ -495,6 +509,23 @@ async def amain(argv: list[str] | None = None) -> int:
     pingo.add_argument("--output-dir")
     pingo.add_argument("--user-agent")
     pingo.add_argument("--raw", action="store_true")
+
+    botid = solve_sub.add_parser("vercel_botid")
+    botid_source = botid.add_mutually_exclusive_group(required=True)
+    botid_source.add_argument("--script-js", help="inline BotID script/context JSON, or @/path")
+    botid_source.add_argument("--script-file")
+    botid_source.add_argument("--script-url")
+    botid.add_argument("--allow-network", action="store_true", help="allow fetching --script-url")
+    botid.add_argument("--submit", action="store_true", help="stub-only: returns failure with generated header ticket")
+    botid.add_argument("--profile-json", help="fingerprint profile JSON, or @/path")
+    botid.add_argument("--profile-file")
+    botid.add_argument("--fingerprint-json", help="explicit fingerprint JSON, or @/path")
+    botid.add_argument("--fingerprint-file")
+    botid.add_argument("--salt", help="optional hex/base64 deterministic salt for tests")
+    botid.add_argument("--iv", help="optional hex/base64 deterministic IV for tests")
+    botid.add_argument("--timeout", type=int, default=15)
+    botid.add_argument("--proxy")
+    botid.add_argument("--raw", action="store_true")
 
     shpw = solve_sub.add_parser("shapow")
     shpw.add_argument("--base-url", default="https://example.com")
@@ -1764,6 +1795,22 @@ async def amain(argv: list[str] | None = None) -> int:
     sbf.add_argument("--output-json")
     sbf.add_argument("--full", action="store_true")
 
+    sacw = stress_sub.add_parser("acwscv2")
+    sacw.add_argument("--base-url")
+    sacw.add_argument("--target-url")
+    sacw.add_argument("--submit-url")
+    sacw.add_argument("--challenge-html")
+    sacw.add_argument("--challenge-file")
+    sacw.add_argument("--submit", action="store_true")
+    sacw.add_argument("--runs", type=int, default=10)
+    sacw.add_argument("--concurrency", type=int, default=2)
+    sacw.add_argument("--timeout", type=int, default=10)
+    sacw.add_argument("--proxy")
+    sacw.add_argument("--output-dir")
+    sacw.add_argument("--output-json")
+    sacw.add_argument("--user-agent")
+    sacw.add_argument("--full", action="store_true")
+
     spingo = stress_sub.add_parser("pingoo")
     spingo.add_argument("--base-url")
     spingo.add_argument("--init-url")
@@ -1784,6 +1831,26 @@ async def amain(argv: list[str] | None = None) -> int:
     spingo.add_argument("--output-json")
     spingo.add_argument("--user-agent")
     spingo.add_argument("--full", action="store_true")
+
+    sbotid = stress_sub.add_parser("vercel_botid")
+    sbotid_source = sbotid.add_mutually_exclusive_group(required=True)
+    sbotid_source.add_argument("--script-js")
+    sbotid_source.add_argument("--script-file")
+    sbotid_source.add_argument("--script-url")
+    sbotid.add_argument("--allow-network", action="store_true")
+    sbotid.add_argument("--submit", action="store_true")
+    sbotid.add_argument("--profile-json")
+    sbotid.add_argument("--profile-file")
+    sbotid.add_argument("--fingerprint-json")
+    sbotid.add_argument("--fingerprint-file")
+    sbotid.add_argument("--salt")
+    sbotid.add_argument("--iv")
+    sbotid.add_argument("--runs", type=int, default=10)
+    sbotid.add_argument("--concurrency", type=int, default=2)
+    sbotid.add_argument("--timeout", type=int, default=15)
+    sbotid.add_argument("--proxy")
+    sbotid.add_argument("--output-json")
+    sbotid.add_argument("--full", action="store_true")
 
     sshpw = stress_sub.add_parser("shapow")
     sshpw.add_argument("--base-url", default="https://example.com")
@@ -2965,7 +3032,9 @@ async def amain(argv: list[str] | None = None) -> int:
             "wargon2",
             "balooproxy",
             "basedflare",
+            "acwscv2",
             "pingoo",
+            "vercel_botid",
         ):
             common.update({
                 "site_profile": args.site_profile,
@@ -3294,6 +3363,21 @@ async def amain(argv: list[str] | None = None) -> int:
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "acwscv2":
+        ret = await client.solve_acwscv2(
+            base_url=args.base_url,
+            target_url=args.target_url,
+            submit_url=args.submit_url,
+            challenge_html=args.challenge_html,
+            challenge_file=args.challenge_file,
+            submit=args.submit,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
+            output_dir=args.output_dir,
+            user_agent=args.user_agent,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
     if args.cmd == "solve" and args.provider == "pingoo":
         ret = await client.solve_pingoo(
             base_url=args.base_url,
@@ -3312,6 +3396,26 @@ async def amain(argv: list[str] | None = None) -> int:
             proxy_server=args.proxy,
             output_dir=args.output_dir,
             user_agent=args.user_agent,
+        )
+        emit(ret, include_raw=args.raw)
+        return 0 if ret.ok else 2
+    if args.cmd == "solve" and args.provider == "vercel_botid":
+        ret = await client.solve_vercel_botid(
+            script_js=args.script_js,
+            script_file=args.script_file,
+            script_url=args.script_url,
+            allow_network=args.allow_network,
+            submit=args.submit,
+            profile=_json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}") if args.profile_file else _json_arg(args.profile_json),
+            fingerprint=(
+                _json_arg(args.fingerprint_json) or _json_arg(f"@{args.fingerprint_file}")
+                if args.fingerprint_file
+                else _json_arg(args.fingerprint_json)
+            ),
+            salt=args.salt,
+            iv=args.iv,
+            timeout_sec=args.timeout,
+            proxy_server=args.proxy,
         )
         emit(ret, include_raw=args.raw)
         return 0 if ret.ok else 2
@@ -4774,6 +4878,30 @@ async def amain(argv: list[str] | None = None) -> int:
         emit_stress(ret, full=args.full)
         return 0 if ret["summary"]["fail"] == 0 else 2
 
+    if args.cmd == "stress" and args.provider == "acwscv2":
+        root = Path(args.output_dir) if args.output_dir else None
+        ret = await run_stress(
+            name="acwscv2",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda i: client.solve_acwscv2(
+                base_url=args.base_url,
+                target_url=args.target_url,
+                submit_url=args.submit_url,
+                challenge_html=args.challenge_html,
+                challenge_file=args.challenge_file,
+                submit=args.submit,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
+                output_dir=str(root / f"run_{i}") if root else None,
+                user_agent=args.user_agent,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+
     if args.cmd == "stress" and args.provider == "pingoo":
         root = Path(args.output_dir) if args.output_dir else None
         ret = await run_stress(
@@ -4799,6 +4927,38 @@ async def amain(argv: list[str] | None = None) -> int:
                 proxy_server=args.proxy,
                 output_dir=str(root / f"run_{i}") if root else None,
                 user_agent=args.user_agent,
+            ),
+        )
+        emit_stress(ret, full=args.full)
+        return 0 if ret["summary"]["fail"] == 0 else 2
+
+    if args.cmd == "stress" and args.provider == "vercel_botid":
+        ret = await run_stress(
+            name="vercel_botid",
+            runs=args.runs,
+            concurrency=args.concurrency,
+            per_run_timeout=args.timeout + 5,
+            output_json=args.output_json,
+            run_once=lambda _i: client.solve_vercel_botid(
+                script_js=args.script_js,
+                script_file=args.script_file,
+                script_url=args.script_url,
+                allow_network=args.allow_network,
+                submit=args.submit,
+                profile=(
+                    _json_arg(args.profile_json) or _json_arg(f"@{args.profile_file}")
+                    if args.profile_file
+                    else _json_arg(args.profile_json)
+                ),
+                fingerprint=(
+                    _json_arg(args.fingerprint_json) or _json_arg(f"@{args.fingerprint_file}")
+                    if args.fingerprint_file
+                    else _json_arg(args.fingerprint_json)
+                ),
+                salt=args.salt,
+                iv=args.iv,
+                timeout_sec=args.timeout,
+                proxy_server=args.proxy,
             ),
         )
         emit_stress(ret, full=args.full)

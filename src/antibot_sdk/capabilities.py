@@ -149,6 +149,15 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "output": "_basedflare_pow cookie / pow_response",
         "scope": "BasedFlare HAProxy edge PoW：解析 /.basedflare/bot-check JSON/HTML challenge，复现 sha256/argon2 Worker PoW，POST pow_response 换 _basedflare_pow clearance cookie；不启动浏览器。",
     },
+    "acwscv2": {
+        "provider": "acwscv2",
+        "name": "Aliyun / acw_sc__v2 JS Cookie",
+        "category": "solver",
+        "captcha_type": "aliyun_acw_sc_v2_js_cookie",
+        "status": "alpha",
+        "output": "acw_sc__v2 cookie",
+        "scope": "阿里云/加速乐类 acw_sc__v2 JS challenge：解析 arg1、混淆 string table、RC4 key 与 40 位 shuffle，本地生成 clearance cookie 并可重试 protected page；不启动浏览器。",
+    },
     "pingoo": {
         "provider": "pingoo",
         "name": "Pingoo Captcha",
@@ -156,7 +165,16 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "captcha_type": "jwt_cookie_sha256_pow",
         "status": "alpha",
         "output": "__pingoo_captcha_verified cookie / verify JSON body",
-        "scope": "Pingoo 反向代理 CAPTCHA：GET /__pingoo/captcha/api/init 领取 EdDSA JWT challenge cookie，复现 SHA256(challenge+nonce) 十六进制前缀 PoW，POST /api/verify 换 __pingoo_captcha_verified JWT cookie；不启动浏览器。",
+        "scope": "Pingoo 反向代理 CAPTCHA：GET /__pingoo/captcha/api/init 领取 EdDSA JWT challenge cookie，复现 SHA256(challenge+nonce) 十六进制前缀 PoW，POST /__pingoo/captcha/api/verify 换 __pingoo_captcha_verified JWT cookie；不启动浏览器。",
+    },
+    "vercel_botid": {
+        "provider": "vercel_botid",
+        "name": "Vercel BotID / X-Is-Human",
+        "category": "solver",
+        "captcha_type": "x_is_human_aes_gcm_fingerprint",
+        "status": "prototype",
+        "output": "X-Is-Human header JSON",
+        "scope": "Vercel BotID 原型：从 BotID c.js/简化脚本或 JSON context 提取 key/seed/signature/version，合成低风险 WebGL/browser fingerprint，并复现 PBKDF2-SHA256 + AES-256-GCM 生成 X-Is-Human header；不启动浏览器，网络提交为调用方自持。",
     },
     "friendlycaptcha": {
         "provider": "friendlycaptcha",

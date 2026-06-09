@@ -111,6 +111,13 @@ async def run_stress(
     attempt_counts: list[int] = []
     attempt_code_counts: Counter[str] = Counter()
     for r in records:
+        diagnostics = r.get("diagnostics") or {}
+        if isinstance(diagnostics, dict):
+            for key in ("attempts_hint", "attempts", "attempt_count", "nonce_attempts"):
+                value = diagnostics.get(key)
+                if isinstance(value, int):
+                    attempt_counts.append(int(value))
+                    break
         raw = ((r.get("result") or {}).get("raw") or {}) if isinstance(r.get("result"), dict) else {}
         if isinstance(raw, dict):
             if isinstance(raw.get("attempt"), int):

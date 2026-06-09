@@ -14,7 +14,9 @@ from .providers.auro import AuroSolver
 from .providers.awswaf import AwsWafSolver
 from .providers.balooproxy import BalooProxySolver
 from .providers.basedflare import BasedFlareSolver
+from .providers.acwscv2 import AcwScV2Solver
 from .providers.pingoo import PingooSolver
+from .providers.vercel_botid import VercelBotIdSolver
 from .providers.browser import BrowserAutomation
 from .providers.botcha import BotchaSolver
 from .providers.btx import BtxSolver
@@ -95,7 +97,9 @@ class AntibotClient:
         self.awswaf = AwsWafSolver()
         self.balooproxy = BalooProxySolver()
         self.basedflare = BasedFlareSolver()
+        self.acwscv2 = AcwScV2Solver()
         self.pingoo = PingooSolver()
+        self.vercel_botid = VercelBotIdSolver()
         self.fcaptcha = FCaptchaSolver()
         self.cryptopuzzle = CryptoPuzzleSolver()
         self.friendlycaptcha = FriendlyCaptchaSolver()
@@ -210,8 +214,14 @@ class AntibotClient:
     async def solve_basedflare(self, **kwargs: Any) -> CaptchaResult:
         return await self.basedflare.solve(**kwargs)
 
+    async def solve_acwscv2(self, **kwargs: Any) -> CaptchaResult:
+        return await self.acwscv2.solve(**kwargs)
+
     async def solve_pingoo(self, **kwargs: Any) -> CaptchaResult:
         return await self.pingoo.solve(**kwargs)
+
+    async def solve_vercel_botid(self, **kwargs: Any) -> CaptchaResult:
+        return await self.vercel_botid.solve(**kwargs)
 
     async def solve_cryptopuzzle(self, **kwargs: Any) -> CaptchaResult:
         return await self.cryptopuzzle.solve(**kwargs)
@@ -837,6 +847,29 @@ class AntibotClient:
             basedflare_kwargs.setdefault("base_url", target_url)
             basedflare_kwargs.setdefault("submit", True)
             return await self.solve_basedflare(**basedflare_kwargs)
+        if provider == "acwscv2":
+            acw_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "base_url",
+                    "target_url",
+                    "submit_url",
+                    "challenge_html",
+                    "challenge_file",
+                    "submit",
+                    "timeout_sec",
+                    "proxy_server",
+                    "output_dir",
+                    "headers",
+                    "user_agent",
+                }
+                and v is not None
+            }
+            acw_kwargs.setdefault("base_url", target_url)
+            acw_kwargs.setdefault("submit", True)
+            return await self.solve_acwscv2(**acw_kwargs)
         if provider == "pingoo":
             pingoo_kwargs = {
                 k: v
@@ -866,6 +899,31 @@ class AntibotClient:
             pingoo_kwargs.setdefault("base_url", target_url)
             pingoo_kwargs.setdefault("submit", True)
             return await self.solve_pingoo(**pingoo_kwargs)
+        if provider == "vercel_botid":
+            botid_kwargs = {
+                k: v
+                for k, v in kwargs.items()
+                if k
+                in {
+                    "script_js",
+                    "script_file",
+                    "script_url",
+                    "allow_network",
+                    "submit",
+                    "fingerprint",
+                    "profile",
+                    "salt",
+                    "iv",
+                    "timeout_sec",
+                    "proxy_server",
+                    "headers",
+                }
+                and v is not None
+            }
+            botid_kwargs.setdefault("script_url", target_url)
+            botid_kwargs.setdefault("allow_network", True)
+            botid_kwargs.setdefault("submit", False)
+            return await self.solve_vercel_botid(**botid_kwargs)
         if provider == "friendlycaptcha":
             frc_kwargs = {
                 k: v
