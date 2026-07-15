@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>antibot-sdk Tencent Captcha Local Harness</title>
+  <!-- Official public demo appids from https://cloud.tencent.com/product/captcha (captcha.js) -->
+  <script src="https://turing.captcha.qcloud.com/TCaptcha.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; }
+    button { margin: 8px 8px 8px 0; padding: 10px 16px; font-size: 14px; cursor: pointer; }
+    pre { background: #111; color: #0f0; padding: 12px; min-height: 120px; overflow: auto; }
+    .hint { color: #555; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>Tencent Captcha Local Harness</h1>
+  <p class="hint">
+    Uses the same public CaptchaAppIds embedded on the official product page demo.
+    This page exists so antibot-sdk can stress-test without depending on fragile marketing CTAs.
+  </p>
+
+  <div>
+    <button id="captcha_click" type="button">滑动拼图验证</button>
+    <button id="text_click" type="button">文字点选验证</button>
+    <button id="vtt_click" type="button">空间语义验证</button>
+    <button id="noFeel_click" type="button">无感验证</button>
+    <p class="hint">文字点选 appid=199999888；滑动 appid=199999861。可用 URL query <code>?mode=text</code> 自动弹出点选。</p>
+  </div>
+
+  <h3>Last callback</h3>
+  <pre id="out">waiting...</pre>
+
+  <script>
+    // Official product-page public appids (from captcha.js on cloud.tencent.com/product/captcha)
+    const APPIDS = {
+      slide: '199999861',
+      vtt: '199999726',
+      text: '199999888',
+      nofeel: '199999399',
+    };
+
+    function show(obj) {
+      document.getElementById('out').textContent = JSON.stringify(obj, null, 2);
+      window.__ANTIBOT_LAST_CAPTCHA__ = obj;
+    }
+
+    function captchaCallback(res) {
+      show({ kind: 'captchaCallback', ...res, at: Date.now() });
+    }
+    function captchaCallbackNoFeel(res) {
+      show({ kind: 'captchaCallbackNoFeel', ...res, at: Date.now() });
+    }
+
+    function bind(id, appid, cb, opts) {
+      const el = document.getElementById(id);
+      el.onclick = function () {
+        if (!window.TencentCaptcha) {
+          show({ error: 'TencentCaptcha SDK not loaded' });
+          return;
+        }
+        try {
+          new window.TencentCaptcha(String(appid), cb, opts || {}).show();
+        } catch (e) {
+          show({ error: String(e) });
+        }
+      };
+    }
+
+    function init() {
+      if (!window.TencentCaptcha) {
+        show({ error: 'TencentCaptcha missing; retrying...' });
+        setTimeout(init, 400);
+        return;
+      }
+      bind('captcha_click', APPIDS.slide, captchaCallback, {});
+      bind('vtt_click', APPIDS.vtt, captchaCallback, {});
+      bind('text_click', APPIDS.text, captchaCallback, {});
+      bind('noFeel_click', APPIDS.nofeel, captchaCallbackNoFeel, { loading: false });
+      show({ ready: true, appids: APPIDS });
+
+      // Optional auto-open for automation: ?mode=text|slide
+      try {
+        const mode = new URLSearchParams(location.search).get('mode') || '';
+        if (mode === 'text') document.getElementById('text_click').click();
+        if (mode === 'slide') document.getElementById('captcha_click').click();
+      } catch (e) {}
+    }
+    init();
+  </script>
+</body>
+</html>

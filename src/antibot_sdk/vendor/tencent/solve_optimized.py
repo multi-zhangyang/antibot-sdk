@@ -54,9 +54,9 @@ DEFAULT_PROFILE = get_profile(os.getenv("TCAPTCHA_PROFILE", "cloud_product"))
 TARGET_URL = os.getenv("TCAPTCHA_TARGET_URL", DEFAULT_PROFILE.target_url)
 TARGET_APPID = os.getenv("TCAPTCHA_APPID", DEFAULT_PROFILE.appid or "")
 VERIFY_PATH = "cap_union_new_verify"
-MAX_ATTEMPTS = int(os.getenv("TCAPTCHA_MAX_ATTEMPTS", "2"))
+MAX_ATTEMPTS = int(os.getenv("TCAPTCHA_MAX_ATTEMPTS", "3"))
 PAGE_RETRIES = int(os.getenv("TCAPTCHA_PAGE_RETRIES", "2"))
-FRAME_WAIT_SEC = float(os.getenv("TCAPTCHA_FRAME_WAIT_SEC", "18"))
+FRAME_WAIT_SEC = float(os.getenv("TCAPTCHA_FRAME_WAIT_SEC", "25"))
 
 BG_SELECTOR = ".tc-bg-img, .tencent-captcha-dy__verify-bg-img"
 SLIDER_SELECTOR = (
@@ -232,9 +232,33 @@ async def _click_trigger(page: Page) -> bool:
         await asyncio.sleep(2)
         return False
 
-    # --- 腾讯云产品页等 ---
-    for _ in range(4):
-        await asyncio.sleep(1.5)
+    # --- 腾讯云产品页 / local harness 等 ---
+    # Official product page binds public demos to stable element ids (see captcha.js):
+    #   #captcha_click -> 199999861 (slide)
+    #   #vtt_click     -> 199999726
+    #   #text_click    -> 199999888
+    #   #noFeel_click  -> 199999399
+    # Prefer these ids first so we never click marketing CTAs that also say 立即体验.
+    for selector in (
+        "#captcha_click",
+        "#vtt_click",
+        "button#captcha_click",
+        "a#captcha_click",
+        "text=滑动拼图验证",
+        "text=点击验证",
+    ):
+        try:
+            loc = page.locator(selector).first
+            if await loc.count():
+                await loc.scroll_into_view_if_needed(timeout=2500)
+                await loc.click(timeout=3000, force=True)
+                await asyncio.sleep(3.5)
+                return True
+        except Exception:
+            pass
+
+    for _ in range(5):
+        await asyncio.sleep(1.2)
         clicked = bool(await page.evaluate(
             """()=>{
             const visible = (el) => {
@@ -250,21 +274,30 @@ async def _click_trigger(page: Page) -> bool:
                     return true;
                 } catch(e) { return false; }
             };
+            // Stable ids first.
+            for (const id of ['captcha_click', 'vtt_click']) {
+                const el = document.getElementById(id);
+                if (visible(el) && clickEl(el)) return true;
+            }
             const xps = [
-                "//text()[contains(.,'滑动拼图验证')]/following::*[contains(text(),'立即体验')][1]",
+                "//text()[contains(.,'滑动拼图验证')]/following::*[contains(text(),'立即体验') or self::button or self::a][1]",
+                "//*[contains(text(),'滑动拼图验证')]/following::*[contains(text(),'立即体验')][1]",
+                "//*[contains(text(),'滑动拼图')]/following::*[contains(text(),'立即体验')][1]",
                 "//*[contains(text(),'点击验证')]",
-                "//*[contains(text(),'立即体验')]",
-                "//*[contains(text(),'体验')]"
+                "//*[contains(@class,'captcha-box')]//*[contains(text(),'立即体验')]",
             ];
             for (const xp of xps) {
                 const r = document.evaluate(xp, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
                 const el = r.singleNodeValue;
                 if (visible(el) && clickEl(el)) return true;
             }
-            const nodes = Array.from(document.querySelectorAll('button,a,div,span'));
-            const keys = ['点击验证', '立即体验', '开始验证', '验证'];
-            for (const k of keys) {
-                const el = nodes.find(e => visible(e) && (e.innerText || '').trim().includes(k));
+            // Fallback: short CTAs only, avoid nav mega-menus.
+            const nodes = Array.from(document.querySelectorAll('button,a,div,span')).filter(visible);
+            for (const k of ['点击验证', '开始验证', '滑动拼图验证']) {
+                const el = nodes.find(e => {
+                  const t = (e.innerText || '').trim();
+                  return t === k || (t.includes(k) && t.length <= 16);
+                });
                 if (el && clickEl(el)) return true;
             }
             return false;
@@ -284,21 +317,39 @@ async def _wait_frame(page: Page) -> CaptchaFrame:
     两条路径:
       1. 旧模板: iframe#tcaptcha_iframe_dy 内部含 .tc-bg-img
       2. 新模板: tgJCap 直接把 .tencent-captcha-dy__verify-bg-img 渲染到主页面
+
+    支持滑动拼图（bg+slider）与文字点选（bg + 请依次点击 instruction，无 slider）。
     """
     async def ready(frame: Frame) -> bool:
         try:
             return bool(
                 await frame.evaluate(
                     """(sels)=>{
-                        const visible = (e) => {
+                        const visible = (e, minH) => {
                             if(!e) return false;
                             const r = e.getBoundingClientRect();
                             const cs = getComputedStyle(e);
-                            return r.width > 1 && r.height > 1 &&
-                                   cs.display !== 'none' && cs.visibility !== 'hidden';
+                            // Some templates briefly report height=0 while the
+                            // bg image is decoding; accept width-first readiness
+                            // and only require a small min height.
+                            return r.width > 20 && r.height >= minH &&
+                                   cs.display !== 'none' && cs.visibility !== 'hidden' &&
+                                   Number(cs.opacity || '1') > 0.05;
                         };
-                        return visible(document.querySelector(sels.bg)) &&
-                               visible(document.querySelector(sels.slider));
+                        const bg = document.querySelector(sels.bg);
+                        const slider = document.querySelector(sels.slider);
+                        const text = (document.body && document.body.innerText) || '';
+                        const isWordClick = /请依次点击/.test(text);
+                        if (isWordClick) {
+                          return visible(bg, 1);
+                        }
+                        // Slider can lag one frame behind bg; require bg strongly,
+                        // slider more loosely.
+                        // Word-click templates share drag_ele.html and may briefly
+                        // show slider placeholder text. Treat bg-ready as enough;
+                        // solver will wait for real instruction afterwards.
+                        if (visible(bg, 1) && !slider) return true;
+                        return visible(bg, 1) && visible(slider, 1);
                     }""",
                     {"bg": BG_SELECTOR, "slider": SLIDER_SELECTOR},
                 )
@@ -524,26 +575,259 @@ async def _read_verify(frame: Frame, state: dict) -> Optional[dict]:
     return state.get("res")
 
 
+def _parse_word_click_targets(instruction: str) -> list[str]:
+    """Extract ordered CJK chars from '请依次点击：X Y Z'."""
+    import re
+
+    text = instruction or ""
+    m = re.search(r"请依次点击[:：]\s*(.+)", text)
+    payload = m.group(1) if m else text
+    # Stop at common trailing UI noise.
+    payload = payload.split("AI生成", 1)[0].split("确定", 1)[0]
+    return re.findall(r"[\u4e00-\u9fff]", payload)
+
+
+async def _challenge_kind(frame: Frame) -> str:
+    """Return 'word_click' | 'slider' | 'unknown'."""
+    try:
+        return str(
+            await frame.evaluate(
+                """()=>{
+                    // Prefer stable instruction nodes over body text (body races during load).
+                    const instr = document.querySelector('#instructionText, #instruction, .tc-instruction-text');
+                    const instrText = instr ? ((instr.innerText || instr.textContent || '').trim()) : '';
+                    if (/请依次点击/.test(instrText)) return 'word_click';
+                    const text = (document.body && document.body.innerText) || '';
+                    if (/请依次点击/.test(text) && document.querySelector('.tc-bg-img')) return 'word_click';
+                    const slider = document.querySelector(
+                      '.tc-slider-normal, .tc-drag-thumb, .tencent-captcha-dy__slider-block, .tencent-captcha-dy__slider-block--normal'
+                    );
+                    if (slider) return 'slider';
+                    // Fallback: if only bg + confirm button (no slider), treat as word_click shell.
+                    const bg = document.querySelector('.tc-bg-img, .tencent-captcha-dy__verify-bg-img');
+                    const hasConfirm = Array.from(document.querySelectorAll('div,button,span'))
+                      .some(e => ((e.innerText || '').trim() === '确定'));
+                    if (bg && hasConfirm && !slider) return 'word_click';
+                    return 'unknown';
+                }"""
+            )
+        )
+    except Exception:
+        return "unknown"
+
+
+async def _resolve_captcha_frame(page: Page) -> CaptchaFrame | None:
+    """Re-resolve the live captcha frame (iframe can navigate qcloud → gtimg)."""
+    # Prefer known iframe element for stable page-coordinate offsets.
+    for sel in ("iframe#tcaptcha_iframe_dy", "iframe[src*='template']", "iframe[src*='tcaptcha']", "iframe[src*='drag_ele']"):
+        try:
+            el = await page.query_selector(sel)
+            if not el:
+                continue
+            frame = await el.content_frame()
+            if frame:
+                return CaptchaFrame(frame=frame, iframe_element=el)
+        except Exception:
+            continue
+    for frame in page.frames:
+        if frame is page.main_frame:
+            continue
+        u = frame.url or ""
+        if any(x in u for x in ("template", "tcaptcha", "drag_ele", "captcha.gtimg", "captcha.qcloud")):
+            owner = None
+            try:
+                owner = await frame.frame_element()
+            except Exception:
+                owner = None
+            return CaptchaFrame(frame=frame, iframe_element=owner)
+    return None
+
+
+async def _word_click_instruction(page: Page, frame: Frame | None = None) -> str:
+    # Shared drag_ele template first paints a slider placeholder instruction
+    # ("拖动下方滑块完成拼图") for ~8-12s before the real word-click prompt arrives.
+    # Prefer Playwright frame locators (more resilient than evaluate on detaching docs).
+    deadline = time.time() + 25.0
+    while time.time() < deadline:
+        try:
+            # Always re-bind: iframe host/src can switch mid-load.
+            target = await _resolve_captcha_frame(page)
+            fr = target.frame if target else frame
+            if fr is None:
+                await asyncio.sleep(0.3)
+                continue
+            # 1) locator path
+            for sel in ("#instructionText", "#instruction", ".tc-instruction-text", ".tc-title"):
+                try:
+                    loc = fr.locator(sel).first
+                    if await loc.count():
+                        text = (await loc.inner_text(timeout=800)).strip()
+                        if "请依次点击" in text:
+                            return text
+                except Exception:
+                    pass
+            # 2) evaluate fallback
+            try:
+                text = str(
+                    await fr.evaluate(
+                        """()=>{
+                            const nodes = [
+                              document.querySelector('#instructionText'),
+                              document.querySelector('#instruction'),
+                              document.querySelector('.tc-instruction-text'),
+                              document.querySelector('.tc-title'),
+                            ].filter(Boolean);
+                            for (const n of nodes) {
+                              const t = (n.innerText || n.textContent || '').trim();
+                              if (/请依次点击/.test(t)) return t;
+                            }
+                            const body = (document.body && document.body.innerText) || '';
+                            const m = body.match(/请依次点击[:：][^\n]*/);
+                            return m ? m[0].trim() : '';
+                        }"""
+                    )
+                    or ""
+                )
+                if text:
+                    return text
+            except Exception:
+                pass
+        except Exception:
+            pass
+        await asyncio.sleep(0.35)
+    return ""
+
+
+async def _click_word_targets(
+    page: Page,
+    target: CaptchaFrame,
+    bg_bytes: bytes,
+    targets: list[str],
+    *,
+    verbose: bool = False,
+) -> dict:
+    """Locate chars via crack_tcaptcha siamese OCR and click them in order."""
+    from crack_tcaptcha.solvers.word_ocr import locate_chars_by_siamese
+
+    points = await asyncio.to_thread(locate_chars_by_siamese, bg_bytes, targets)
+    raw_w = _image_width(bg_bytes)
+    with Image.open(io.BytesIO(bg_bytes)) as im:
+        raw_h = int(im.height)
+
+    # Playwright bounding_box() is already in page coordinates (includes iframe offset).
+    bg_loc = target.frame.locator(".tc-bg-img, .tencent-captcha-dy__verify-bg-img").first
+    box = await bg_loc.bounding_box()
+    if not box or box.get("width", 0) < 20 or box.get("height", 0) < 20:
+        raise RuntimeError("word_click: missing bg geometry")
+    sx = float(box["width"]) / max(1, raw_w)
+    sy = float(box["height"]) / max(1, raw_h)
+
+    clicks: list[dict] = []
+    for idx, (px, py) in enumerate(points):
+        cx = float(box["x"]) + float(px) * sx + random.uniform(-1.0, 1.0)
+        cy = float(box["y"]) + float(py) * sy + random.uniform(-1.0, 1.0)
+        if verbose:
+            print(f"    click[{idx}] raw=({px},{py}) page=({cx:.1f},{cy:.1f})", flush=True)
+        await page.mouse.move(cx, cy)
+        await asyncio.sleep(random.uniform(0.06, 0.16))
+        await page.mouse.down()
+        await asyncio.sleep(random.uniform(0.03, 0.08))
+        await page.mouse.up()
+        clicks.append({"raw": [int(px), int(py)], "page": [round(cx, 1), round(cy, 1)]})
+        await asyncio.sleep(random.uniform(0.28, 0.6))
+
+    # Confirm button (文字点选 needs 确定). Prefer dedicated action nodes.
+    confirm_clicked = False
+    for sel in (
+        "#tcStatus .tc-status--right",
+        ".tc-status--right",
+        "text=确定",
+        "#verifyBtn",
+        ".tc-action--confirm",
+    ):
+        try:
+            loc = target.frame.locator(sel).first
+            if await loc.count():
+                # Prefer clicking the visible 确定 text node when using broad containers.
+                if sel in {"#tcStatus .tc-status--right", ".tc-status--right"}:
+                    try:
+                        await loc.locator("text=确定").first.click(timeout=1500, force=True)
+                    except Exception:
+                        await loc.click(timeout=1500, force=True)
+                else:
+                    await loc.click(timeout=1500, force=True)
+                cbox = await loc.bounding_box()
+                clicks.append({"confirm_selector": sel, "box": cbox})
+                confirm_clicked = True
+                break
+        except Exception:
+            continue
+    if not confirm_clicked:
+        # Last resort: page-level mouse click from frame evaluate rect + iframe offset.
+        confirm = await target.frame.evaluate(
+            """()=>{
+                const nodes = Array.from(document.querySelectorAll('div,button,span,a'));
+                const el = nodes.find(e => ((e.innerText || '').trim() === '确定' || ((e.innerText || '').includes('确定') && (e.innerText || '').trim().length <= 4)));
+                if (!el) return null;
+                const r = el.getBoundingClientRect();
+                return {x:r.x + r.width/2, y:r.y + r.height/2, w:r.width, h:r.height};
+            }"""
+        )
+        if confirm and confirm.get("w", 0) > 5:
+            off_x, off_y = await target.offset()
+            cx = off_x + float(confirm["x"]) + random.uniform(-0.8, 0.8)
+            cy = off_y + float(confirm["y"]) + random.uniform(-0.8, 0.8)
+            await page.mouse.click(cx, cy)
+            clicks.append({"confirm": [round(cx, 1), round(cy, 1)]})
+            confirm_clicked = True
+    if not confirm_clicked and verbose:
+        print("    warn: confirm button not clicked", flush=True)
+    return {
+        "targets": targets,
+        "points": [[int(a), int(b)] for a, b in points],
+        "scale": {"sx": sx, "sy": sy, "raw_w": raw_w, "raw_h": raw_h, "box": box},
+        "clicks": clicks,
+        "method": "word_siamese",
+        "confirm_clicked": confirm_clicked,
+    }
+
+
 async def _drag(page: Page, geo: RuntimeGeometry) -> None:
+    # Keep overshoot tiny: Tencent maps final CSS position; large overshoot hurts rate.
+    overshoot = random.uniform(0.4, 1.8)
+    end_x = geo.end_x + overshoot
     traj = generate_slide_trajectory(
         int(geo.start_x),
         int(geo.start_y),
-        int(geo.end_x),
-        int(geo.end_y),
-        duration_ms=random.randint(900, 1700),
-        interval_ms=random.randint(24, 36),
+        int(end_x),
+        int(geo.end_y + random.uniform(-0.8, 0.8)),
+        duration_ms=random.randint(1000, 1800),
+        interval_ms=random.randint(22, 34),
     )
-    await page.mouse.move(geo.start_x, geo.start_y)
-    await asyncio.sleep(random.uniform(0.1, 0.3))
+    await page.mouse.move(
+        geo.start_x + random.uniform(-1.0, 1.0),
+        geo.start_y + random.uniform(-0.8, 0.8),
+    )
+    await asyncio.sleep(random.uniform(0.10, 0.28))
     await page.mouse.down()
+    await asyncio.sleep(random.uniform(0.03, 0.10))
     prev_t = 0
-    for pt in traj.points:
+    for idx, pt in enumerate(traj.points):
         delay_ms = pt.t - prev_t
         if delay_ms > 0:
+            # Occasional micro-pauses mid-drag.
+            if 0.35 < (idx / max(1, len(traj.points))) < 0.75 and random.random() < 0.06:
+                delay_ms += random.randint(12, 40)
             await asyncio.sleep(delay_ms / 1000.0)
-        await page.mouse.move(pt.x, pt.y)
+        y = pt.y + random.uniform(-0.25, 0.25)
+        await page.mouse.move(pt.x, y)
         prev_t = pt.t
-    await asyncio.sleep(random.uniform(0.05, 0.16))
+    # Settle back to exact target after tiny overshoot.
+    await page.mouse.move(
+        geo.end_x + random.uniform(-0.25, 0.25),
+        geo.end_y + random.uniform(-0.30, 0.30),
+    )
+    await asyncio.sleep(random.uniform(0.08, 0.20))
     await page.mouse.up()
 
 
@@ -628,10 +912,11 @@ async def solve_one(
             if result and result.get("ticket"):
                 return result
             code = str(result.get("error_code")) if result else "unknown"
-            if code in {"no_frame", "nav_error"} and page_try <= PAGE_RETRIES:
+            # Reload-worthy reject codes also benefit from a full page restart.
+            if code in {"no_frame", "nav_error", "9", "50", "12", "51"} and page_try <= PAGE_RETRIES:
                 if verbose:
                     print(f"[!] page retry {page_try}/{PAGE_RETRIES}: {code}", flush=True)
-                await asyncio.sleep(random.uniform(1.5, 3.0))
+                await asyncio.sleep(random.uniform(1.5, 3.5))
                 continue
             return result
         return last
@@ -744,34 +1029,170 @@ async def _solve_on_page(
         # ------------------------------------------------------------------
         # Common path: 等待 iframe + 视觉求解（兼容所有页面）
         # ------------------------------------------------------------------
+        async def _show_with_appid() -> bool:
+            if not appid:
+                return False
+            try:
+                await page.wait_for_function(
+                    "() => typeof window.TencentCaptcha === 'function'",
+                    timeout=8000,
+                )
+                return bool(
+                    await page.evaluate(
+                        """(appid) => {
+                            try {
+                              // Destroy any previous popup remnants first.
+                              try {
+                                const old = document.querySelector('#tcaptcha_iframe_dy, iframe[id*="tcaptcha"]');
+                                if (old && old.parentElement) old.parentElement.remove();
+                              } catch (e) {}
+                              const cap = new window.TencentCaptcha(String(appid), function(){}, {});
+                              cap.show();
+                              return true;
+                            } catch (e) { return false; }
+                        }""",
+                        str(appid),
+                    )
+                )
+            except Exception:
+                return False
+
         if not is_zhuque:
-            await _click_trigger(page)
+            # Prefer explicit public-demo show() when appid is known and SDK is present.
+            # This avoids product-page CTA fragility and works for local harness.
+            shown = await _show_with_appid()
+            if not shown:
+                await _click_trigger(page)
+            else:
+                await asyncio.sleep(1.2)
 
         verify_state = _install_verify_capture(page)
-        target = await _wait_frame(page)
+        try:
+            target = await _wait_frame(page)
+        except RuntimeError:
+            # One more show/click cycle before failing the page attempt.
+            if not is_zhuque:
+                if not await _show_with_appid():
+                    await _click_trigger(page)
+                else:
+                    await asyncio.sleep(1.2)
+            target = await _wait_frame(page)
 
         for attempt in range(1, MAX_ATTEMPTS + 1):
             verify_state["res"] = None
             if verbose:
                 print(f"[+] attempt {attempt}", flush=True)
             await _inject_xhr_hook(target.frame)
+            kind = await _challenge_kind(target.frame)
             bg_url = await _bg_url(target.frame)
             bg_bytes = await _fetch_bg_bytes(target.frame, bg_url)
-            gap_x, conf, method = detect_gap(bg_bytes)
-            if conf < 0.55:
-                raise RuntimeError("low conf")
 
-            geo = await _runtime_geometry(target, bg_bytes, gap_x)
-            if verbose:
-                print(
-                    "    "
-                    f"gap={gap_x} conf={conf:.3f} method={method} "
-                    f"rate={geo.rate:.6f} init_x={geo.init_x:.2f}",
-                    flush=True,
+            meta: dict = {"kind": kind}
+            if kind == "word_click":
+                # Wait for bg layout to settle (height can be 0 for a few frames).
+                try:
+                    await target.frame.wait_for_function(
+                        """() => {
+                          const bg = document.querySelector('.tc-bg-img, .tencent-captcha-dy__verify-bg-img');
+                          if (!bg) return false;
+                          const r = bg.getBoundingClientRect();
+                          return r.width > 20 && r.height > 20;
+                        }""",
+                        timeout=8000,
+                    )
+                except Exception:
+                    pass
+                instruction = await _word_click_instruction(page, target.frame)
+                # iframe may have navigated while waiting for instruction; rebind.
+                rebound = await _resolve_captcha_frame(page)
+                if rebound is not None:
+                    target = rebound
+                targets = _parse_word_click_targets(instruction)
+                if not targets:
+                    # Re-check kind; some appids briefly render generic shell text.
+                    kind = await _challenge_kind(target.frame)
+                    if kind != "word_click":
+                        # fall through to slider path below by reassigning
+                        gap_x, conf, method = detect_gap(bg_bytes)
+                        if conf < 0.55:
+                            raise RuntimeError("low conf")
+                        geo = await _runtime_geometry(target, bg_bytes, gap_x)
+                        if verbose:
+                            print(
+                                "    "
+                                f"gap={gap_x} conf={conf:.3f} method={method} "
+                                f"rate={geo.rate:.6f} init_x={geo.init_x:.2f}",
+                                flush=True,
+                            )
+                        await _drag(page, geo)
+                        rate = geo.rate
+                        init_x = geo.init_x
+                        await asyncio.sleep(2.5)
+                        res = await _read_verify(target.frame, verify_state)
+                        if not res:
+                            raise RuntimeError("no verify")
+                        code = str(res.get("errorCode"))
+                        if verbose:
+                            print(f"    code={code}", flush=True)
+                        if code == "0" and res.get("ticket"):
+                            elapsed = int((time.time() - t0) * 1000)
+                            result = {
+                                "ok": True,
+                                "profile": profile.name,
+                                "target_url": target_url,
+                                "appid": appid,
+                                "fp": _public_fp_marker(stable_fp),
+                                "ticket": res["ticket"],
+                                "randstr": res.get("randstr", ""),
+                                "gap_x": gap_x,
+                                "conf": conf,
+                                "method": method,
+                                "rate": rate,
+                                "init_x": init_x,
+                                "elapsed_ms": elapsed,
+                                "captcha_kind": kind,
+                            }
+                            if verbose:
+                                print("[+] PASS", flush=True)
+                            break
+                        result = {"error_code": code, "raw": res, "captcha_kind": kind}
+                        if attempt < MAX_ATTEMPTS and code in {"50", "12", "9", "51", "52", "1", "21", "100"}:
+                            await asyncio.sleep(random.uniform(2.0, 3.5))
+                            target = await _wait_frame(page)
+                            continue
+                        break
+                    raise RuntimeError(f"word_click: empty targets from {instruction!r}")
+                # refresh bg after layout settle
+                bg_url = await _bg_url(target.frame)
+                bg_bytes = await _fetch_bg_bytes(target.frame, bg_url)
+                if verbose:
+                    print(f"    word_click targets={targets} instr={instruction!r}", flush=True)
+                click_info = await _click_word_targets(
+                    page, target, bg_bytes, targets, verbose=verbose
                 )
+                meta.update(click_info)
+                method = click_info.get("method") or "word_siamese"
+                gap_x = None
+                conf = None
+                rate = None
+                init_x = None
+            else:
+                gap_x, conf, method = detect_gap(bg_bytes)
+                if conf < 0.55:
+                    raise RuntimeError("low conf")
+                geo = await _runtime_geometry(target, bg_bytes, gap_x)
+                if verbose:
+                    print(
+                        "    "
+                        f"gap={gap_x} conf={conf:.3f} method={method} "
+                        f"rate={geo.rate:.6f} init_x={geo.init_x:.2f}",
+                        flush=True,
+                    )
+                await _drag(page, geo)
+                rate = geo.rate
+                init_x = geo.init_x
 
-            await _drag(page, geo)
-            await asyncio.sleep(2.5)
+            await asyncio.sleep(2.5 if kind != "word_click" else 2.0)
             res = await _read_verify(target.frame, verify_state)
             if not res:
                 raise RuntimeError("no verify")
@@ -792,24 +1213,58 @@ async def _solve_on_page(
                     "gap_x": gap_x,
                     "conf": conf,
                     "method": method,
-                    "rate": geo.rate,
-                    "init_x": geo.init_x,
+                    "rate": rate,
+                    "init_x": init_x,
                     "elapsed_ms": elapsed,
+                    "captcha_kind": kind,
+                    "meta": meta,
                 }
                 if verbose:
                     print("[+] PASS", flush=True)
                 break
 
-            result = {"error_code": code, "raw": res}
-            if attempt < MAX_ATTEMPTS and code in {"50", "12", "9", "51"}:
+            result = {"error_code": code, "raw": res, "captcha_kind": kind, "meta": meta}
+            # Retry more aggressively on common reject/refresh codes.
+            if attempt < MAX_ATTEMPTS and code in {"50", "12", "9", "51", "52", "1", "21", "100"}:
+                reloaded = False
                 try:
-                    await target.frame.evaluate(
-                        "()=>{const r=document.querySelector('%s'); if(r) r.click();}" % RELOAD_SELECTOR
+                    reloaded = bool(
+                        await target.frame.evaluate(
+                            "()=>{const r=document.querySelector('%s'); if(r){r.click(); return true;} return false;}"
+                            % RELOAD_SELECTOR
+                        )
                     )
                 except Exception:
-                    pass
-                await asyncio.sleep(4)
-                target = await _wait_frame(page)
+                    reloaded = False
+                if not reloaded:
+                    # Some templates destroy the frame after reject; re-trigger page.
+                    try:
+                        if appid:
+                            await page.evaluate(
+                                """(appid)=>{
+                                    try {
+                                      const old=document.querySelector('#tcaptcha_iframe_dy, iframe[id*="tcaptcha"]');
+                                      if(old && old.parentElement) old.parentElement.remove();
+                                    } catch(e) {}
+                                    if (window.TencentCaptcha) {
+                                      new window.TencentCaptcha(String(appid), function(){}, {}).show();
+                                      return true;
+                                    }
+                                    return false;
+                                }""",
+                                str(appid),
+                            )
+                        else:
+                            await _click_trigger(page)
+                    except Exception:
+                        pass
+                await asyncio.sleep(random.uniform(2.2, 4.2))
+                try:
+                    target = await _wait_frame(page)
+                except Exception:
+                    # Force page-level retry outside attempt loop.
+                    result = {"error_code": code, "raw": res, "error": "frame_lost_after_reject"}
+                    break
                 continue
             break
 

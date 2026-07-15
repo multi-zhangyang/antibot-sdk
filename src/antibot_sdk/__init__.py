@@ -26,7 +26,18 @@ from .providers.geetest import (
     parse_geetest_v4_event,
 )
 from .providers.tencent import TencentCaptchaSolver
-from .proxy import ProxyConfig, normalize_proxy_server, normalize_proxy_url, parse_proxy, redacted_proxy
+from .proxy import (
+    LocalAnonymizedProxy,
+    ProxyConfig,
+    chromium_proxy_server,
+    env_proxy_candidates,
+    normalize_proxy_server,
+    normalize_proxy_url,
+    parse_proxy,
+    prepare_chromium_proxy,
+    redacted_proxy,
+    resolve_runtime_proxy,
+)
 from .stress import compact_result, run_stress
 
 __all__ = [
@@ -47,6 +58,7 @@ __all__ = [
     "find_geetest_match_swap",
     "find_geetest_winlinze_move",
     "PolicyDecision",
+    "LocalAnonymizedProxy",
     "ProxyConfig",
     "RunnerConfig",
     "RunResult",
@@ -65,12 +77,16 @@ __all__ = [
     "is_recoverable_attempt_codes",
     "list_capabilities",
     "list_profiles",
+    "chromium_proxy_server",
+    "env_proxy_candidates",
     "normalize_proxy_server",
     "normalize_proxy_url",
     "parse_geetest_jsonp",
     "parse_geetest_v4_event",
     "parse_proxy",
+    "prepare_chromium_proxy",
     "redacted_proxy",
+    "resolve_runtime_proxy",
     "run_once",
     "run_stress",
 ]

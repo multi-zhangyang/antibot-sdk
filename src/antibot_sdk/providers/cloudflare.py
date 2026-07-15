@@ -253,9 +253,20 @@ def resolve_headless(mode: str, requested: HeadlessMode) -> bool:
     if requested == "true":
         return True
     if requested == "false":
+        # Without DISPLAY, headed Chrome crashes on VPS/container hosts.
+        # Force headless unless the caller already has a virtual display.
+        if not os.environ.get("DISPLAY"):
+            LOG.warning("headless=false requested but DISPLAY is unset; forcing headless")
+            return True
         return False
-    # Managed challenges historically require a headed browser; everything else defaults headless.
-    return False if mode == "managed" else True
+    # Managed challenges historically prefer headed browsers. On headless VPS
+    # hosts (no DISPLAY), fall back to headless instead of hard-failing.
+    if mode == "managed":
+        if os.environ.get("DISPLAY"):
+            return False
+        LOG.info("managed mode without DISPLAY; using headless fallback")
+        return True
+    return True
 
 
 def build_options(config: RunnerConfig, headless: bool) -> tuple[ChromiumOptions, str | None]:
@@ -295,7 +306,20 @@ def build_options(config: RunnerConfig, headless: bool) -> tuple[ChromiumOptions
         add_argument_once(options, f"--user-data-dir={profile}")
 
     if config.proxy:
-        add_argument_once(options, f"--proxy-server={config.proxy}")
+        # Chromium rejects credentials embedded in --proxy-server. Callers that
+        # still pass auth URLs must bridge them first (see run_once).
+        from ..proxy import chromium_proxy_server, parse_proxy
+
+        cfg = parse_proxy(config.proxy)
+        if cfg is not None and not cfg.has_auth:
+            server = chromium_proxy_server(config.proxy)
+            if server:
+                add_argument_once(options, f"--proxy-server={server}")
+        elif cfg is not None and cfg.has_auth:
+            LOG.warning(
+                "Ignoring authenticated proxy in build_options; bridge it first "
+                "(proxy-chain local anonymize)."
+            )
 
     fake_engagement_time = int(time.time()) - random.randint(14, 45) * 24 * 60 * 60
     options.browser_preferences = {
@@ -625,9 +649,43 @@ async def extract_selectors(tab: Any, selectors: dict[str, str]) -> dict[str, An
 
 
 async def run_once(config: RunnerConfig) -> RunResult:
+    from ..proxy import prepare_chromium_proxy, redacted_proxy
+
     started = time.monotonic()
     headless = resolve_headless(config.mode, config.headless)
-    options, browser_binary = build_options(config, headless=headless)
+    proxy_bridge = None
+    effective_config = config
+    proxy_diag: dict[str, Any] = {"requested": redacted_proxy(config.proxy)}
+
+    if config.proxy:
+        try:
+            local_proxy, proxy_bridge, proxy_diag = await prepare_chromium_proxy(config.proxy)
+            if local_proxy:
+                effective_config = RunnerConfig(**{**asdict(config), "proxy": local_proxy})
+        except Exception as exc:
+            proxy_diag = {
+                "requested": redacted_proxy(config.proxy),
+                "error": f"{type(exc).__name__}: {exc}",
+                "hint": "Authenticated proxies need `antibot install-js-deps` (proxy-chain) for Cloudflare/Pydoll.",
+            }
+            result_errors_early = [
+                f"proxy bridge failed: {exc}. For auth proxies run `uv run antibot install-js-deps`."
+            ]
+            headless = resolve_headless(config.mode, config.headless)
+            result = RunResult(
+                ok=False,
+                url=config.url,
+                browser_binary=discover_browser_binary(config.browser_binary) or "",
+                headless=headless,
+                pydoll_version=pydoll_version(),
+                diagnostics=diagnose_environment(config.browser_binary),
+                errors=result_errors_early,
+            )
+            result.diagnostics["proxy"] = proxy_diag
+            result.elapsed_sec = round(time.monotonic() - started, 3)
+            return result
+
+    options, browser_binary = build_options(effective_config, headless=headless)
     result = RunResult(
         ok=False,
         url=config.url,
@@ -636,10 +694,13 @@ async def run_once(config: RunnerConfig) -> RunResult:
         pydoll_version=pydoll_version(),
         diagnostics=diagnose_environment(config.browser_binary),
     )
+    result.diagnostics["proxy"] = proxy_diag
 
     if not browser_binary:
         result.errors.append("No executable Chrome/Chromium binary found")
         result.elapsed_sec = round(time.monotonic() - started, 3)
+        if proxy_bridge is not None:
+            await proxy_bridge.close()
         return result
 
     if not headless and not os.environ.get("DISPLAY"):
@@ -649,68 +710,75 @@ async def run_once(config: RunnerConfig) -> RunResult:
         async with Chrome(options=options) as browser:
             tab = await browser.start()
             result.diagnostics["user_agent_override"] = await apply_user_agent_override(
-                tab, config, browser_binary
+                tab, effective_config, browser_binary
             )
-            if config.inject_fingerprint_patch:
+            if effective_config.inject_fingerprint_patch:
                 result.diagnostics["new_document_patch"] = await install_new_document_patch(
-                    tab, fingerprint_patch_source(config.accept_languages)
+                    tab, fingerprint_patch_source(effective_config.accept_languages)
                 )
-            if config.block_resources:
-                await enable_resource_blocking(tab, config.block_stylesheets)
+            if effective_config.block_resources:
+                await enable_resource_blocking(tab, effective_config.block_stylesheets)
                 result.diagnostics["resource_blocking"] = {
-                    "types": sorted(DEFAULT_BLOCKED_RESOURCE_TYPES | ({"Stylesheet"} if config.block_stylesheets else set()))
+                    "types": sorted(
+                        DEFAULT_BLOCKED_RESOURCE_TYPES
+                        | ({"Stylesheet"} if effective_config.block_stylesheets else set())
+                    )
                 }
 
             auto_solve_enabled = False
-            if config.mode in {"turnstile", "managed"}:
+            if effective_config.mode in {"turnstile", "managed"}:
                 auto_solve_enabled = True
-                await tab.enable_auto_solve_cloudflare_captcha(time_to_wait_captcha=config.captcha_wait)
-                async with tab.expect_and_bypass_cloudflare_captcha(time_to_wait_captcha=config.captcha_wait):
-                    await tab.go_to(config.url, timeout=config.navigation_timeout)
+                await tab.enable_auto_solve_cloudflare_captcha(time_to_wait_captcha=effective_config.captcha_wait)
+                async with tab.expect_and_bypass_cloudflare_captcha(time_to_wait_captcha=effective_config.captcha_wait):
+                    await tab.go_to(effective_config.url, timeout=effective_config.navigation_timeout)
             else:
-                await tab.go_to(config.url, timeout=config.navigation_timeout)
+                await tab.go_to(effective_config.url, timeout=effective_config.navigation_timeout)
                 initial_state = classify_page(
                     await safe_title(tab), await safe_url(tab), await safe_html(tab, limit=80_000)
                 )
                 result.diagnostics["initial_state"] = initial_state
-                if config.mode == "auto" and initial_state == "challenge":
+                if effective_config.mode == "auto" and initial_state == "challenge":
                     auto_solve_enabled = True
-                    await tab.enable_auto_solve_cloudflare_captcha(time_to_wait_captcha=config.captcha_wait)
-                    if config.human_probe:
+                    await tab.enable_auto_solve_cloudflare_captcha(time_to_wait_captcha=effective_config.captcha_wait)
+                    if effective_config.human_probe:
                         result.diagnostics["initial_manual_probe_clicks"] = await manual_turnstile_probe(tab)
                     try:
-                        async with tab.expect_and_bypass_cloudflare_captcha(time_to_wait_captcha=config.captcha_wait):
+                        async with tab.expect_and_bypass_cloudflare_captcha(
+                            time_to_wait_captcha=effective_config.captcha_wait
+                        ):
                             await tab.refresh(ignore_cache=True)
                     except Exception as exc:
                         # Some challenge pages are solved in-place; continue into the settle loop.
                         result.diagnostics["auto_retry"] = f"{type(exc).__name__}: {exc}"
 
-            state, wait_diag = await wait_until_stable(tab, config.max_wait, config.human_probe)
+            state, wait_diag = await wait_until_stable(tab, effective_config.max_wait, effective_config.human_probe)
             result.diagnostics["auto_solve_enabled"] = auto_solve_enabled
             result.diagnostics["wait"] = wait_diag
             result.state = state
             result.title = await safe_title(tab)
             result.final_url = await safe_url(tab)
 
-            if config.clicks:
-                result.diagnostics["clicks"] = await perform_clicks(tab, config.clicks, config.wait_after_click)
+            if effective_config.clicks:
+                result.diagnostics["clicks"] = await perform_clicks(
+                    tab, effective_config.clicks, effective_config.wait_after_click
+                )
                 post_click_state, post_click_diag = await wait_until_stable(
-                    tab, min(config.max_wait, 30), config.human_probe
+                    tab, min(effective_config.max_wait, 30), effective_config.human_probe
                 )
                 result.diagnostics["post_click_wait"] = post_click_diag
                 result.state = post_click_state
 
-            if config.selectors:
-                result.selectors = await extract_selectors(tab, config.selectors)
+            if effective_config.selectors:
+                result.selectors = await extract_selectors(tab, effective_config.selectors)
 
-            if config.screenshot:
-                path = str(Path(config.screenshot).expanduser().resolve())
+            if effective_config.screenshot:
+                path = str(Path(effective_config.screenshot).expanduser().resolve())
                 Path(path).parent.mkdir(parents=True, exist_ok=True)
                 await tab.take_screenshot(path=path, beyond_viewport=True)
                 result.artifacts["screenshot"] = path
 
-            if config.html_output:
-                path = str(Path(config.html_output).expanduser().resolve())
+            if effective_config.html_output:
+                path = str(Path(effective_config.html_output).expanduser().resolve())
                 Path(path).parent.mkdir(parents=True, exist_ok=True)
                 Path(path).write_text(await safe_html(tab), encoding="utf-8")
                 result.artifacts["html"] = path
@@ -728,13 +796,23 @@ async def run_once(config: RunnerConfig) -> RunResult:
     except Exception as exc:  # Keep prototype CLI from hiding diagnostic output.
         result.errors.append(f"Unhandled error: {type(exc).__name__}: {exc}")
     finally:
+        if proxy_bridge is not None:
+            try:
+                await proxy_bridge.close()
+            except Exception as exc:
+                result.diagnostics.setdefault("proxy", {})["close_error"] = f"{type(exc).__name__}: {exc}"
         result.elapsed_sec = round(time.monotonic() - started, 3)
 
     return result
 
 
 def diagnose_environment(explicit_binary: str | None = None) -> dict[str, Any]:
+    from ..proxy import env_proxy_candidates
+
     binary = discover_browser_binary(explicit_binary)
+    proxy_chain = (
+        Path(__file__).resolve().parents[1] / "vendor" / "aliyun" / "node_modules" / "proxy-chain"
+    )
     return {
         "python": sys.version.split()[0],
         "pydoll_python": pydoll_version(),
@@ -743,6 +821,15 @@ def diagnose_environment(explicit_binary: str | None = None) -> dict[str, Any]:
         "display": os.environ.get("DISPLAY"),
         "xvfb_run": shutil.which("xvfb-run"),
         "uv": shutil.which("uv"),
+        "node": shutil.which("node"),
+        "proxy_chain_installed": proxy_chain.exists(),
+        "vps_hints": {
+            "no_display": not bool(os.environ.get("DISPLAY")),
+            "prefer_headless": not bool(os.environ.get("DISPLAY")),
+            "auth_proxy_needs_bridge": True,
+            "install_js_deps": "uv run antibot install-js-deps",
+        },
+        "env_proxy": env_proxy_candidates(),
     }
 
 

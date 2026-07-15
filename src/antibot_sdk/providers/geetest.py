@@ -855,12 +855,25 @@ class GeetestV4Solver:
                     "--disable-blink-features=AutomationControlled",
                     "--disable-dev-shm-usage",
                     "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-gpu",
                 ],
             }
+            if not browser_binary:
+                # Prefer full Chromium over headless-shell for captcha canvas/layout.
+                for root in (Path.home() / ".cache" / "ms-playwright", Path("/ms-playwright")):
+                    if root.exists():
+                        found = sorted(root.glob("chromium-*/chrome-linux*/chrome"), reverse=True)
+                        if found:
+                            browser_binary = str(found[0])
+                            break
             if browser_binary:
                 launch_kwargs["executable_path"] = browser_binary
-            proxy = parse_proxy(proxy_server)
+            from ..proxy import resolve_runtime_proxy
+
+            proxy = parse_proxy(proxy_server) or resolve_runtime_proxy(None)
             if proxy:
+                # Playwright natively supports username/password on proxy dict.
                 launch_kwargs["proxy"] = proxy.playwright()
 
             browser = await playwright.chromium.launch(**launch_kwargs)
@@ -906,11 +919,21 @@ class GeetestV4Solver:
                 variant_selection = await self._select_demo_variant(page, requested_variant)
                 await drain_response_tasks()
 
-            if auto_trigger:
-                if requested_variant in {"auto", "observe", "ai"}:
-                    show_calls = await self._show_all_captchas(page)
-                    trigger_clicks = await self._click_triggers(page, click_selectors)
-                    await drain_response_tasks()
+            if auto_trigger and requested_variant != "observe":
+                # Popup demos (slide/winlinze/match) need showCaptcha + DOM trigger
+                # before the puzzle is laid out. AI/auto also benefit from the same path.
+                show_calls = await self._show_all_captchas(page)
+                trigger_clicks = await self._click_triggers(page, click_selectors)
+                # Give popup animation time to switch opacity/layout after showCaptcha.
+                await page.wait_for_timeout(900)
+                if not await self._any_challenge_visible(page, timeout_ms=1200):
+                    # Second pass: force show + click again (demo pages can race init).
+                    show_calls = list(show_calls or []) + await self._show_all_captchas(page)
+                    trigger_clicks = list(trigger_clicks or []) + await self._click_triggers(
+                        page, click_selectors
+                    )
+                    await page.wait_for_timeout(700)
+                await drain_response_tasks()
 
             state = await self._snapshot(page)
             hook_success = self._hook_success_for_requested(state, requested_variant)
@@ -1601,10 +1624,18 @@ class GeetestV4Solver:
                     const r = el.getBoundingClientRect();
                     const cs = getComputedStyle(el);
                     return r.width > 20 && r.height > 20 && cs.display !== 'none'
-                      && cs.visibility !== 'hidden' && cs.opacity !== '0';
+                      && cs.visibility !== 'hidden' && Number(cs.opacity || '1') > 0.05;
                   };
-                  return visible(document.querySelector('.geetest_bg'))
-                    || visible(document.querySelector('[class*="geetest_bg"]'));
+                  // Hash-suffixed classnames still contain geetest_bg / geetest_slice_bg.
+                  const bg = document.querySelector('.geetest_bg')
+                    || document.querySelector('[class*="geetest_bg"]');
+                  const sliceBg = document.querySelector('.geetest_slice_bg')
+                    || document.querySelector('[class*="geetest_slice_bg"]');
+                  const sub = document.querySelector('.geetest_subitem.geetest_slide')
+                    || document.querySelector('[class*="geetest_subitem"][class*="geetest_slide"]');
+                  const captcha = document.querySelector('[class*="geetest_captcha"]');
+                  const boxShown = captcha && String(captcha.className || '').includes('geetest_boxShow');
+                  return visible(bg) || visible(sliceBg) || (boxShown && sub && Number(getComputedStyle(sub).opacity || '0') > 0.05);
                 }""",
                 timeout=timeout_ms,
             )
@@ -1723,6 +1754,18 @@ class GeetestV4Solver:
         return None
 
     async def _ensure_slide_visible(self, page: Any) -> None:
+        # Playwright locator clicks are more reliable than pure DOM dispatch for
+        # popup demos that gate showCaptcha behind form submit / radar click.
+        for selector in ("#btn", ".btn", ".geetest_btn_click", "text=提交", "text=Click to verify"):
+            try:
+                loc = page.locator(selector).first
+                if await loc.count():
+                    await loc.click(timeout=1800, force=True)
+                    await page.wait_for_timeout(350)
+                    if await self._slide_visible(page, timeout_ms=1200):
+                        return
+            except Exception:
+                pass
         await page.evaluate(
             """async () => {
               const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1731,42 +1774,49 @@ class GeetestV4Solver:
                 const r = el.getBoundingClientRect();
                 const cs = getComputedStyle(el);
                 return r.width > 3 && r.height > 3 && cs.display !== 'none'
-                  && cs.visibility !== 'hidden' && cs.opacity !== '0';
+                  && cs.visibility !== 'hidden' && Number(cs.opacity || '1') > 0.05;
               };
-              if (visible(document.querySelector('.geetest_bg'))
-                  || visible(document.querySelector('[class*="geetest_bg"]'))) return;
+              const slideReady = () => {
+                const bg = document.querySelector('.geetest_bg')
+                  || document.querySelector('[class*="geetest_bg"]');
+                const captcha = document.querySelector('[class*="geetest_captcha"]');
+                const boxShown = captcha && String(captcha.className || '').includes('geetest_boxShow');
+                return visible(bg) || boxShown;
+              };
+              if (slideReady()) return;
               try {
                 if (window.__ANTIBOT_GEETEST && window.__ANTIBOT_GEETEST.showAll) {
                   window.__ANTIBOT_GEETEST.showAll();
-                  await sleep(350);
+                  await sleep(450);
                 }
               } catch {}
-              if (visible(document.querySelector('.geetest_bg'))
-                  || visible(document.querySelector('[class*="geetest_bg"]'))) return;
+              if (slideReady()) return;
               const selectors = [
-                '.geetest_holder', '.geetest_btn_click', '#captcha', '[class*="geetest_holder"]',
-                '[class*="geetest_radar"]', '[class*="geetest"]', 'button',
+                '#btn', '.btn', '.geetest_holder', '.geetest_btn_click', '#captcha',
+                '[class*="geetest_holder"]', '[class*="geetest_radar"]', '[class*="geetest_btn_click"]',
+                'button[type="submit"]', 'button',
               ];
               for (const sel of selectors) {
                 const nodes = Array.from(document.querySelectorAll(sel)).slice(0, 8);
                 for (const el of nodes) {
-                  if (!visible(el)) continue;
+                  if (!visible(el) && sel !== '#btn' && sel !== '.btn') continue;
                   const r = el.getBoundingClientRect();
                   try {
-                    const x = r.left + r.width / 2;
-                    const y = r.top + r.height / 2;
+                    const x = r.left + Math.max(r.width, 1) / 2;
+                    const y = r.top + Math.max(r.height, 1) / 2;
                     el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: x, clientY: y }));
                     el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: x, clientY: y }));
                     el.click();
                     el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: x, clientY: y }));
-                    await sleep(450);
-                    if (visible(document.querySelector('.geetest_bg'))
-                        || visible(document.querySelector('[class*="geetest_bg"]'))) return;
+                    await sleep(500);
+                    if (slideReady()) return;
                   } catch {}
                 }
               }
             }"""
         )
+        # Final settle wait for popup opacity transition (subitem starts at opacity 0).
+        await self._slide_visible(page, timeout_ms=3500)
 
     async def _fetch_bytes(self, page: Any, url: str) -> bytes:
         inline = _data_url_bytes(url)
@@ -1808,32 +1858,38 @@ class GeetestV4Solver:
         await page.mouse.down()
 
         trace: list[dict[str, float]] = []
-        overshoot = random.uniform(1.5, 5.5)
-        steps = random.randint(46, 68)
+        overshoot = random.uniform(2.0, 6.5)
+        steps = random.randint(52, 78)
         for i in range(steps):
             t = (i + 1) / steps
-            if t < 0.70:
-                ease = 1 - (1 - t / 0.70) ** 3
-                current = (distance + overshoot) * 0.86 * ease
-            elif t < 0.90:
-                ease = (t - 0.70) / 0.20
-                current = (distance + overshoot) * (0.86 + 0.14 * (1 - (1 - ease) ** 2))
+            if t < 0.68:
+                ease = 1 - (1 - t / 0.68) ** 3
+                current = (distance + overshoot) * 0.88 * ease
+            elif t < 0.88:
+                ease = (t - 0.68) / 0.20
+                current = (distance + overshoot) * (0.88 + 0.12 * (1 - (1 - ease) ** 2))
             else:
-                ease = (t - 0.90) / 0.10
+                ease = (t - 0.88) / 0.12
                 current = distance + overshoot * (1 - ease)
-            if i > steps - 10:
-                current += random.uniform(-0.55, 0.55)
-            y = start_y + math.sin(t * math.pi * random.uniform(1.5, 3.0)) * random.uniform(0.15, 1.2)
+            if i > steps - 12:
+                current += random.uniform(-0.45, 0.45)
+            y = start_y + math.sin(t * math.pi * random.uniform(1.2, 2.6)) * random.uniform(0.1, 1.0)
             x = start_x + current
             await page.mouse.move(x, y)
             trace.append({"x": round(x, 2), "y": round(y, 2), "t": round(t, 3)})
-            await page.wait_for_timeout(random.randint(8, 24))
+            # Variable cadence: slightly slower mid-drag, snappier settle.
+            if t < 0.55:
+                await page.wait_for_timeout(random.randint(10, 28))
+            elif t < 0.85:
+                await page.wait_for_timeout(random.randint(8, 22))
+            else:
+                await page.wait_for_timeout(random.randint(12, 30))
 
         await page.mouse.move(
-            start_x + distance + random.uniform(-0.25, 0.25),
-            start_y + random.uniform(-0.45, 0.45),
+            start_x + distance + random.uniform(-0.2, 0.2),
+            start_y + random.uniform(-0.35, 0.35),
         )
-        hold_ms = random.randint(240, 680)
+        hold_ms = random.randint(280, 760)
         await page.wait_for_timeout(hold_ms)
         await page.mouse.up()
         return {

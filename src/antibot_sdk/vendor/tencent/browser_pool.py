@@ -94,6 +94,21 @@ class BrowserPool:
         }
         if self.proxy:
             launch_kw["proxy"] = self.proxy
+        # Prefer full Chromium over headless-shell when available; some captcha
+        # runtimes render more reliably on the complete browser build.
+        executable = os.getenv("TCAPTCHA_BROWSER_BINARY") or os.getenv("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH")
+        if not executable:
+            from pathlib import Path
+
+            roots = [Path.home() / ".cache" / "ms-playwright", Path("/ms-playwright")]
+            candidates = []
+            for root in roots:
+                if root.exists():
+                    candidates.extend(sorted(root.glob("chromium-*/chrome-linux*/chrome"), reverse=True))
+            if candidates:
+                executable = str(candidates[0])
+        if executable and os.path.isfile(executable):
+            launch_kw["executable_path"] = executable
         return await self._playwright.chromium.launch(**launch_kw)
 
     async def acquire(self) -> tuple[Browser, BrowserContext]:
@@ -168,6 +183,8 @@ class BrowserPool:
             "viewport": {"width": 1366, "height": 768},
             "locale": self.locale,
             "timezone_id": self.timezone_id,
+            # Auth proxies / MITM edges on VPS often break intermediate certs.
+            "ignore_https_errors": True,
         }
         if self.user_agent:
             kw["user_agent"] = self.user_agent

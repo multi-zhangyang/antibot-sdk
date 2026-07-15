@@ -19,6 +19,41 @@ uv run playwright install chromium
 uv run antibot install-js-deps
 ```
 
+> `install-js-deps` 不仅给阿里云 Node runner 装依赖，也会装 `proxy-chain`。  
+> Cloudflare/Pydoll 在 VPS 上使用**带账号密码的代理**时依赖它做本地匿名桥接（Chrome 的 `--proxy-server` 不能直接带 user:pass）。
+
+## VPS / 无桌面环境
+
+本仓库面向 headless 服务器做了适配：
+
+| 场景 | 行为 |
+| --- | --- |
+| 无 `DISPLAY` + `headless=auto/managed` | 自动走 headless，避免 Chrome 直接起不来 |
+| 无 `DISPLAY` + `headless=false` | 强制降级 headless，并写诊断日志 |
+| 需要真 headed | 用 `xvfb-run -a uv run antibot ... --headless false` |
+| 代理 `http://user:pass@host:port` | Playwright 路径原生支持；Cloudflare 路径自动 bridge 到 `127.0.0.1` |
+| 代理 `socks5://user:pass@host:port` | 同上（Tencent/GeeTest 走 Playwright；Cloudflare 走 bridge） |
+| 环境变量代理 | 设 `ANTIBOT_USE_ENV_PROXY=1` 后读取 `ANTIBOT_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` |
+
+诊断：
+
+```bash
+uv run antibot diagnose
+```
+
+关注字段：`display`、`proxy_chain_installed`、`vps_ready`、`env_proxy`。
+
+带鉴权代理的 Cloudflare 示例：
+
+```bash
+uv run antibot solve cloudflare \
+  --target-url 'https://example.com' \
+  --mode scrape \
+  --headless true \
+  --proxy 'http://user:pass@host:8080' \
+  --raw
+```
+
 ## CLI
 
 ### Cloudflare
@@ -43,12 +78,38 @@ uv run antibot solve cloudflare \
 
 ### Tencent Captcha
 
+公开可用目标（实测）：
+
+| Profile | URL | AppId | 说明 |
+| --- | --- | --- | --- |
+| `cloud_product` | `https://cloud.tencent.com/product/captcha` | `199999861` | 官方产品页滑动拼图 demo，按钮 `#captcha_click` |
+| `cloud_product_text` | 同上 | `199999888` | 官方文字点选 demo（已支持，OCR 依次点击 + 确定） |
+| `local_harness` | 本地 `examples/tencent/local_harness.html` | `199999861` | 稳定压测用，不依赖营销页 CTA |
+| `matrix_ai_detect` | `https://matrix.tencent.com/ai-detect/ai_gen_txt` | `2089775896` | 朱雀 AI 检测，多为无感/direct-pass |
+
+> 说明：`007.qq.com`、heroku 旧 demo 等大多已 404/502。社区文章里的 appid 多数无法公开复用。  
+> 官方产品页公开 appid 来自其 `captcha.js`：`199999861/726/888/399`。
+
 ```bash
+# 官方产品页滑动 demo
 uv run antibot solve tencent \
   --target-url 'https://cloud.tencent.com/product/captcha' \
   --profile cloud_product \
+  --appid 199999861 \
   --headless true \
   --timeout 120 \
+  --raw
+```
+
+```bash
+# 本地 harness（推荐压测；先起静态服务）
+python3 -m http.server 8765 --directory examples/tencent
+uv run antibot solve tencent \
+  --target-url 'http://127.0.0.1:8765/local_harness.html' \
+  --profile local_harness \
+  --appid 199999861 \
+  --headless true \
+  --timeout 90 \
   --raw
 ```
 

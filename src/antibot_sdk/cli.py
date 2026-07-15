@@ -312,6 +312,8 @@ async def amain(argv: list[str] | None = None) -> int:
         AliyunCaptchaSolver.install_js_deps()
         return 0
     if args.cmd == "diagnose":
+        from .proxy import env_proxy_candidates
+
         emit(
             {
                 "node": shutil.which("node"),
@@ -319,6 +321,21 @@ async def amain(argv: list[str] | None = None) -> int:
                 "chrome": discover_chrome(),
                 "playwright_python": True,
                 "aliyun_js_deps_installed": AliyunCaptchaSolver.js_deps_installed(),
+                "proxy_chain_installed": (
+                    AliyunCaptchaSolver.vendor_dir() / "node_modules" / "proxy-chain"
+                ).exists(),
+                "display": __import__("os").environ.get("DISPLAY"),
+                "xvfb_run": shutil.which("xvfb-run"),
+                "env_proxy": env_proxy_candidates(),
+                "vps_ready": {
+                    "browser": bool(discover_chrome()),
+                    "node": bool(shutil.which("node")),
+                    "js_deps": AliyunCaptchaSolver.js_deps_installed(),
+                    "no_display_ok_with_headless": True,
+                    "auth_proxy_bridge": (
+                        AliyunCaptchaSolver.vendor_dir() / "node_modules" / "proxy-chain"
+                    ).exists(),
+                },
                 "cloudflare": BrowserAutomation.diagnose(),
             },
             include_raw=True,
@@ -357,13 +374,17 @@ async def amain(argv: list[str] | None = None) -> int:
                     timeout_sec=args.timeout,
                 )
             elif provider == "cloudflare":
+                # auto headless on VPS without DISPLAY is safer than forcing headed.
+                headless_value = str(args.headless)
                 ret = await client.solve_cloudflare(
                     target_url=target_url,
                     mode="auto",
-                    headless=str(args.headless),
+                    headless=headless_value,
                     browser_binary=args.browser_binary or args.chrome_path,
                     proxy=args.proxy,
                     max_wait=args.timeout or 90,
+                    screenshot=getattr(args, "screenshot", None),
+                    output_json=getattr(args, "output_json", None),
                 )
             elif provider == "geetest":
                 ret = await GeetestV4Solver().solve(

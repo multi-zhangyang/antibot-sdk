@@ -4,7 +4,7 @@ from dataclasses import asdict
 from typing import Any
 
 from ..models import BrowserResult
-from ..proxy import normalize_proxy_url
+from ..proxy import normalize_proxy_url, resolve_runtime_proxy
 from .cloudflare import RunnerConfig, diagnose_environment, run_once
 
 
@@ -29,13 +29,17 @@ class BrowserAutomation:
         platform: str | None = None,
         max_wait: int = 90,
         captcha_wait: float = 8.0,
+        use_env_proxy: bool | None = None,
         **kwargs: Any,
     ) -> BrowserResult:
         if isinstance(headless, bool):
             headless_value = "true" if headless else "false"
         else:
             headless_value = headless
-        normalized_proxy = normalize_proxy_url(proxy) if proxy else None
+        # Keep the full authenticated URL when present. run_once bridges auth
+        # proxies to a local anonymized endpoint before passing --proxy-server.
+        resolved = resolve_runtime_proxy(proxy, use_env=use_env_proxy)
+        normalized_proxy = resolved.url if resolved else (normalize_proxy_url(proxy) if proxy else None)
         cfg = RunnerConfig(
             url=url,
             mode=mode,  # type: ignore[arg-type]

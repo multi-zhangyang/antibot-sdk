@@ -39,7 +39,32 @@ PROFILES: dict[str, SiteProfile] = {
         flow="cloud_slider_demo",
         sdk_url="https://turing.captcha.qcloud.com/TCaptcha.js",
         prehandle_host="https://turing.captcha.qcloud.com",
-        notes="Tencent Cloud product-page slider demo; historical v2.1 benchmark target.",
+        notes=(
+            "Official Tencent Cloud product-page public demo. Trigger: #captcha_click. "
+            "Public CaptchaAppId 199999861 (slide). Sibling public appids on same page: "
+            "199999726 (vtt), 199999888 (text click), 199999399 (no-feel)."
+        ),
+    ),
+    "cloud_product_text": SiteProfile(
+        name="cloud_product_text",
+        target_url="https://cloud.tencent.com/product/captcha",
+        appid="199999888",
+        flow="cloud_slider_demo",
+        sdk_url="https://turing.captcha.qcloud.com/TCaptcha.js",
+        prehandle_host="https://turing.captcha.qcloud.com",
+        notes="Official product-page text-click demo via #text_click / appid 199999888.",
+    ),
+    "local_harness": SiteProfile(
+        name="local_harness",
+        target_url="file://examples/tencent/local_harness.html",
+        appid="199999861",
+        flow="cloud_slider_demo",
+        sdk_url="https://turing.captcha.qcloud.com/TCaptcha.js",
+        prehandle_host="https://turing.captcha.qcloud.com",
+        notes=(
+            "Local static harness using the same public product-page appids. "
+            "Serve via `python -m http.server` and pass the http://127.0.0.1 URL."
+        ),
     ),
     "matrix_ai_detect": SiteProfile(
         name="matrix_ai_detect",
