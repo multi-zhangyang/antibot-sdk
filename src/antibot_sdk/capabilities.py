@@ -9,8 +9,19 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "category": "browser_flow",
         "captcha_type": "managed_challenge",
         "status": "active",
-        "output": "BrowserResult / final page state / artifacts",
-        "scope": "Cloudflare/Turnstile 页面级人机验证浏览器流：Pydoll/CDP 启动 Chrome，补 UA/CH/指纹，等待 challenge 稳定，提取页面状态；不是纯协议 token solver。",
+        "output": "BrowserResult / state / cookies / cf_clearance / optional turnstile_token / artifacts",
+        "scope": (
+            "Cloudflare/Turnstile 页面级人机验证浏览器流：Pydoll/CDP 启动 Chrome，补 UA/CH/指纹，"
+            "按 mode=auto|turnstile|managed|scrape 处理挑战，等待页面稳定后返回 state 与会话 cookie。"
+            "成功时常可拿到 cf_clearance/__cf_bm 等 cookie，以及页面内嵌 Turnstile response（若存在）。"
+            "不是只给 sitekey 就返回 token 的纯协议 solver。"
+        ),
+        "modes": {
+            "auto": "默认：打开页面，发现 challenge 再启用 auto-solve + manual probe",
+            "turnstile": "强制走 Turnstile/checkbox 自动求解路径",
+            "managed": "强制 managed challenge 路径；有 DISPLAY 时倾向 headed",
+            "scrape": "不主动求解，只打开页面并报告状态/cookie",
+        },
     },
     "tencent": {
         "provider": "tencent",

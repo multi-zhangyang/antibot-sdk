@@ -73,6 +73,10 @@ def _compact_raw(raw: Any) -> Any:
         "title": raw.get("title"),
         "solution": raw.get("solution"),
         "events": raw.get("events"),
+        "cf_clearance": raw.get("cf_clearance"),
+        "cookie_header": raw.get("cookie_header"),
+        "turnstile_token": raw.get("turnstile_token"),
+        "cookies": raw.get("cookies"),
     }
     return {key: value for key, value in keep.items() if value not in (None, "", [], {})}
 

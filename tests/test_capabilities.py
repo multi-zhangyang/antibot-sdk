@@ -39,12 +39,34 @@ def test_captcha_result_schema_has_type_and_capability() -> None:
 
 
 def test_browser_result_schema_for_cloudflare_flow() -> None:
-    ret = BrowserResult(ok=True, state="clear", url="https://example.com", final_url="https://example.com/")
+    ret = BrowserResult(
+        ok=True,
+        state="clear",
+        url="https://example.com",
+        final_url="https://example.com/",
+        cookies=[{"name": "cf_clearance", "value": "abc", "domain": ".example.com"}],
+        cookie_header="cf_clearance=abc",
+        cf_clearance="abc",
+        turnstile_token="token-value-1234567890",
+    )
     data = asdict(ret)
 
     assert data["ok"] is True
     assert data["state"] == "clear"
     assert data["final_url"] == "https://example.com/"
+    assert data["cf_clearance"] == "abc"
+    assert data["cookie_header"] == "cf_clearance=abc"
+    assert data["turnstile_token"].startswith("token-")
+    assert data["cookies"][0]["name"] == "cf_clearance"
+
+
+def test_cloudflare_capability_documents_modes_and_session_output() -> None:
+    caps = list_capabilities()
+    browser_flows = {item["provider"]: item for item in caps["browser_flows"]}
+    cf = browser_flows["cloudflare"]
+    assert "cf_clearance" in cf["output"]
+    assert set(cf["modes"]) >= {"auto", "turnstile", "managed", "scrape"}
+    assert "不是" in cf["scope"] or "不是纯协议" in cf["scope"]
 
 
 def test_top_level_sdk_exports_core_human_verification_api() -> None:

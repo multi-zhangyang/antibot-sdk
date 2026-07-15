@@ -78,3 +78,23 @@ def test_local_anonymized_proxy_skips_bridge_without_auth():
         await bridge.close()
 
     asyncio.run(_run())
+
+
+def test_cloudflare_cookie_helpers():
+    from antibot_sdk.providers.cloudflare import (
+        cookies_to_header,
+        cookie_to_dict,
+        summarize_session_cookies,
+    )
+
+    cookies = [
+        cookie_to_dict({"name": "cf_clearance", "value": "xyz", "domain": ".example.com", "path": "/", "secure": True}),
+        cookie_to_dict({"name": "session", "value": "1", "domain": "example.com"}),
+        cookie_to_dict({"name": "__cf_bm", "value": "bm", "domain": ".example.com"}),
+    ]
+    assert cookies_to_header(cookies) == "cf_clearance=xyz; session=1; __cf_bm=bm"
+    summary = summarize_session_cookies(cookies)
+    assert summary["has_cf_clearance"] is True
+    assert summary["cf_clearance_len"] == 3
+    assert "cf_clearance" in summary["names"]
+    assert any(item["name"] == "__cf_bm" for item in summary["interesting"])

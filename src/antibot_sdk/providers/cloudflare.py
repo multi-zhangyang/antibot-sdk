@@ -118,9 +118,150 @@ class RunResult:
     headless: bool = True
     pydoll_version: str = ""
     selectors: dict[str, Any] = field(default_factory=dict)
+    cookies: list[dict[str, Any]] = field(default_factory=list)
+    cookie_header: str = ""
+    cf_clearance: str | None = None
+    turnstile_token: str | None = None
     artifacts: dict[str, str] = field(default_factory=dict)
     diagnostics: dict[str, Any] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
+
+
+CF_SESSION_COOKIE_NAMES = (
+    "cf_clearance",
+    "__cf_bm",
+    "cf_chl_rc_i",
+    "cf_chl_2",
+    "cf_chl_prog",
+)
+
+
+def cookie_to_dict(cookie: Any) -> dict[str, Any]:
+    if isinstance(cookie, dict):
+        data = dict(cookie)
+    else:
+        data = {}
+        for key in (
+            "name",
+            "value",
+            "domain",
+            "path",
+            "expires",
+            "httpOnly",
+            "secure",
+            "session",
+            "sameSite",
+            "size",
+            "sourcePort",
+        ):
+            if hasattr(cookie, key):
+                data[key] = getattr(cookie, key)
+            elif isinstance(cookie, dict) and key in cookie:
+                data[key] = cookie[key]
+        # TypedDict-like mapping fallback.
+        if not data and hasattr(cookie, "items"):
+            try:
+                data = dict(cookie)  # type: ignore[arg-type]
+            except Exception:
+                data = {"value": str(cookie)}
+    return {k: v for k, v in data.items() if v is not None}
+
+
+def cookies_to_header(cookies: list[dict[str, Any]]) -> str:
+    parts: list[str] = []
+    for cookie in cookies:
+        name = str(cookie.get("name") or "").strip()
+        if not name:
+            continue
+        value = str(cookie.get("value") or "")
+        parts.append(f"{name}={value}")
+    return "; ".join(parts)
+
+
+def summarize_session_cookies(cookies: list[dict[str, Any]]) -> dict[str, Any]:
+    interesting = [
+        {
+            "name": c.get("name"),
+            "domain": c.get("domain"),
+            "path": c.get("path"),
+            "secure": c.get("secure"),
+            "httpOnly": c.get("httpOnly"),
+            "expires": c.get("expires"),
+            "value_len": len(str(c.get("value") or "")),
+        }
+        for c in cookies
+        if str(c.get("name") or "") in CF_SESSION_COOKIE_NAMES
+        or str(c.get("name") or "").startswith("cf_")
+        or str(c.get("name") or "").startswith("__cf")
+    ]
+    cf_clearance = next((str(c.get("value")) for c in cookies if c.get("name") == "cf_clearance"), None)
+    return {
+        "count": len(cookies),
+        "names": [str(c.get("name")) for c in cookies if c.get("name")],
+        "interesting": interesting,
+        "has_cf_clearance": bool(cf_clearance),
+        "cf_clearance_len": len(cf_clearance or ""),
+    }
+
+
+async def collect_cookies(tab: Any) -> list[dict[str, Any]]:
+    try:
+        raw_cookies = await tab.get_cookies()
+    except Exception as exc:
+        LOG.debug("get_cookies failed: %s", exc)
+        return []
+    out: list[dict[str, Any]] = []
+    for cookie in raw_cookies or []:
+        item = cookie_to_dict(cookie)
+        if item.get("name"):
+            out.append(item)
+    return out
+
+
+async def extract_turnstile_token(tab: Any) -> str | None:
+    """Best-effort recovery of an embedded Turnstile response token from the page."""
+    script = r"""
+(() => {
+  const selectors = [
+    'input[name="cf-turnstile-response"]',
+    'textarea[name="cf-turnstile-response"]',
+    'input[name="g-recaptcha-response"]',
+    'textarea[name="g-recaptcha-response"]',
+    '[name="cf-turnstile-response"]',
+  ];
+  for (const sel of selectors) {
+    const el = document.querySelector(sel);
+    if (el && el.value && String(el.value).length > 20) return String(el.value);
+  }
+  // shadow-ish walk for custom wrappers
+  const walk = (root, depth) => {
+    if (!root || depth > 5) return null;
+    try {
+      for (const sel of selectors) {
+        const el = root.querySelector && root.querySelector(sel);
+        if (el && el.value && String(el.value).length > 20) return String(el.value);
+      }
+      const nodes = root.querySelectorAll ? root.querySelectorAll('*') : [];
+      for (const n of nodes) {
+        if (n.shadowRoot) {
+          const hit = walk(n.shadowRoot, depth + 1);
+          if (hit) return hit;
+        }
+      }
+    } catch (_) {}
+    return null;
+  };
+  return walk(document, 0);
+})()
+""".strip()
+    try:
+        response = await tab.execute_script(script, return_by_value=True)
+        value = js_value(response, None)
+        if isinstance(value, str) and len(value) > 20:
+            return value
+    except Exception as exc:
+        LOG.debug("turnstile token extract failed: %s", exc)
+    return None
 
 
 def pydoll_version() -> str:
@@ -771,6 +912,29 @@ async def run_once(config: RunnerConfig) -> RunResult:
             if effective_config.selectors:
                 result.selectors = await extract_selectors(tab, effective_config.selectors)
 
+            # Recover session material after the page settles. This is the main
+            # reusable output of the Cloudflare browser flow (not a pure token API).
+            try:
+                cookies = await collect_cookies(tab)
+                result.cookies = cookies
+                result.cookie_header = cookies_to_header(cookies)
+                result.cf_clearance = next(
+                    (str(c.get("value")) for c in cookies if c.get("name") == "cf_clearance"),
+                    None,
+                )
+                result.diagnostics["session"] = summarize_session_cookies(cookies)
+            except Exception as exc:
+                result.diagnostics["session_error"] = f"{type(exc).__name__}: {exc}"
+
+            try:
+                token = await extract_turnstile_token(tab)
+                if token:
+                    result.turnstile_token = token
+                    result.diagnostics.setdefault("session", {})["has_turnstile_token"] = True
+                    result.diagnostics.setdefault("session", {})["turnstile_token_len"] = len(token)
+            except Exception as exc:
+                result.diagnostics["turnstile_token_error"] = f"{type(exc).__name__}: {exc}"
+
             if effective_config.screenshot:
                 path = str(Path(effective_config.screenshot).expanduser().resolve())
                 Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -786,6 +950,13 @@ async def run_once(config: RunnerConfig) -> RunResult:
             if auto_solve_enabled:
                 await tab.disable_auto_solve_cloudflare_captcha()
             result.ok = state == "clear"
+            result.diagnostics["mode"] = effective_config.mode
+            result.diagnostics["mode_guide"] = {
+                "auto": "Detect challenge page then auto-bypass; good default.",
+                "turnstile": "Force Turnstile/checkbox auto-solve path before/while loading.",
+                "managed": "Force managed challenge path; prefers headed when DISPLAY exists.",
+                "scrape": "No challenge solver; just open page and report state/cookies.",
+            }.get(str(effective_config.mode), "")
     except FailedToStartBrowser as exc:
         result.errors.append(
             f"Failed to start browser: {exc}. binary={browser_binary!r}; "

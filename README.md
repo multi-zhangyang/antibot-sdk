@@ -58,6 +58,23 @@ uv run antibot solve cloudflare \
 
 ### Cloudflare
 
+这是**页面级浏览器验证流**（不是纯 sitekey→token 协议 solver）。
+
+| mode | 什么时候用 | 行为 |
+| --- | --- | --- |
+| `auto` | 默认，不知道挑战类型 | 打开页面；若识别到 challenge 再启用 auto-solve + checkbox probe |
+| `turnstile` | 明确是 Turnstile/checkbox | 强制走 Turnstile 自动求解路径 |
+| `managed` | JS challenge / managed interstitial | 强制 managed 路径；有 `DISPLAY` 时倾向 headed |
+| `scrape` | 只要打开页面看状态 | 不主动求解，只返回 state/cookies |
+
+成功时常见返回：
+
+- `state=clear`
+- `cookies` / `cookie_header`（会话 cookie）
+- `cf_clearance`（若站点下发）
+- `turnstile_token`（若页面存在 `cf-turnstile-response` 一类隐藏域）
+- `diagnostics.session`（cookie 摘要，不含完整敏感值长度外信息）
+
 ```bash
 uv run antibot run 'https://example.com' \
   --mode auto \
@@ -68,10 +85,21 @@ uv run antibot run 'https://example.com' \
 ```
 
 ```bash
+# Turnstile / checkbox 场景
+uv run antibot solve cloudflare \
+  --target-url 'https://example.com' \
+  --mode turnstile \
+  --headless true \
+  --max-wait 120 \
+  --raw
+```
+
+```bash
+# Managed challenge 场景（无桌面时会自动降级 headless）
 uv run antibot solve cloudflare \
   --target-url 'https://example.com' \
   --mode managed \
-  --headless false \
+  --headless auto \
   --max-wait 120 \
   --raw
 ```
@@ -209,12 +237,15 @@ async def main():
     async with AntibotClient() as client:
         ret = await client.solve_cloudflare(
             target_url="https://example.com",
-            mode="auto",
+            mode="auto",          # auto | turnstile | managed | scrape
             headless="auto",
             max_wait=90,
             screenshot="/tmp/cf.png",
         )
         print(ret.ok, ret.state, ret.final_url)
+        print(ret.cf_clearance)
+        print(ret.cookie_header)
+        print(ret.turnstile_token)
 
 asyncio.run(main())
 ```

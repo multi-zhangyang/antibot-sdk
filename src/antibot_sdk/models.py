@@ -12,6 +12,11 @@ class BrowserResult:
     final_url: str = ""
     title: str = ""
     selectors: dict[str, Any] = field(default_factory=dict)
+    # Session material recovered after a browser challenge flow.
+    cookies: list[dict[str, Any]] = field(default_factory=list)
+    cookie_header: str = ""
+    cf_clearance: str | None = None
+    turnstile_token: str | None = None
     artifacts: dict[str, str] = field(default_factory=dict)
     diagnostics: dict[str, Any] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
