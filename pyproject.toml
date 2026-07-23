@@ -36,6 +36,7 @@ dependencies = [
   "Pillow>=10.0",
   "playwright>=1.40",
   "captcha-recognizer>=1.0",
+  "onnxruntime>=1.16,<1.24; python_version < '3.11'",
   "crack-tcaptcha>=0.0.8",
   "opencv-python>=4.8",
   "numpy>=1.26",
