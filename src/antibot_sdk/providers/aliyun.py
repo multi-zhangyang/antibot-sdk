@@ -12,10 +12,16 @@ from typing import Any
 from ..models import CaptchaResult
 from ..policy import aliyun_policy_decision
 from ..profiles import aliyun_profile_for_url
-from ..proxy import normalize_proxy_url, redacted_proxy
+from ..proxy import (
+    normalize_proxy_url,
+    proxy_free_environment,
+    redacted_proxy,
+    resolve_runtime_proxy,
+)
 
 VENDOR_DIR = Path(__file__).resolve().parents[1] / "vendor" / "aliyun"
 BRIDGE = VENDOR_DIR / "bridge.js"
+MINIMUM_NODE_VERSION = (22, 12, 0)
 
 
 def is_recoverable_attempt_codes(codes: list[str]) -> bool:
@@ -35,6 +41,31 @@ def discover_chrome() -> str | None:
     return None
 
 
+def node_version(node: str | None = None) -> tuple[int, int, int] | None:
+    executable = node or shutil.which("node")
+    if not executable:
+        return None
+    try:
+        proc = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+        parts = proc.stdout.strip().lstrip("v").split(".")
+        if len(parts) >= 3:
+            return int(parts[0]), int(parts[1]), int(parts[2].split("-", 1)[0])
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    return None
+
+
+def node_is_compatible(node: str | None = None) -> bool:
+    version = node_version(node)
+    return version is not None and version >= MINIMUM_NODE_VERSION
+
+
 class AliyunCaptchaSolver:
     """Aliyun CAPTCHA V3 slider adapter using the bundled Node runner."""
 
@@ -51,7 +82,17 @@ class AliyunCaptchaSolver:
 
     @staticmethod
     def install_js_deps() -> None:
-        subprocess.run(["npm", "install"], cwd=str(VENDOR_DIR), check=True)
+        version = node_version()
+        if version is None:
+            raise RuntimeError("Node.js is required to install Aliyun JavaScript dependencies")
+        if version < MINIMUM_NODE_VERSION:
+            actual = ".".join(str(part) for part in version)
+            required = ".".join(str(part) for part in MINIMUM_NODE_VERSION)
+            raise RuntimeError(f"Node.js >={required} is required; found {actual}")
+        npm = shutil.which("npm")
+        if not npm:
+            raise RuntimeError("npm is required to install Aliyun JavaScript dependencies")
+        subprocess.run([npm, "install"], cwd=str(VENDOR_DIR), check=True)
 
     async def solve(
         self,
@@ -62,6 +103,7 @@ class AliyunCaptchaSolver:
         output_dir: str | None = None,
         out: str | None = None,
         proxy_server: str | None = None,
+        use_env_proxy: bool | None = None,
         user_agent: str | None = None,
         selectors: dict[str, str] | None = None,
         site_profile: str | None = "auto",
@@ -80,9 +122,40 @@ class AliyunCaptchaSolver:
     ) -> CaptchaResult:
         import asyncio
 
+        detected_node = node_version(self.node)
+        if not node_is_compatible(self.node):
+            actual = (
+                ".".join(str(part) for part in detected_node)
+                if detected_node
+                else "not found"
+            )
+            return CaptchaResult(
+                provider="aliyun",
+                ok=False,
+                captcha_type="slider",
+                capability="solver",
+                diagnostics={
+                    "target_url": target_url,
+                    "node_version": actual,
+                    "minimum_node_version": "22.12.0",
+                },
+                errors=[f"Node.js >=22.12.0 is required; found {actual}"],
+            )
+        if not self.js_deps_installed():
+            return CaptchaResult(
+                provider="aliyun",
+                ok=False,
+                captcha_type="slider",
+                capability="solver",
+                diagnostics={"target_url": target_url, "js_deps_installed": False},
+                errors=["Aliyun JavaScript dependencies are missing; run `antibot install-js-deps`"],
+            )
+
         output_root = output_dir or tempfile.mkdtemp(prefix="antibot-aliyun-run-")
         final_out = out or str(Path(output_root) / "aliyun_captcha_run.json")
         user_data_dir = tempfile.mkdtemp(prefix="antibot-aliyun-profile-")
+        resolved_proxy = resolve_runtime_proxy(proxy_server, use_env=use_env_proxy)
+        proxy_server = resolved_proxy.url if resolved_proxy else None
 
         user_max_attempts = max_attempts is not None
         user_session_retries = session_retries is not None
@@ -343,7 +416,10 @@ class AliyunCaptchaSolver:
                 cwd=str(VENDOR_DIR),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env={**os.environ, "NODE_PATH": str(VENDOR_DIR / "node_modules")},
+                env={
+                    **proxy_free_environment(),
+                    "NODE_PATH": str(VENDOR_DIR / "node_modules"),
+                },
                 start_new_session=True,
             )
             try:

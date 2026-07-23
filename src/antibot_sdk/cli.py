@@ -3,18 +3,46 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import shutil
+import os
+import subprocess
+import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from ._version import __version__
 from .capabilities import list_capabilities
 from .client import AntibotClient
 from .profiles import detect_provider_for_url, list_profiles
-from .providers.aliyun import AliyunCaptchaSolver, discover_chrome
-from .providers.browser import BrowserAutomation
-from .providers.geetest import DEFAULT_GEETEST_DEMO_URL, GeetestV4Solver
+from .providers.aliyun import AliyunCaptchaSolver
+from .providers.geetest import DEFAULT_GEETEST_DEMO_URL
+from .runtime import runtime_diagnostics
 from .stress import run_stress
+
+HCAPTCHA_ENGINE_REQUIREMENTS = (
+    "ftfy>=6.1",
+    "httpx[http2]>=0.24,<1",
+    "importlib-metadata>=6",
+    "loguru>=0.7",
+    "msgpack>=1.1,<2",
+    "onnxruntime>=1.16",
+    "pydantic>=2.5,<3",
+    "pyyaml>=6",
+    "regex>=2023.0",
+    "scikit-image>=0.21",
+    "scikit-learn>=1.3,<2",
+    "tenacity>=8,<9",
+    "tqdm>=4.66",
+)
+
+
+def _install_hcaptcha_engine() -> None:
+    base = [sys.executable, "-m", "pip", "install", "--disable-pip-version-check"]
+    subprocess.run([*base, *HCAPTCHA_ENGINE_REQUIREMENTS], check=True)
+    subprocess.run(
+        [*base, "--no-deps", "hcaptcha-challenger==0.10.1.post2"],
+        check=True,
+    )
 
 
 def _json_arg(value: str | None) -> Any:
@@ -105,7 +133,12 @@ def _add_tencent_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--locale")
     parser.add_argument("--timezone-id")
     parser.add_argument("--user-agent")
+    parser.add_argument("--browser-binary")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--output-json",
+        help="persist this run's complete result; use a unique path for each benchmark run",
+    )
 
 
 def _add_aliyun_args(parser: argparse.ArgumentParser) -> None:
@@ -183,6 +216,43 @@ def _add_geetest_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--raw", action="store_true")
 
 
+def _add_widget_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--target-url", required=True)
+    parser.add_argument("--headless", default="true", choices=["true", "false", "1", "0", "yes", "no"])
+    parser.add_argument("--browser-binary")
+    parser.add_argument("--proxy")
+    parser.add_argument("--proxy-bypass", default="127.0.0.1,localhost")
+    parser.add_argument("--timeout", type=int, default=90)
+    parser.add_argument("--wait-after-load-ms", type=int, default=1500)
+    parser.add_argument("--trigger", dest="click_selector", action="append", default=[])
+    parser.add_argument("--no-auto-click", action="store_true")
+    parser.add_argument("--output-dir")
+    parser.add_argument("--screenshot")
+    parser.add_argument("--html-output")
+    parser.add_argument("--output-json")
+    parser.add_argument("--user-agent")
+    parser.add_argument("--locale")
+    parser.add_argument("--timezone-id")
+    parser.add_argument("--submit-selector")
+    parser.add_argument("--success-selector", action="append", default=[])
+    parser.add_argument("--success-text")
+    parser.add_argument("--verification-wait-ms", type=int, default=3000)
+    parser.add_argument("--vision-base-url")
+    parser.add_argument("--vision-model")
+    parser.add_argument("--vision-api-key-env", default="ANTIBOT_VISION_API_KEY")
+    parser.add_argument("--vision-timeout", type=float, default=180)
+    parser.add_argument("--vision-min-confidence", type=float, default=0.35)
+    parser.add_argument("--vision-retries", type=int, default=2)
+    parser.add_argument("--recaptcha-max-attempts", type=int, default=6)
+    parser.add_argument("--recaptcha-max-rounds", type=int, default=8)
+    parser.add_argument("--hcaptcha-max-attempts", type=int, default=6)
+    parser.add_argument(
+        "--vision-extra-json",
+        help="OpenAI-compatible request fields as JSON or @path; never put API keys here",
+    )
+    parser.add_argument("--raw", action="store_true")
+
+
 def _cloudflare_kwargs(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "mode": args.mode,
@@ -241,14 +311,144 @@ def _geetest_kwargs(
     }
 
 
+def _widget_kwargs(
+    args: argparse.Namespace,
+    *,
+    target_url: str | None = None,
+    browser_binary: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "target_url": target_url or args.target_url,
+        "headless": _headless_bool(getattr(args, "headless", None)),
+        "browser_binary": browser_binary or getattr(args, "browser_binary", None),
+        "proxy_server": getattr(args, "proxy", None),
+        "proxy_bypass": getattr(args, "proxy_bypass", "127.0.0.1,localhost"),
+        "timeout_sec": getattr(args, "timeout", None) or 90,
+        "wait_after_load_ms": getattr(args, "wait_after_load_ms", 1500),
+        "click_selectors": getattr(args, "click_selector", None) or None,
+        "auto_click": not bool(getattr(args, "no_auto_click", False)),
+        "output_dir": getattr(args, "output_dir", None),
+        "screenshot": getattr(args, "screenshot", None),
+        "html_output": getattr(args, "html_output", None),
+        "output_json": getattr(args, "output_json", None),
+        "user_agent": getattr(args, "user_agent", None),
+        "locale": getattr(args, "locale", None),
+        "timezone_id": getattr(args, "timezone_id", None),
+        "submit_selector": getattr(args, "submit_selector", None),
+        "success_selectors": getattr(args, "success_selector", None) or None,
+        "success_text": getattr(args, "success_text", None),
+        "verification_wait_ms": getattr(args, "verification_wait_ms", 3000),
+        "vision_base_url": getattr(args, "vision_base_url", None),
+        "vision_model": getattr(args, "vision_model", None),
+        "vision_api_key_env": getattr(
+            args, "vision_api_key_env", "ANTIBOT_VISION_API_KEY"
+        ),
+        "vision_timeout_sec": getattr(args, "vision_timeout", 180),
+        "vision_min_confidence": getattr(args, "vision_min_confidence", 0.35),
+        "vision_retries": getattr(args, "vision_retries", 2),
+        "recaptcha_max_attempts": getattr(args, "recaptcha_max_attempts", 6),
+        "recaptcha_max_rounds": getattr(args, "recaptcha_max_rounds", 8),
+        "hcaptcha_max_attempts": getattr(args, "hcaptcha_max_attempts", 6),
+        "vision_extra_body": _json_arg(getattr(args, "vision_extra_json", None)),
+    }
+
+
+def _arkose_kwargs(
+    args: argparse.Namespace,
+    *,
+    target_url: str | None = None,
+    browser_binary: str | None = None,
+) -> dict[str, Any]:
+    """Build Arkose runner options without passing reCAPTCHA-only settings."""
+
+    return {
+        "target_url": target_url or args.target_url,
+        "headless": _headless_bool(getattr(args, "headless", None)),
+        "browser_binary": browser_binary or getattr(args, "browser_binary", None),
+        "proxy_server": getattr(args, "proxy", None),
+        "proxy_bypass": getattr(args, "proxy_bypass", "127.0.0.1,localhost"),
+        "timeout_sec": getattr(args, "timeout", None) or 120,
+        "wait_after_load_ms": getattr(args, "wait_after_load_ms", 1800),
+        "click_selectors": getattr(args, "click_selector", None) or None,
+        "auto_click": not bool(getattr(args, "no_auto_click", False)),
+        "output_dir": getattr(args, "output_dir", None),
+        "screenshot": getattr(args, "screenshot", None),
+        "html_output": getattr(args, "html_output", None),
+        "output_json": getattr(args, "output_json", None),
+        "user_agent": getattr(args, "user_agent", None),
+        "locale": getattr(args, "locale", None),
+        "timezone_id": getattr(args, "timezone_id", None),
+        "submit_selector": getattr(args, "submit_selector", None),
+        "success_selectors": getattr(args, "success_selector", None) or None,
+        "success_text": getattr(args, "success_text", None),
+        "verification_wait_ms": getattr(args, "verification_wait_ms", 4000),
+        "vision_base_url": getattr(args, "vision_base_url", None),
+        "vision_model": getattr(args, "vision_model", None) or "gpt-5.4",
+        "vision_api_key_env": getattr(args, "vision_api_key_env", "ANTIBOT_VISION_API_KEY"),
+        "vision_timeout_sec": getattr(args, "vision_timeout", 180),
+        "vision_min_confidence": getattr(args, "vision_min_confidence", 0.35),
+        "vision_retries": getattr(args, "vision_retries", 2),
+        "max_rounds": getattr(args, "arkose_max_rounds", 12),
+        "vision_extra_body": _json_arg(getattr(args, "vision_extra_json", None)),
+    }
+
+
 async def amain(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="antibot")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("profiles")
     sub.add_parser("capabilities")
     sub.add_parser("diagnose")
     sub.add_parser("install-js-deps")
+    sub.add_parser("install-hcaptcha-engine")
+
+    replay = sub.add_parser("replay-eval")
+    replay.add_argument("inputs", nargs="+")
+
+    harness = sub.add_parser("harness")
+    harness.add_argument("--target-url", required=True)
+    harness.add_argument(
+        "--provider",
+        default="auto",
+        choices=[
+            "auto",
+            "aliyun",
+            "cloudflare",
+            "geetest",
+            "hcaptcha",
+            "recaptcha",
+            "arkose",
+            "tencent",
+        ],
+    )
+    harness.add_argument("--planner", choices=["heuristic", "pydantic-ai"], default="heuristic")
+    harness.add_argument("--agent-base-url")
+    harness.add_argument("--agent-model")
+    harness.add_argument("--agent-api-key-env", default="ANTIBOT_AGENT_API_KEY")
+    harness.add_argument("--agent-timeout", type=float, default=30.0)
+    harness.add_argument("--timeout", type=float, default=300.0)
+    harness.add_argument("--max-steps", type=int, default=6)
+    harness.add_argument("--max-provider-actions", type=int, default=2)
+    harness.add_argument("--options-json")
+    harness.add_argument("--proxy")
+    harness.add_argument("--browser-binary")
+    harness.add_argument("--raw", action="store_true")
+
+    serve = sub.add_parser("serve")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--max-concurrency", type=int, default=2)
+    serve.add_argument("--default-timeout", type=float, default=180.0)
+    serve.add_argument("--browser-binary")
+    serve.add_argument("--proxy")
+    serve.add_argument(
+        "--log-level",
+        default="info",
+        choices=["critical", "error", "warning", "info", "debug", "trace"],
+    )
+    serve.add_argument("--no-access-log", action="store_true")
 
     run = sub.add_parser("run")
     _add_cloudflare_args(run, positional_url=True)
@@ -256,7 +456,20 @@ async def amain(argv: list[str] | None = None) -> int:
     auto = sub.add_parser("auto")
     auto.add_argument("url", nargs="?")
     auto.add_argument("--target-url")
-    auto.add_argument("--provider", default="auto", choices=["auto", "aliyun", "tencent", "cloudflare", "geetest"])
+    auto.add_argument(
+        "--provider",
+        default="auto",
+        choices=[
+            "auto",
+            "aliyun",
+            "tencent",
+            "cloudflare",
+            "geetest",
+            "recaptcha",
+            "hcaptcha",
+            "arkose",
+        ],
+    )
     auto.add_argument("--proxy")
     auto.add_argument("--timeout", type=int)
     auto.add_argument("--raw", action="store_true")
@@ -275,11 +488,18 @@ async def amain(argv: list[str] | None = None) -> int:
     auto.add_argument("--output-dir")
     auto.add_argument("--save-html", action="store_true")
     auto.add_argument("--screenshot")
+    auto.add_argument("--html-output")
     auto.add_argument("--output-json")
     auto.add_argument("--raw-events", action="store_true")
     auto.add_argument("--user-agent")
     auto.add_argument("--locale", default="zh-CN")
     auto.add_argument("--timezone-id", default="Asia/Shanghai")
+    auto.add_argument("--proxy-bypass", default="127.0.0.1,localhost")
+    auto.add_argument("--no-auto-click", action="store_true")
+    auto.add_argument("--recaptcha-max-attempts", type=int, default=6)
+    auto.add_argument("--recaptcha-max-rounds", type=int, default=8)
+    auto.add_argument("--hcaptcha-max-attempts", type=int, default=6)
+    auto.add_argument("--arkose-max-rounds", type=int, default=12)
 
     solve = sub.add_parser("solve")
     solve_sub = solve.add_subparsers(dest="provider", required=True)
@@ -287,6 +507,11 @@ async def amain(argv: list[str] | None = None) -> int:
     _add_aliyun_args(solve_sub.add_parser("aliyun"))
     _add_cloudflare_args(solve_sub.add_parser("cloudflare"))
     _add_geetest_args(solve_sub.add_parser("geetest"))
+    _add_widget_args(solve_sub.add_parser("recaptcha"))
+    _add_widget_args(solve_sub.add_parser("hcaptcha"))
+    arkose = solve_sub.add_parser("arkose")
+    _add_widget_args(arkose)
+    arkose.add_argument("--arkose-max-rounds", type=int, default=12)
 
     stress = sub.add_parser("stress")
     stress_sub = stress.add_subparsers(dest="provider", required=True)
@@ -294,7 +519,6 @@ async def amain(argv: list[str] | None = None) -> int:
     _add_tencent_args(st)
     st.add_argument("--runs", type=int, default=5)
     st.add_argument("--concurrency", type=int, default=1)
-    st.add_argument("--output-json")
     st.add_argument("--full", action="store_true")
 
     sa = stress_sub.add_parser("aliyun")
@@ -313,40 +537,118 @@ async def amain(argv: list[str] | None = None) -> int:
         emit(list_capabilities(), include_raw=True)
         return 0
     if args.cmd == "install-js-deps":
-        AliyunCaptchaSolver.install_js_deps()
+        try:
+            AliyunCaptchaSolver.install_js_deps()
+        except (OSError, RuntimeError) as exc:
+            emit({"ok": False, "error": str(exc)}, include_raw=True)
+            return 2
         return 0
-    if args.cmd == "diagnose":
-        from .proxy import env_proxy_candidates
-
+    if args.cmd == "install-hcaptcha-engine":
+        try:
+            _install_hcaptcha_engine()
+        except (OSError, subprocess.CalledProcessError) as exc:
+            emit({"ok": False, "error": str(exc)}, include_raw=True)
+            return 2
         emit(
             {
-                "node": shutil.which("node"),
-                "npm": shutil.which("npm"),
-                "chrome": discover_chrome(),
-                "playwright_python": True,
-                "aliyun_js_deps_installed": AliyunCaptchaSolver.js_deps_installed(),
-                "proxy_chain_installed": (
-                    AliyunCaptchaSolver.vendor_dir() / "node_modules" / "proxy-chain"
-                ).exists(),
-                "display": __import__("os").environ.get("DISPLAY"),
-                "xvfb_run": shutil.which("xvfb-run"),
-                "env_proxy": env_proxy_candidates(),
-                "vps_ready": {
-                    "browser": bool(discover_chrome()),
-                    "node": bool(shutil.which("node")),
-                    "js_deps": AliyunCaptchaSolver.js_deps_installed(),
-                    "no_display_ok_with_headless": True,
-                    "auth_proxy_bridge": (
-                        AliyunCaptchaSolver.vendor_dir() / "node_modules" / "proxy-chain"
-                    ).exists(),
-                },
-                "cloudflare": BrowserAutomation.diagnose(),
+                "ok": True,
+                "engine": "hcaptcha-challenger",
+                "version": "0.10.1.post2",
             },
             include_raw=True,
         )
         return 0
+    if args.cmd == "diagnose":
+        emit(runtime_diagnostics(), include_raw=True)
+        return 0
+    if args.cmd == "replay-eval":
+        from .harness import evaluate_replays
 
-    async with AntibotClient(browser_binary=getattr(args, "chrome_path", None)) as client:
+        try:
+            report = evaluate_replays(args.inputs)
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            emit({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, include_raw=True)
+            return 2
+        emit(report.to_dict(), include_raw=True)
+        return 0
+    if args.cmd == "serve":
+        try:
+            import uvicorn
+        except ImportError as exc:
+            parser.error(
+                "serve requires optional dependencies: "
+                "install with `pip install -e '.[service]'` or `uv sync --extra service`"
+            )
+            raise AssertionError("unreachable") from exc
+        from .service import ServiceSettings, create_app
+
+        app = create_app(
+            ServiceSettings(
+                max_concurrency=args.max_concurrency,
+                default_timeout_sec=args.default_timeout,
+                browser_binary=args.browser_binary,
+                default_proxy=args.proxy,
+            )
+        )
+        server = uvicorn.Server(
+            uvicorn.Config(
+                app,
+                host=args.host,
+                port=args.port,
+                log_level=args.log_level,
+                access_log=not args.no_access_log,
+            )
+        )
+        await server.serve()
+        return 0 if server.started else 1
+
+    async with AntibotClient(
+        browser_binary=getattr(args, "browser_binary", None)
+        or getattr(args, "chrome_path", None)
+    ) as client:
+        if args.cmd == "harness":
+            from .harness import HarnessBudget, PydanticAIPlanner
+
+            options = _json_arg(args.options_json) or {}
+            if not isinstance(options, dict):
+                parser.error("--options-json must decode to a JSON object")
+            if args.proxy and "proxy" not in options and "proxy_server" not in options:
+                options["proxy"] = args.proxy
+            planner = None
+            if args.planner == "pydantic-ai":
+                api_key = os.environ.get(args.agent_api_key_env, "")
+                if not args.agent_base_url or not args.agent_model or not api_key:
+                    emit(
+                        {
+                            "ok": False,
+                            "error": (
+                                "pydantic-ai planner requires --agent-base-url, "
+                                "--agent-model and the configured API key environment variable"
+                            ),
+                        },
+                        include_raw=True,
+                    )
+                    return 2
+                planner = PydanticAIPlanner(
+                    base_url=args.agent_base_url,
+                    api_key=api_key,
+                    model=args.agent_model,
+                    timeout_sec=args.agent_timeout,
+                )
+            ret = await client.solve_agent(
+                args.target_url,
+                provider=args.provider,
+                planner=planner,
+                budget=HarnessBudget(
+                    timeout_sec=args.timeout,
+                    max_steps=args.max_steps,
+                    max_provider_actions=args.max_provider_actions,
+                ),
+                **options,
+            )
+            emit(ret, include_raw=args.raw)
+            return 0 if ret.ok else 2
+
         if args.cmd == "run":
             ret = await client.open(args.url, **_cloudflare_kwargs(args))
             emit(ret, include_raw=args.raw)
@@ -375,7 +677,9 @@ async def amain(argv: list[str] | None = None) -> int:
                     appid=args.appid,
                     headless=_headless_bool(args.headless),
                     proxy_server=args.proxy,
+                    browser_binary=args.browser_binary,
                     timeout_sec=args.timeout,
+                    output_json=getattr(args, "output_json", None),
                 )
             elif provider == "cloudflare":
                 # auto headless on VPS without DISPLAY is safer than forcing headed.
@@ -391,8 +695,25 @@ async def amain(argv: list[str] | None = None) -> int:
                     output_json=getattr(args, "output_json", None),
                 )
             elif provider == "geetest":
-                ret = await GeetestV4Solver().solve(
+                ret = await client.solve_geetest(
                     **_geetest_kwargs(
+                        args,
+                        target_url=target_url,
+                        browser_binary=args.browser_binary or args.chrome_path,
+                    )
+                )
+            elif provider in {"recaptcha", "hcaptcha"}:
+                method = getattr(client, f"solve_{provider}")
+                ret = await method(
+                    **_widget_kwargs(
+                        args,
+                        target_url=target_url,
+                        browser_binary=args.browser_binary or args.chrome_path,
+                    )
+                )
+            elif provider == "arkose":
+                ret = await client.solve_arkose(
+                    **_arkose_kwargs(
                         args,
                         target_url=target_url,
                         browser_binary=args.browser_binary or args.chrome_path,
@@ -409,8 +730,19 @@ async def amain(argv: list[str] | None = None) -> int:
             return 0 if ret.ok else 2
 
         if args.cmd == "solve" and args.provider == "geetest":
-            ret = await GeetestV4Solver().solve(**_geetest_kwargs(args))
+            ret = await client.solve_geetest(**_geetest_kwargs(args))
             emit(ret, include_raw=args.raw or args.raw_events)
+            return 0 if ret.ok else 2
+
+        if args.cmd == "solve" and args.provider in {"recaptcha", "hcaptcha"}:
+            method = getattr(client, f"solve_{args.provider}")
+            ret = await method(**_widget_kwargs(args))
+            emit(ret, include_raw=args.raw)
+            return 0 if ret.ok else 2
+
+        if args.cmd == "solve" and args.provider == "arkose":
+            ret = await client.solve_arkose(**_arkose_kwargs(args))
+            emit(ret, include_raw=args.raw)
             return 0 if ret.ok else 2
 
         if args.cmd == "solve" and args.provider == "tencent":
@@ -425,8 +757,10 @@ async def amain(argv: list[str] | None = None) -> int:
                 locale=args.locale,
                 timezone_id=args.timezone_id,
                 user_agent=args.user_agent,
+                browser_binary=args.browser_binary,
                 timeout_sec=args.timeout,
                 verbose=args.verbose,
+                output_json=args.output_json,
             )
             emit(ret, include_raw=args.raw)
             return 0 if ret.ok else 2
@@ -470,6 +804,7 @@ async def amain(argv: list[str] | None = None) -> int:
                     locale=args.locale,
                     timezone_id=args.timezone_id,
                     user_agent=args.user_agent,
+                    browser_binary=args.browser_binary,
                 )
                 await pool.start()
                 payload = await run_stress(
@@ -533,7 +868,11 @@ async def amain(argv: list[str] | None = None) -> int:
 
 
 def main() -> None:
-    raise SystemExit(asyncio.run(amain()))
+    try:
+        code = asyncio.run(amain())
+    except KeyboardInterrupt:
+        code = 130
+    raise SystemExit(code)
 
 
 if __name__ == "__main__":

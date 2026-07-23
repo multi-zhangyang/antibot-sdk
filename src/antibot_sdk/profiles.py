@@ -29,9 +29,9 @@ class AliyunSiteProfile:
     def matches(self, url: str | None) -> bool:
         if not url:
             return False
-        u = url.lower()
-        host = (urlparse(url).hostname or "").lower()
-        return any(pattern in u or pattern in host for pattern in self.url_patterns)
+        parsed = urlparse(url)
+        surface = f"{parsed.hostname or ''}{parsed.path or ''}".lower()
+        return any(pattern in surface for pattern in self.url_patterns)
 
 
 ALIYUN_SITE_PROFILES: dict[str, AliyunSiteProfile] = {
@@ -96,18 +96,44 @@ def detect_provider_for_url(url: str | None) -> str:
     if not url:
         return "unknown"
     parsed = urlparse(url)
-    u = url.lower()
     host = (parsed.hostname or "").lower()
-    if aliyun_profile_for_url(url, "auto") or any(x in u or x in host for x in ("aliyun", "alibaba", "cloudauth")):
+    surface = f"{host}{parsed.path or ''}".lower()
+    if aliyun_profile_for_url(url, "auto") or any(
+        x in surface for x in ("aliyun", "alibaba", "cloudauth")
+    ):
         return "aliyun"
-    if any(x in u or x in host for x in ("tencent", "gtimg", "qcloud", "tcaptcha", "turing.captcha")):
+    if any(
+        x in surface for x in ("tencent", "gtimg", "qcloud", "tcaptcha", "turing.captcha")
+    ):
         return "tencent"
     if any(
-        x in u or x in host
+        x in surface
         for x in ("geetest", "gcaptcha4", "gt4.geetest", "static.geetest.com/v4")
     ):
         return "geetest"
-    if any(x in u or x in host for x in ("cloudflare", "cf-challenge", "cf_clearance", "cdn-cgi", "turnstile")):
+    if any(
+        x in surface
+        for x in ("google.com/recaptcha", "gstatic.com/recaptcha", "recaptcha.net/recaptcha")
+    ):
+        return "recaptcha"
+    if any(x in surface for x in ("hcaptcha.com", "hcaptcha.net")):
+        return "hcaptcha"
+    if any(
+        x in surface
+        for x in (
+            "arkoselabs.com",
+            "funcaptcha.com",
+            "client-api.arkoselabs.com",
+            "client-api.arkoselabs.cn",
+            "arkoselabs",
+            "funcaptcha",
+        )
+    ):
+        return "arkose"
+    if any(
+        x in surface
+        for x in ("cloudflare", "cf-challenge", "cf_clearance", "cdn-cgi", "turnstile")
+    ):
         return "cloudflare"
     return "unknown"
 
@@ -135,6 +161,33 @@ def list_profiles() -> dict[str, dict[str, Any]]:
                 "captcha_type": "geetest_v4_slide",
                 "headless": "true",
                 "click_selector": "#btn",
+            },
+        },
+        "recaptcha": {
+            "live_v2_demo": {
+                "target_url": "https://2captcha.com/demo/recaptcha-v2",
+                "captcha_type": "recaptcha_v2",
+                "headless": "true",
+                "sitekey": "6LfD3PIbAAAAAJs_eEHvoOl75_83eXSqpPSRFJ_u",
+            },
+        },
+        "hcaptcha": {
+            "official_demo": {
+                "target_url": "https://accounts.hcaptcha.com/demo",
+                "captcha_type": "hcaptcha",
+                "headless": "true",
+                "sitekey": "a5f74b19-9e45-40e0-b45d-47ff91b7a6c2",
+                "submit_selector": "#hcaptcha-demo-submit",
+                "success_selector": ".hcaptcha-success",
+                "success_text": "Verification Success!",
+            },
+        },
+        "arkose": {
+            "official_demo": {
+                "target_url": "https://demo.arkoselabs.com/",
+                "captcha_type": "funcaptcha",
+                "headless": "true",
+                "note": "Official demo may not render a challenge; success requires live /fc/ca/ pass evidence.",
             },
         },
     }

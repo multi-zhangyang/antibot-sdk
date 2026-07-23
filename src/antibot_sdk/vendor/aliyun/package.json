@@ -7,7 +7,7 @@
   "author": "multi-zhangyang",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "check:syntax": "node -c bridge.js && node -c src/runner.js && node -c src/aggregate.js && node -c src/stability.js && node -c src/stability_stats.js && node -c src/index.js && node -c src/deep_hooks.js && node -c src/site_profiles.js",

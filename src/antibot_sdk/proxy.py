@@ -8,6 +8,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
 
+SUPPORTED_PROXY_SCHEMES = frozenset({"http", "https", "socks4", "socks5"})
+PROXY_ENVIRONMENT_KEYS = (
+    "ANTIBOT_PROXY",
+    "HTTP_PROXY",
+    "http_proxy",
+    "HTTPS_PROXY",
+    "https_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+    "NO_PROXY",
+    "no_proxy",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ProxyConfig:
@@ -60,6 +73,24 @@ class ProxyConfig:
         return self.server
 
 
+def _proxy_config(
+    scheme: str,
+    host: str,
+    port: int | None,
+    username: str | None = None,
+    password: str | None = None,
+) -> ProxyConfig:
+    normalized_scheme = scheme.lower()
+    if normalized_scheme not in SUPPORTED_PROXY_SCHEMES:
+        supported = ", ".join(sorted(SUPPORTED_PROXY_SCHEMES))
+        raise ValueError(f"unsupported proxy scheme {scheme!r}; expected one of: {supported}")
+    if not host or any(char.isspace() for char in host):
+        raise ValueError("proxy host must be non-empty and contain no whitespace")
+    if port is not None and not 1 <= port <= 65535:
+        raise ValueError(f"invalid proxy port: {port!r}")
+    return ProxyConfig(normalized_scheme, host, port, username, password)
+
+
 def parse_proxy(value: str | None, *, default_scheme: str = "http") -> ProxyConfig | None:
     """Parse SDK proxy input.
 
@@ -82,12 +113,12 @@ def parse_proxy(value: str | None, *, default_scheme: str = "http") -> ProxyConf
         p = urlparse(raw)
         if not p.hostname:
             raise ValueError(f"invalid proxy: {value!r}")
-        return ProxyConfig(
-            scheme=(p.scheme or default_scheme).lower(),
-            host=p.hostname,
-            port=p.port,
-            username=unquote(p.username) if p.username else None,
-            password=unquote(p.password) if p.password else None,
+        return _proxy_config(
+            p.scheme or default_scheme,
+            p.hostname,
+            p.port,
+            unquote(p.username) if p.username else None,
+            unquote(p.password) if p.password else None,
         )
 
     parts = raw.split(":")
@@ -98,7 +129,7 @@ def parse_proxy(value: str | None, *, default_scheme: str = "http") -> ProxyConf
             port = int(port_s)
         except ValueError as e:
             raise ValueError(f"invalid proxy port: {port_s!r}") from e
-        return ProxyConfig(default_scheme, host, port, username, password)
+        return _proxy_config(default_scheme, host, port, username, password)
 
     if len(parts) == 2:
         host, port_s = parts
@@ -106,7 +137,7 @@ def parse_proxy(value: str | None, *, default_scheme: str = "http") -> ProxyConf
             port = int(port_s)
         except ValueError as e:
             raise ValueError(f"invalid proxy port: {port_s!r}") from e
-        return ProxyConfig(default_scheme, host, port)
+        return _proxy_config(default_scheme, host, port)
 
     raise ValueError(f"unsupported proxy format: {value!r}")
 
@@ -158,6 +189,16 @@ def env_proxy_candidates() -> dict[str, str | None]:
         except Exception:
             out[key] = "***"
     return out
+
+
+def proxy_free_environment() -> dict[str, str]:
+    """Return a child-process environment without implicit proxy variables."""
+
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if key not in PROXY_ENVIRONMENT_KEYS
+    }
 
 
 def resolve_runtime_proxy(
@@ -224,14 +265,14 @@ class LocalAnonymizedProxy:
     async def start(self, *, timeout: float = 15.0) -> str:
         if self.local_url:
             return self.local_url
+        if not self.upstream.has_auth:
+            self.local_url = self.upstream.server
+            return self.local_url
         if not self.available:
             raise RuntimeError(
                 "proxy-chain is not installed; run `antibot install-js-deps` "
                 f"(expected under {self.module_dir / 'node_modules' / 'proxy-chain'})"
             )
-        if not self.upstream.has_auth:
-            self.local_url = self.upstream.server
-            return self.local_url
 
         # proxy-chain@3 is ESM-only; use dynamic import instead of require().
         script = r"""
@@ -262,7 +303,10 @@ process.stdin.resume();
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             stdin=asyncio.subprocess.PIPE,
-            env={**os.environ, "NODE_PATH": str(self.module_dir / "node_modules")},
+            env={
+                **proxy_free_environment(),
+                "NODE_PATH": str(self.module_dir / "node_modules"),
+            },
             start_new_session=True,
         )
         assert self._proc.stdout is not None
@@ -322,7 +366,7 @@ process.stdin.resume();
         await self.start()
         return self
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
+    async def __aexit__(self, _exc_type, _exc, _tb) -> None:
         await self.close()
 
 

@@ -30,12 +30,12 @@ class BrowserPool:
         size: int = 4,
         max_uses: int = 3,
         headless: bool = True,
-        xvfb: bool = False,
         initial_size: int = 0,
         proxy: Optional[dict] = None,
         locale: str = "zh-CN",
         timezone_id: str = "Asia/Shanghai",
         user_agent: Optional[str] = None,
+        executable_path: Optional[str] = None,
         pool_id: Optional[str] = None,
         launch_timeout_ms: int = 45000,
         close_timeout_sec: float = 8.0,
@@ -43,12 +43,12 @@ class BrowserPool:
         self.size = size
         self.max_uses = max_uses
         self.headless = headless
-        self.xvfb = xvfb
         self.initial_size = initial_size
         self.proxy = proxy
         self.locale = locale
         self.timezone_id = timezone_id
         self.user_agent = user_agent
+        self.executable_path = executable_path
         self.pool_id = pool_id or f"antibot-tencent-{os.getpid()}-{uuid.uuid4().hex[:10]}"
         self.launch_timeout_ms = launch_timeout_ms
         self.close_timeout_sec = close_timeout_sec
@@ -83,9 +83,18 @@ class BrowserPool:
         if self._playwright is None:
             raise RuntimeError("browser pool is not started")
         env = os.environ.copy()
-        if self.xvfb:
-            # if DISPLAY not set, let caller ensure xvfb-run or similar
-            pass
+        for key in (
+            "ANTIBOT_PROXY",
+            "HTTP_PROXY",
+            "http_proxy",
+            "HTTPS_PROXY",
+            "https_proxy",
+            "ALL_PROXY",
+            "all_proxy",
+            "NO_PROXY",
+            "no_proxy",
+        ):
+            env.pop(key, None)
         launch_kw = {
             "headless": self.headless,
             "args": self._args,
@@ -96,7 +105,7 @@ class BrowserPool:
             launch_kw["proxy"] = self.proxy
         # Prefer full Chromium over headless-shell when available; some captcha
         # runtimes render more reliably on the complete browser build.
-        executable = os.getenv("TCAPTCHA_BROWSER_BINARY") or os.getenv("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH")
+        executable = self.executable_path or os.getenv("TCAPTCHA_BROWSER_BINARY") or os.getenv("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH")
         if not executable:
             from pathlib import Path
 

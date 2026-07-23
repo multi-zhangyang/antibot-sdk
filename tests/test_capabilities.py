@@ -14,9 +14,44 @@ def test_capability_matrix_keeps_human_verification_boundary() -> None:
     assert solvers["tencent"]["captcha_type"] == "slider"
     assert solvers["aliyun"]["captcha_type"] == "slider"
     assert solvers["geetest"]["captcha_type"] == "geetest_v4"
-    assert set(browser_flows) == {"cloudflare"}
+    assert set(browser_flows) == {"cloudflare", "recaptcha", "hcaptcha", "arkose"}
     assert browser_flows["cloudflare"]["category"] == "browser_flow"
+    assert browser_flows["recaptcha"]["category"] == "browser_flow"
+    assert browser_flows["recaptcha"]["status"] == "active_limited_matrix"
+    assert (
+        browser_flows["recaptcha"]["variants"]["v2/dynamic_3x3/cars"]
+        == "live_verified_limited_matrix"
+    )
+    assert "Google /userverify" in browser_flows["recaptcha"]["scope"]
+    assert "checkcaptcha pass=true" in browser_flows["hcaptcha"]["scope"]
+    assert "live_verified" in browser_flows["hcaptcha"]["variants"].values()
+    assert (
+        browser_flows["hcaptcha"]["variants"]["open_vocabulary/point"]
+        == "live_verified_limited_matrix"
+    )
+    assert (
+        browser_flows["hcaptcha"]["variants"]["open_vocabulary/drag_drop"]
+        == "live_attempted_vendor_rejected"
+    )
     assert caps["flow_observers"] == caps["browser_flows"]
+    assert caps["harness"]["status"] == "active"
+    assert "AntibotClient.solve_agent" in caps["harness"]["entrypoints"]
+    assert caps["harness"]["contract"]["observation"] == "ChallengeObservation"
+    assert "BrowserChallengeSession" in caps["harness"]["contract"]["session_adapters"]
+    assert "TurnstileChallengeSession" in caps["harness"]["contract"]["session_adapters"]
+    assert "affordance ids" in caps["harness"]["contract"]["action_validation"]
+    assert "real verifier" in caps["harness"]["contract"]["unknown_scene_policy"]
+    assert "dynamic scene replacements" in caps["harness"]["contract"]["replay_metrics"]
+    assert "20 independent source runs" in caps["harness"]["contract"]["benchmark_gate"]
+    assert {adapter["provider"] for adapter in caps["harness"]["adapters"]} == {
+        "aliyun",
+        "arkose",
+        "cloudflare",
+        "geetest",
+        "hcaptcha",
+        "recaptcha",
+        "tencent",
+    }
     assert caps["unsupported"] == []
 
 
@@ -69,16 +104,42 @@ def test_cloudflare_capability_documents_modes_and_session_output() -> None:
     assert "不是" in cf["scope"] or "不是纯协议" in cf["scope"]
 
 
+def test_capabilities_returns_an_isolated_deep_copy() -> None:
+    first = list_capabilities()
+    first["browser_flows"][0]["modes"]["auto"] = "mutated"
+
+    second = list_capabilities()
+
+    assert second["browser_flows"][0]["modes"]["auto"] != "mutated"
+
+
 def test_top_level_sdk_exports_core_human_verification_api() -> None:
     assert antibot_sdk.AntibotClient
     assert antibot_sdk.BrowserAutomation
     assert antibot_sdk.AliyunCaptchaSolver
     assert antibot_sdk.TencentCaptchaSolver
     assert antibot_sdk.GeetestV4Solver
+    assert antibot_sdk.CaptchaWidgetSolver
     assert antibot_sdk.RunnerConfig
     assert antibot_sdk.run_once
     assert antibot_sdk.list_capabilities
     assert antibot_sdk.parse_proxy
+    assert antibot_sdk.OpenAICompatibleVisionBackend
+    assert antibot_sdk.VisionTask
+    assert antibot_sdk.CaptchaHarness
+    assert antibot_sdk.TurnstileChallengeSession
+    assert antibot_sdk.TencentChallengeSession
+    assert antibot_sdk.TencentSliderChallengeSession
+    assert antibot_sdk.HarnessBudget
+    assert antibot_sdk.ChallengeObservation
+    assert antibot_sdk.ChallengeAction
+    assert antibot_sdk.ProviderAdapterRegistry
+    assert antibot_sdk.VisionSolvePolicy
     caps = list_capabilities()
     assert {item["provider"] for item in caps["solvers"]} == {"aliyun", "tencent", "geetest"}
-    assert {item["provider"] for item in caps["browser_flows"]} == {"cloudflare"}
+    assert {item["provider"] for item in caps["browser_flows"]} == {
+        "cloudflare",
+        "recaptcha",
+        "hcaptcha",
+        "arkose",
+    }

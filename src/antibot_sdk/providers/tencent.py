@@ -5,14 +5,19 @@ import asyncio
 from typing import Any
 
 from ..models import CaptchaResult
-from ..proxy import parse_proxy, redacted_proxy
+from ..persistence import persist_result
+from ..proxy import redacted_proxy, resolve_runtime_proxy
 from ..vendor.tencent.browser_pool import BrowserPool
 from ..vendor.tencent.solve_optimized import solve_one
 from ..vendor.tencent.site_profiles import get_profile, profile_for_url
 
 
-def _proxy(proxy_server: str | None) -> dict[str, str] | None:
-    cfg = parse_proxy(proxy_server)
+def _proxy(
+    proxy_server: str | None,
+    *,
+    use_env_proxy: bool | None = None,
+) -> dict[str, str] | None:
+    cfg = resolve_runtime_proxy(proxy_server, use_env=use_env_proxy)
     return cfg.playwright() if cfg else None
 
 
@@ -31,16 +36,19 @@ class TencentCaptchaSolver:
         locale: str | None = None,
         timezone_id: str | None = None,
         user_agent: str | None = None,
+        browser_binary: str | None = None,
+        use_env_proxy: bool | None = None,
     ) -> tuple[BrowserPool, Any]:
         prof = profile_for_url(target_url, profile) if target_url else get_profile(profile)
         pool = BrowserPool(
             size=pool_size,
             max_uses=browser_max_uses,
             headless=headless,
-            proxy=_proxy(proxy_server),
+            proxy=_proxy(proxy_server, use_env_proxy=use_env_proxy),
             locale=locale or prof.default_locale,
             timezone_id=timezone_id or ("America/New_York" if prof.name == "matrix_ai_detect" else "Asia/Shanghai"),
             user_agent=user_agent,
+            executable_path=browser_binary,
         )
         return pool, prof
 
@@ -86,28 +94,68 @@ class TencentCaptchaSolver:
             )
 
         raw = raw or {}
-        ok = bool(raw.get("ok") or raw.get("ticket"))
+        session_diagnostics = raw.get("session_diagnostics")
+        session_diagnostics = session_diagnostics if isinstance(session_diagnostics, dict) else {}
+        session_verification = session_diagnostics.get("tencent_session_verification")
+        session_verification = (
+            session_verification if isinstance(session_verification, dict) else {}
+        )
+        session_responses = session_diagnostics.get("tencent_verification_responses")
+        session_responses = session_responses if isinstance(session_responses, list) else []
+        verified_response = any(
+            isinstance(item, dict)
+            and item.get("accepted") is True
+            and str(item.get("error_code") or "") == "0"
+            for item in session_responses
+        )
+        legacy_verified = str(raw.get("error_code") or "") == "0"
+        ok = bool(raw.get("ok")) and bool(raw.get("ticket")) and (
+            session_verification.get("accepted") is True
+            or verified_response
+            or legacy_verified
+        )
+        provider_diagnostics = {
+            "profile": raw.get("profile") or getattr(prof, "name", None) or profile,
+            "target_url": raw.get("target_url") or target_url or getattr(prof, "target_url", None),
+            "appid": raw.get("appid") or appid or getattr(prof, "appid", None),
+            "method": raw.get("method"),
+            "gap_x": raw.get("gap_x"),
+            "conf": raw.get("conf"),
+            "rate": raw.get("rate"),
+            "init_x": raw.get("init_x"),
+            "pool_id": pool_id,
+            "proxy": redacted_proxy(proxy_server),
+        }
+        nested_session = session_diagnostics.get("session")
+        nested_session = nested_session if isinstance(nested_session, dict) else {}
+        # Keep normalized session trace alongside provider diagnostics.  The
+        # raw vendor ticket remains in the typed result, while Harness traces
+        # only retain token length and action/evidence metadata.
+        for key in (
+            "challenge_observations",
+            "challenge_actions",
+            "vision_answers",
+            "vision_inference_errors",
+            "harness",
+            "session",
+            "tencent_session_observations",
+            "tencent_verification_responses",
+            "tencent_session_verification",
+        ):
+            if key in session_diagnostics:
+                provider_diagnostics[key] = session_diagnostics[key]
+            elif key in nested_session:
+                provider_diagnostics[key] = nested_session[key]
         return CaptchaResult(
             provider="tencent",
             ok=ok,
-            captcha_type="slider",
+            captcha_type=raw.get("captcha_kind") or "slider",
             capability="solver",
             ticket=raw.get("ticket"),
             randstr=raw.get("randstr"),
             verify_code=str(raw.get("error_code") or "") or None,
             elapsed_ms=raw.get("elapsed_ms") or elapsed_ms,
-            diagnostics={
-                "profile": raw.get("profile") or getattr(prof, "name", None) or profile,
-                "target_url": raw.get("target_url") or target_url or getattr(prof, "target_url", None),
-                "appid": raw.get("appid") or appid or getattr(prof, "appid", None),
-                "method": raw.get("method"),
-                "gap_x": raw.get("gap_x"),
-                "conf": raw.get("conf"),
-                "rate": raw.get("rate"),
-                "init_x": raw.get("init_x"),
-                "pool_id": pool_id,
-                "proxy": redacted_proxy(proxy_server),
-            },
+            diagnostics=provider_diagnostics,
             raw=raw,
             errors=[] if ok else [str(raw.get("error") or raw.get("error_code") or "solve_failed")],
         )
@@ -126,6 +174,7 @@ class TencentCaptchaSolver:
         proxy_server: str | None = None,
         timeout_sec: int | None = None,
         verbose: bool = False,
+        output_json: str | None = None,
     ) -> CaptchaResult:
         """Solve one Tencent captcha using an already-started BrowserPool.
 
@@ -143,7 +192,7 @@ class TencentCaptchaSolver:
                 verbose=verbose,
             )
             raw = await asyncio.wait_for(solve_coro, timeout=timeout_sec) if timeout_sec else await solve_coro
-            return self._result_from_raw(
+            result = self._result_from_raw(
                 raw,
                 prof=prof,
                 target_url=target_url,
@@ -157,8 +206,10 @@ class TencentCaptchaSolver:
                 proxy_server=proxy_server,
                 started=started,
             )
+            persist_result(result, output_json)
+            return result
         except asyncio.TimeoutError:
-            return self._result_from_raw(
+            result = self._result_from_raw(
                 None,
                 prof=prof,
                 target_url=target_url,
@@ -174,8 +225,10 @@ class TencentCaptchaSolver:
                 error=f"timeout after {timeout_sec}s",
                 error_type="TimeoutError",
             )
+            persist_result(result, output_json)
+            return result
         except Exception as e:
-            return self._result_from_raw(
+            result = self._result_from_raw(
                 None,
                 prof=prof,
                 target_url=target_url,
@@ -191,6 +244,8 @@ class TencentCaptchaSolver:
                 error=str(e),
                 error_type=type(e).__name__,
             )
+            persist_result(result, output_json)
+            return result
 
     async def solve(
         self,
@@ -205,13 +260,18 @@ class TencentCaptchaSolver:
         locale: str | None = None,
         timezone_id: str | None = None,
         user_agent: str | None = None,
+        browser_binary: str | None = None,
+        use_env_proxy: bool | None = None,
         timeout_sec: int | None = None,
         verbose: bool = False,
+        output_json: str | None = None,
     ) -> CaptchaResult:
         started = time.monotonic()
         pool: BrowserPool | None = None
         prof = None
         try:
+            resolved_proxy = resolve_runtime_proxy(proxy_server, use_env=use_env_proxy)
+            proxy_server = resolved_proxy.url if resolved_proxy else None
             pool, prof = self.create_pool(
                 target_url=target_url,
                 profile=profile,
@@ -222,6 +282,8 @@ class TencentCaptchaSolver:
                 locale=locale,
                 timezone_id=timezone_id,
                 user_agent=user_agent,
+                browser_binary=browser_binary,
+                use_env_proxy=False,
             )
             await pool.start()
             return await self.solve_with_pool(
@@ -236,9 +298,10 @@ class TencentCaptchaSolver:
                 timeout_sec=timeout_sec,
                 proxy_server=proxy_server,
                 verbose=verbose,
+                output_json=output_json,
             )
         except Exception as e:
-            return self._result_from_raw(
+            result = self._result_from_raw(
                 None,
                 prof=prof,
                 target_url=target_url,
@@ -254,6 +317,8 @@ class TencentCaptchaSolver:
                 error=str(e),
                 error_type=type(e).__name__,
             )
+            persist_result(result, output_json)
+            return result
         finally:
             if pool is not None:
                 try:

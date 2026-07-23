@@ -1,20 +1,7 @@
-# /// script
-# requires-python = ">=3.10"
-# dependencies = [
-#     "pydoll-python>=2.23.0",
-# ]
-# ///
-"""Prototype product: robust Pydoll anti-bot browser runner.
-
-Use as a CLI:
-    uv run scripts/pydoll_antibot_runner.py https://example.com --selector title=h1
-
-Or import run_once()/diagnose_environment() from another script.
-"""
+"""Cloudflare browser-flow runner built on Pydoll/CDP."""
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import importlib.metadata as metadata
 import json
@@ -27,20 +14,37 @@ import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Literal
+from typing import Any, Literal
+from urllib.parse import urlsplit, urlunsplit
 
-from pydoll.browser import Chrome
-from pydoll.browser.options import ChromiumOptions
-from pydoll.commands import EmulationCommands, PageCommands
-from pydoll.exceptions import (
-    ElementNotFound,
-    FailedToStartBrowser,
-    NavigationError,
-    PageLoadTimeout,
-    WaitElementTimeout,
-)
-from pydoll.protocol.fetch.events import FetchEvent, RequestPausedEvent
-from pydoll.protocol.network.types import ErrorReason
+try:
+    from pydoll.browser import Chrome
+    from pydoll.browser.options import ChromiumOptions
+    from pydoll.commands import EmulationCommands, PageCommands
+    from pydoll.exceptions import (
+        ElementNotFound,
+        FailedToStartBrowser,
+        NavigationError,
+        PageLoadTimeout,
+        WaitElementTimeout,
+    )
+    from pydoll.protocol.fetch.events import FetchEvent, RequestPausedEvent
+    from pydoll.protocol.network.types import ErrorReason
+
+    _PYDOLL_IMPORT_ERROR: ModuleNotFoundError | None = None
+except ModuleNotFoundError as exc:
+    if not (exc.name or "").startswith("pydoll"):
+        raise
+
+    _PYDOLL_IMPORT_ERROR = exc
+    Chrome = ChromiumOptions = EmulationCommands = PageCommands = None  # type: ignore[assignment]
+    FetchEvent = RequestPausedEvent = ErrorReason = None  # type: ignore[assignment]
+
+    class _PydollUnavailableError(Exception):
+        pass
+
+    ElementNotFound = FailedToStartBrowser = _PydollUnavailableError
+    NavigationError = PageLoadTimeout = WaitElementTimeout = _PydollUnavailableError
 
 LOG = logging.getLogger("pydoll-antibot-runner")
 
@@ -122,6 +126,7 @@ class RunResult:
     cookie_header: str = ""
     cf_clearance: str | None = None
     turnstile_token: str | None = None
+    events: list[dict[str, Any]] = field(default_factory=list)
     artifacts: dict[str, str] = field(default_factory=dict)
     diagnostics: dict[str, Any] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
@@ -134,6 +139,58 @@ CF_SESSION_COOKIE_NAMES = (
     "cf_chl_2",
     "cf_chl_prog",
 )
+
+NETWORK_EVENT_LIMIT = 300
+
+
+def compact_network_events(
+    logs: list[dict[str, Any]],
+    *,
+    limit: int = NETWORK_EVENT_LIMIT,
+) -> list[dict[str, Any]]:
+    """Keep request evidence without persisting query tokens or credentials."""
+
+    events: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for event in logs:
+        if not isinstance(event, dict):
+            continue
+        params = event.get("params")
+        params = params if isinstance(params, dict) else {}
+        request = params.get("request")
+        request = request if isinstance(request, dict) else {}
+        raw_url = request.get("url")
+        if not isinstance(raw_url, str):
+            continue
+        try:
+            parsed = urlsplit(raw_url)
+        except ValueError:
+            continue
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            continue
+        host = parsed.hostname
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        try:
+            port = parsed.port
+        except ValueError:
+            port = None
+        netloc = f"{host}:{port}" if port is not None else host
+        url = urlunsplit((parsed.scheme, netloc, parsed.path or "/", "", ""))
+        method = str(request.get("method") or "GET").upper()
+        resource_type = str(params.get("type") or "")
+        key = (method, url, resource_type)
+        if key in seen:
+            continue
+        seen.add(key)
+        events.append(
+            {
+                "url": url,
+                "method": method,
+                "resource_type": resource_type,
+            }
+        )
+    return events[-max(1, int(limit)) :]
 
 
 def cookie_to_dict(cookie: Any) -> dict[str, Any]:
@@ -204,6 +261,23 @@ def summarize_session_cookies(cookies: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def persist_run_result(result: RunResult, output_path: str | None) -> None:
+    """Persist the same structured result returned by the SDK."""
+
+    if not output_path:
+        return
+    try:
+        path = Path(output_path).expanduser().resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        result.artifacts["output_json"] = str(path)
+        path.write_text(
+            json.dumps(asdict(result), ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        result.errors.append(f"Failed to write output JSON: {exc}")
+
+
 async def collect_cookies(tab: Any) -> list[dict[str, Any]]:
     try:
         raw_cookies = await tab.get_cookies()
@@ -265,6 +339,8 @@ async def extract_turnstile_token(tab: Any) -> str | None:
 
 
 def pydoll_version() -> str:
+    if _PYDOLL_IMPORT_ERROR is not None:
+        return "not-installed"
     try:
         return metadata.version("pydoll-python")
     except metadata.PackageNotFoundError:
@@ -411,6 +487,11 @@ def resolve_headless(mode: str, requested: HeadlessMode) -> bool:
 
 
 def build_options(config: RunnerConfig, headless: bool) -> tuple[ChromiumOptions, str | None]:
+    if _PYDOLL_IMPORT_ERROR is not None or ChromiumOptions is None:
+        raise RuntimeError(
+            "Cloudflare provider requires pydoll-python; install the default project "
+            "dependencies with `pip install -e .` or `uv sync`"
+        ) from _PYDOLL_IMPORT_ERROR
     options = ChromiumOptions()
     options.headless = headless
     options.start_timeout = config.startup_timeout
@@ -486,14 +567,51 @@ def build_options(config: RunnerConfig, headless: bool) -> tuple[ChromiumOptions
     return options, browser_binary
 
 
+def configure_browser_process_environment(browser: Any) -> bool:
+    """Prevent Chromium from bypassing the SDK's opt-in proxy resolution."""
+
+    from ..proxy import proxy_free_environment
+
+    manager = getattr(browser, "_browser_process_manager", None)
+    if manager is None or not hasattr(manager, "_process_creator"):
+        return False
+
+    def create_process(command: list[str]):
+        return subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=proxy_free_environment(),
+        )
+
+    manager._process_creator = create_process
+    return True
+
+
+def force_stop_browser_process(browser: Any, timeout: float = 3.0) -> bool:
+    """Synchronously reap a Pydoll Chrome process after cancellation or failed cleanup."""
+
+    manager = getattr(browser, "_browser_process_manager", None)
+    process = getattr(manager, "_process", None)
+    if process is None or process.poll() is not None:
+        return False
+    process.terminate()
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=timeout)
+    return True
+
+
 def _parse_viewport(raw: str) -> tuple[int, int]:
     try:
         width_s, height_s = raw.lower().replace("x", ",").split(",", 1)
         width, height = int(width_s), int(height_s)
     except Exception as exc:
-        raise argparse.ArgumentTypeError("viewport must look like 1920,1080") from exc
+        raise ValueError("viewport must look like 1920,1080") from exc
     if width < 640 or height < 480:
-        raise argparse.ArgumentTypeError("viewport is too small for challenge pages")
+        raise ValueError("viewport is too small for challenge pages")
     return width, height
 
 
@@ -794,6 +912,21 @@ async def run_once(config: RunnerConfig) -> RunResult:
 
     started = time.monotonic()
     headless = resolve_headless(config.mode, config.headless)
+    if _PYDOLL_IMPORT_ERROR is not None or Chrome is None:
+        result = RunResult(
+            ok=False,
+            url=config.url,
+            headless=headless,
+            pydoll_version=pydoll_version(),
+            diagnostics=diagnose_environment(config.browser_binary),
+            errors=[
+                "Cloudflare provider is unavailable because pydoll-python is not installed; "
+                "run `pip install -e .` or `uv sync`"
+            ],
+        )
+        result.elapsed_sec = round(time.monotonic() - started, 3)
+        persist_run_result(result, config.output_json)
+        return result
     proxy_bridge = None
     effective_config = config
     proxy_diag: dict[str, Any] = {"requested": redacted_proxy(config.proxy)}
@@ -824,9 +957,24 @@ async def run_once(config: RunnerConfig) -> RunResult:
             )
             result.diagnostics["proxy"] = proxy_diag
             result.elapsed_sec = round(time.monotonic() - started, 3)
+            persist_run_result(result, config.output_json)
             return result
 
-    options, browser_binary = build_options(effective_config, headless=headless)
+    try:
+        options, browser_binary = build_options(effective_config, headless=headless)
+    except Exception as exc:
+        result = RunResult(
+            ok=False,
+            url=config.url,
+            browser_binary=discover_browser_binary(config.browser_binary) or "",
+            headless=headless,
+            pydoll_version=pydoll_version(),
+            diagnostics=diagnose_environment(config.browser_binary),
+            errors=[f"Invalid browser configuration: {type(exc).__name__}: {exc}"],
+        )
+        result.elapsed_sec = round(time.monotonic() - started, 3)
+        persist_run_result(result, config.output_json)
+        return result
     result = RunResult(
         ok=False,
         url=config.url,
@@ -842,14 +990,28 @@ async def run_once(config: RunnerConfig) -> RunResult:
         result.elapsed_sec = round(time.monotonic() - started, 3)
         if proxy_bridge is not None:
             await proxy_bridge.close()
+        persist_run_result(result, config.output_json)
         return result
 
     if not headless and not os.environ.get("DISPLAY"):
         result.diagnostics["headed_without_display"] = "Use xvfb-run -a for managed/headed mode"
 
+    browser = None
     try:
-        async with Chrome(options=options) as browser:
+        browser = Chrome(options=options)
+        result.diagnostics["proxy_environment_scrubbed"] = (
+            configure_browser_process_environment(browser)
+        )
+        async with browser:
             tab = await browser.start()
+            try:
+                await tab.enable_network_events()
+                result.diagnostics["network_capture"] = {"enabled": True}
+            except Exception as exc:
+                result.diagnostics["network_capture"] = {
+                    "enabled": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
             result.diagnostics["user_agent_override"] = await apply_user_agent_override(
                 tab, effective_config, browser_binary
             )
@@ -935,6 +1097,22 @@ async def run_once(config: RunnerConfig) -> RunResult:
             except Exception as exc:
                 result.diagnostics["turnstile_token_error"] = f"{type(exc).__name__}: {exc}"
 
+            if result.diagnostics.get("network_capture", {}).get("enabled"):
+                try:
+                    logs = await tab.get_network_logs()
+                    result.events = compact_network_events(logs)
+                    result.diagnostics["network_capture"].update(
+                        {
+                            "request_count": len(logs),
+                            "retained_count": len(result.events),
+                            "query_values_persisted": False,
+                        }
+                    )
+                except Exception as exc:
+                    result.diagnostics["network_capture"]["error"] = (
+                        f"{type(exc).__name__}: {exc}"
+                    )
+
             if effective_config.screenshot:
                 path = str(Path(effective_config.screenshot).expanduser().resolve())
                 Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -967,6 +1145,15 @@ async def run_once(config: RunnerConfig) -> RunResult:
     except Exception as exc:  # Keep prototype CLI from hiding diagnostic output.
         result.errors.append(f"Unhandled error: {type(exc).__name__}: {exc}")
     finally:
+        if browser is not None:
+            try:
+                forced = force_stop_browser_process(browser)
+                if forced:
+                    result.diagnostics["browser_process_forced_stop"] = True
+            except Exception as exc:
+                result.diagnostics["browser_process_cleanup_error"] = (
+                    f"{type(exc).__name__}: {exc}"
+                )
         if proxy_bridge is not None:
             try:
                 await proxy_bridge.close()
@@ -974,6 +1161,7 @@ async def run_once(config: RunnerConfig) -> RunResult:
                 result.diagnostics.setdefault("proxy", {})["close_error"] = f"{type(exc).__name__}: {exc}"
         result.elapsed_sec = round(time.monotonic() - started, 3)
 
+    persist_run_result(result, config.output_json)
     return result
 
 
@@ -987,6 +1175,8 @@ def diagnose_environment(explicit_binary: str | None = None) -> dict[str, Any]:
     return {
         "python": sys.version.split()[0],
         "pydoll_python": pydoll_version(),
+        "pydoll_available": _PYDOLL_IMPORT_ERROR is None,
+        "pydoll_import_error": str(_PYDOLL_IMPORT_ERROR) if _PYDOLL_IMPORT_ERROR else None,
         "browser_binary": binary,
         "browser_binary_exists": _path_is_executable(binary),
         "display": os.environ.get("DISPLAY"),
@@ -1002,112 +1192,3 @@ def diagnose_environment(explicit_binary: str | None = None) -> dict[str, Any]:
         },
         "env_proxy": env_proxy_candidates(),
     }
-
-
-def parse_selector_items(items: Iterable[str]) -> dict[str, str]:
-    selectors: dict[str, str] = {}
-    for item in items:
-        if "=" not in item:
-            raise argparse.ArgumentTypeError("selector must be key=css_or_xpath")
-        key, selector = item.split("=", 1)
-        key, selector = key.strip(), selector.strip()
-        if not key or not selector:
-            raise argparse.ArgumentTypeError("selector key and value cannot be empty")
-        selectors[key] = selector
-    return selectors
-
-
-def make_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Robust Pydoll anti-bot prototype runner")
-    parser.add_argument("url", nargs="?", help="Target URL; omit with --diagnose")
-    parser.add_argument("--mode", choices=["auto", "turnstile", "managed", "scrape", "diagnose"], default="auto")
-    parser.add_argument("--headless", choices=["auto", "true", "false"], default="auto")
-    parser.add_argument("--browser-binary", help="Chrome/Chromium executable path")
-    parser.add_argument("--proxy", help="Proxy server, e.g. http://host:port or socks5://host:port")
-    parser.add_argument("--profile-dir", help="Persistent Chrome profile directory")
-    parser.add_argument("--accept-languages", default="en-US,en")
-    parser.add_argument("--user-agent", help="Override browser User-Agent; default is a Chrome desktop persona without HeadlessChrome")
-    parser.add_argument("--platform", help="Override navigator.platform via CDP, e.g. Win32, MacIntel, Linux x86_64")
-    parser.add_argument("--viewport", default="1920,1080")
-    parser.add_argument("--startup-timeout", type=int, default=45)
-    parser.add_argument("--navigation-timeout", type=int, default=90)
-    parser.add_argument("--max-wait", type=int, default=90)
-    parser.add_argument("--captcha-wait", type=float, default=8.0)
-    parser.add_argument("--selector", action="append", default=[], help="Extract selector as key=css_or_xpath; repeatable")
-    parser.add_argument("--click", action="append", default=[], help="Click CSS/XPath selector after initial settle; repeatable")
-    parser.add_argument("--wait-after-click", type=float, default=3.0)
-    parser.add_argument("--screenshot", help="Save full-page screenshot path")
-    parser.add_argument("--html-output", help="Save final HTML path")
-    parser.add_argument("--output-json", help="Save structured JSON result path")
-    parser.add_argument("--block-resources", action="store_true", help="Block images/fonts/media after fetch interception")
-    parser.add_argument("--block-stylesheets", action="store_true", help="Also block CSS; avoid on challenge pages")
-    parser.add_argument("--no-fingerprint-patch", action="store_true")
-    parser.add_argument("--no-human-probe", action="store_true")
-    parser.add_argument("--diagnose", action="store_true", help="Only print environment diagnostics")
-    parser.add_argument("--verbose", action="store_true")
-    return parser
-
-
-def config_from_args(args: argparse.Namespace) -> RunnerConfig:
-    if args.diagnose or args.mode == "diagnose":
-        return RunnerConfig(url=args.url or "about:blank", mode="diagnose", browser_binary=args.browser_binary)
-    if not args.url:
-        raise SystemExit("url is required unless --diagnose is used")
-    return RunnerConfig(
-        url=args.url,
-        mode=args.mode,
-        headless=args.headless,
-        browser_binary=args.browser_binary,
-        proxy=args.proxy,
-        profile_dir=args.profile_dir,
-        accept_languages=args.accept_languages,
-        user_agent=args.user_agent,
-        platform=args.platform,
-        viewport=args.viewport,
-        startup_timeout=args.startup_timeout,
-        navigation_timeout=args.navigation_timeout,
-        max_wait=args.max_wait,
-        captcha_wait=args.captcha_wait,
-        screenshot=args.screenshot,
-        html_output=args.html_output,
-        output_json=args.output_json,
-        selectors=parse_selector_items(args.selector),
-        clicks=args.click,
-        wait_after_click=args.wait_after_click,
-        block_resources=args.block_resources,
-        block_stylesheets=args.block_stylesheets,
-        inject_fingerprint_patch=not args.no_fingerprint_patch,
-        human_probe=not args.no_human_probe,
-        verbose=args.verbose,
-    )
-
-
-def emit_json(data: dict[str, Any], output_path: str | None = None) -> None:
-    text = json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True)
-    print(text)
-    if output_path:
-        path = Path(output_path).expanduser().resolve()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text + "\n", encoding="utf-8")
-
-
-async def amain(argv: list[str] | None = None) -> int:
-    parser = make_parser()
-    args = parser.parse_args(argv)
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="[%(levelname)s] %(message)s")
-    config = config_from_args(args)
-    if args.diagnose or config.mode == "diagnose":
-        emit_json(diagnose_environment(config.browser_binary), args.output_json)
-        return 0
-    result = await run_once(config)
-    payload = asdict(result)
-    emit_json(payload, config.output_json)
-    return 0 if result.ok else 2
-
-
-def main() -> None:
-    raise SystemExit(asyncio.run(amain()))
-
-
-if __name__ == "__main__":
-    main()

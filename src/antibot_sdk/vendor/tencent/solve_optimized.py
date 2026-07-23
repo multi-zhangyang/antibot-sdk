@@ -38,15 +38,10 @@ except ImportError:
 # crack_tcaptcha trajectory
 try:
     from crack_tcaptcha.trajectory import generate_slide_trajectory
-except ImportError:
-    import sys, os
-    for pattern in ["../venv/lib/python*/site-packages", "venv/lib/python*/site-packages"]:
-        import glob
-        matches = glob.glob(pattern)
-        if matches:
-            sys.path.insert(0, matches[0])
-            break
-    from crack_tcaptcha.trajectory import generate_slide_trajectory
+    _TRAJECTORY_IMPORT_ERROR: ImportError | None = None
+except ImportError as exc:
+    generate_slide_trajectory = None
+    _TRAJECTORY_IMPORT_ERROR = exc
 
 DEFAULT_RATE = 340 / 672
 DEFAULT_INIT_X = 50.0
@@ -793,6 +788,11 @@ async def _click_word_targets(
 
 
 async def _drag(page: Page, geo: RuntimeGeometry) -> None:
+    if generate_slide_trajectory is None:
+        raise RuntimeError(
+            "Tencent slider trajectory support requires crack-tcaptcha; "
+            "install the default project dependencies with `pip install -e .` or `uv sync`"
+        ) from _TRAJECTORY_IMPORT_ERROR
     # Keep overshoot tiny: Tencent maps final CSS position; large overshoot hurts rate.
     overshoot = random.uniform(0.4, 1.8)
     end_x = geo.end_x + overshoot
@@ -849,19 +849,109 @@ async def _consume_playwright_on_cancel(coro):
         raise
 
 
+async def _solve_slider_session(
+    page: Page,
+    first_target: CaptchaFrame,
+    verify_state: dict,
+    *,
+    profile: SiteProfile,
+    target_url: str,
+    appid: str | None,
+    max_attempts: int,
+) -> dict:
+    """Run a visible Tencent slider or word-click through the shared loop."""
+
+    from ...harness.agent import ChallengeAgentLoop, VisionChallengePolicy
+    from ...providers.tencent_session import TencentChallengeSession, TencentWordOCRBackend
+    from ...vision import StaticVisionBackend, VisionSolvePolicy
+
+    initial = first_target
+
+    async def frame_reader() -> CaptchaFrame:
+        nonlocal initial
+        if initial is not None:
+            target = initial
+            initial = None
+            return target
+        return await _wait_frame(page)
+
+    diagnostics: dict = {}
+    session = TencentChallengeSession(
+        page,
+        diagnostics=diagnostics,
+        max_attempts=max_attempts,
+        frame_reader=frame_reader,
+        verify_state=verify_state,
+    )
+    kind = await _challenge_kind(first_target.frame)
+    backend = TencentWordOCRBackend() if kind == "word_click" else StaticVisionBackend([])
+    loop_result = await ChallengeAgentLoop(
+        session,
+        VisionChallengePolicy(
+            backend,
+            solve_policy=VisionSolvePolicy(
+                require_confidence=False,
+                allow_uncertain=False,
+            ),
+            strategies=session.strategy_registry(),
+        ),
+        max_steps=max(3, max_attempts * 2 + 1),
+        timeout_sec=max(30.0, FRAME_WAIT_SEC * max_attempts + 15.0),
+    ).run()
+    observations = loop_result.diagnostics.get("challenge_observations", [])
+    last_observation = observations[-1] if isinstance(observations, list) and observations else {}
+    metadata = last_observation.get("metadata", {}) if isinstance(last_observation, dict) else {}
+    verification = loop_result.verification
+    challenge_kind = (
+        "word_click"
+        if any(item.get("kind") == "point" for item in observations if isinstance(item, dict))
+        else "slider"
+    )
+    raw = {
+        "ok": loop_result.accepted,
+        "error_code": (
+            diagnostics.get("tencent_session_verification", {}).get("error_code")
+            if loop_result.accepted
+            else None
+        ),
+        "profile": profile.name,
+        "target_url": target_url,
+        "appid": appid,
+        "ticket": session.ticket,
+        "randstr": session.randstr or "",
+        "gap_x": None,
+        "conf": metadata.get("detector_confidence"),
+        "method": metadata.get("detector")
+        or ("word_siamese" if challenge_kind == "word_click" else None),
+        "rate": None,
+        "init_x": None,
+        "elapsed_ms": loop_result.elapsed_ms,
+        "captcha_kind": challenge_kind,
+        "session_diagnostics": loop_result.diagnostics,
+        "meta": {
+            "kind": challenge_kind,
+            "session_status": loop_result.status,
+            "session_steps": loop_result.steps,
+            "verification": verification.to_dict(),
+        },
+    }
+    if not loop_result.accepted:
+        raw["error_code"] = (
+            diagnostics.get("tencent_session_verification", {}).get("error_code")
+            or "session_failed"
+        )
+        raw["error"] = ", ".join(loop_result.errors) or "Tencent slider session failed"
+    return raw
+
+
 async def solve_one(
     pool: BrowserPool,
-    headless: Optional[bool] = None,
     verbose: bool = True,
-    use_xvfb: bool = False,
     target_url: Optional[str] = None,
     profile_name: Optional[str] = None,
     appid: Optional[str] = None,
 ) -> Optional[dict]:
-    """单次求解，从 pool 取 browser/context，用完归还.
-
-    headless/use_xvfb 保留为兼容旧调用；实际启动参数由 BrowserPool 决定。
-    """
+    """单次求解，从 pool 取 browser/context，用完归还。"""
     resolved_url = target_url or TARGET_URL
     profile = profile_for_url(resolved_url, profile_name)
     resolved_appid = appid or os.getenv("TCAPTCHA_APPID") or profile.appid or TARGET_APPID
@@ -1078,6 +1168,22 @@ async def _solve_on_page(
                     await asyncio.sleep(1.2)
             target = await _wait_frame(page)
 
+        # The dominant slider path now runs through the provider-neutral
+        # session so every live attempt emits normalized observations/actions
+        # and the same vendor evidence gate used by replay benchmarks.  Keep
+        # the legacy word-click branch below because its OCR action model is a
+        # separate Tencent challenge family.
+        if await _challenge_kind(target.frame) in {"slider", "word_click"}:
+            return await _solve_slider_session(
+                page,
+                target,
+                verify_state,
+                profile=profile,
+                target_url=target_url,
+                appid=appid,
+                max_attempts=MAX_ATTEMPTS,
+            )
+
         for attempt in range(1, MAX_ATTEMPTS + 1):
             verify_state["res"] = None
             if verbose:
@@ -1138,6 +1244,7 @@ async def _solve_on_page(
                             elapsed = int((time.time() - t0) * 1000)
                             result = {
                                 "ok": True,
+                                "error_code": "0",
                                 "profile": profile.name,
                                 "target_url": target_url,
                                 "appid": appid,
@@ -1204,6 +1311,7 @@ async def _solve_on_page(
                 elapsed = int((time.time() - t0) * 1000)
                 result = {
                     "ok": True,
+                    "error_code": "0",
                     "profile": profile.name,
                     "target_url": target_url,
                     "appid": appid,

@@ -14,7 +14,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 from ..models import CaptchaResult
-from ..proxy import parse_proxy, redacted_proxy
+from ..proxy import proxy_free_environment, redacted_proxy, resolve_runtime_proxy
 
 DEFAULT_GEETEST_DEMO_URL = "https://www.geetest.com/en/adaptive-captcha-demo"
 DEFAULT_GEETEST_SLIDE_DEMO_URL = "https://gt4.geetest.com/demov4/slide-popup-zh.html"
@@ -748,6 +748,7 @@ class GeetestV4Solver:
         user_agent: str | None = None,
         locale: str | None = "zh-CN",
         timezone_id: str | None = "Asia/Shanghai",
+        use_env_proxy: bool | None = None,
     ) -> CaptchaResult:
         started = time.monotonic()
         deadline = started + max(1, int(timeout_sec))
@@ -851,6 +852,7 @@ class GeetestV4Solver:
             playwright = await async_playwright().start()
             launch_kwargs: dict[str, Any] = {
                 "headless": _headless(headless),
+                "env": proxy_free_environment(),
                 "args": [
                     "--disable-blink-features=AutomationControlled",
                     "--disable-dev-shm-usage",
@@ -869,12 +871,11 @@ class GeetestV4Solver:
                             break
             if browser_binary:
                 launch_kwargs["executable_path"] = browser_binary
-            from ..proxy import resolve_runtime_proxy
-
-            proxy = parse_proxy(proxy_server) or resolve_runtime_proxy(None)
+            proxy = resolve_runtime_proxy(proxy_server, use_env=use_env_proxy)
             if proxy:
                 # Playwright natively supports username/password on proxy dict.
                 launch_kwargs["proxy"] = proxy.playwright()
+                proxy_server = proxy.url
 
             browser = await playwright.chromium.launch(**launch_kwargs)
             context_kwargs: dict[str, Any] = {
