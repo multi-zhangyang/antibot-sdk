@@ -1237,12 +1237,9 @@ def _orbit_symbol_images(
             None,
         )
         if selected_frame is None:
-            # Color detection should be stable, but keeping the ordinal
-            # fallback makes the crop usable on a frame with a partially
-            # occluded ring.
-            if ring_rank >= len(frame_rings):
-                raise VisionBackendError("Arkose selected orbit disappeared from a state")
-            selected_frame = frame_rings[ring_rank]
+            raise VisionBackendError(
+                f"Arkose {selected.color} orbit disappeared from state {index + 1}"
+            )
         # Keep the complete ring and a narrow band of surrounding context.
         # The symbol can touch the ring; masking to the inner disk removes
         # exactly the extremities that distinguish similar glyphs.  A 300px
