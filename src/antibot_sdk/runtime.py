@@ -120,7 +120,8 @@ def runtime_diagnostics(browser_binary: str | None = None) -> dict[str, Any]:
         "arkose": {
             "ready": bool(modules["playwright"] and modules["PIL"] and chrome),
             "coverage": (
-                "evidence-gated FunCaptcha Canvas/DOM flow; live challenge matrix pending"
+                "evidence-gated FunCaptcha Canvas/DOM flow; orbit carousel live-verified "
+                "with a limited matrix"
             ),
             "open_vocabulary_vision": {
                 "ready": arkose_vision_ready,

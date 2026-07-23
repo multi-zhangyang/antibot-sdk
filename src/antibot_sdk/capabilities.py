@@ -82,16 +82,18 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "name": "Arkose Labs FunCaptcha page widget flow",
         "category": "browser_flow",
         "captcha_type": "funcaptcha",
-        "status": "implemented_pending_live_verification",
+        "status": "live_verified_limited_matrix",
         "output": "final callback/field token in CaptchaResult.ticket plus redacted /fc/ca/ evidence",
         "scope": (
             "页面级 Arkose Labs FunCaptcha 浏览器流：在真实页面中捕获 Canvas/DOM 游戏面，"
             "将图片选择、坐标点击、旋转按钮和拖拽映射到统一 Harness observation/action，"
             "使用流式 OpenAI-compatible 视觉后端处理。仅当最终 callback/field token 与"
             "Arkose /fc/ca/ pass=true 同时存在时接受；gt2 初始化握手、HTTP 200 或 UI 消失"
-            "都不算成功。官方 demo 当前未正常渲染，因此不宣称已在线通过。"
+            "都不算成功。轨道轮播题已有一次完整的在线 pass=true + 最终 token 证据，但同一"
+            "运行的前一组三题被厂商拒绝，因此仅属于有限题型样本，不代表通用成功率。"
         ),
         "variants": {
+            "orbit_carousel": "live_verified_limited_matrix",
             "image_selection": "implemented_pending_live_matrix",
             "point_game": "implemented_pending_live_matrix",
             "rotation_controls": "implemented_pending_live_matrix",

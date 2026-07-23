@@ -86,16 +86,27 @@ def test_visual_spatial_answers_are_normalized() -> None:
     )
     drag = validate_vision_answer(
         drag_task,
-        {
-            "paths": [
-                {"start_point": {"x": 5, "y": 6}, "end_point": {"x": 50, "y": 60}}
-            ]
-        },
+        {"paths": [{"start_point": {"x": 5, "y": 6}, "end_point": {"x": 50, "y": 60}}]},
     )
 
     assert (point.points[0].x, point.points[0].y) == (12, 34)
     assert (box.boxes[0].x1, box.boxes[0].y2) == (1, 40)
     assert (drag.paths[0].start.x, drag.paths[0].end.y) == (5, 60)
+
+
+def test_multiple_choice_accepts_gateway_singular_choice_alias() -> None:
+    task = VisionTask(
+        kind="multiple_choice",
+        prompt="choose one",
+        images=(image(),),
+        choices=("State 1", "State 2"),
+        min_answers=1,
+        max_answers=1,
+    )
+
+    answer = validate_vision_answer(task, {"choice": "State 2", "confidence": 0.8})
+
+    assert answer.choices == ("State 2",)
 
 
 @pytest.mark.parametrize(

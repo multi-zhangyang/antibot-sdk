@@ -33,6 +33,12 @@ def test_capability_matrix_keeps_human_verification_boundary() -> None:
         browser_flows["hcaptcha"]["variants"]["open_vocabulary/drag_drop"]
         == "live_attempted_vendor_rejected"
     )
+    assert browser_flows["arkose"]["status"] == "live_verified_limited_matrix"
+    assert (
+        browser_flows["arkose"]["variants"]["orbit_carousel"]
+        == "live_verified_limited_matrix"
+    )
+    assert "/fc/ca/ pass=true" in browser_flows["arkose"]["scope"]
     assert caps["flow_observers"] == caps["browser_flows"]
     assert caps["harness"]["status"] == "active"
     assert "AntibotClient.solve_agent" in caps["harness"]["entrypoints"]

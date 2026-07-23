@@ -365,6 +365,7 @@ def _arkose_kwargs(
         "target_url": target_url or args.target_url,
         "headless": _headless_bool(getattr(args, "headless", None)),
         "browser_binary": browser_binary or getattr(args, "browser_binary", None),
+        "browser_args": getattr(args, "browser_arg", None) or None,
         "proxy_server": getattr(args, "proxy", None),
         "proxy_bypass": getattr(args, "proxy_bypass", "127.0.0.1,localhost"),
         "timeout_sec": getattr(args, "timeout", None) or 120,
@@ -478,6 +479,7 @@ async def amain(argv: list[str] | None = None) -> int:
     auto.add_argument("--headless", default="auto")
     auto.add_argument("--chrome-path")
     auto.add_argument("--browser-binary")
+    auto.add_argument("--browser-arg", action="append", default=[])
     auto.add_argument("--wait-after-load-ms", type=int, default=2500)
     auto.add_argument("--click-selector", "--trigger", dest="click_selector", action="append", default=[])
     auto.add_argument("--variant", default="auto")
@@ -511,6 +513,7 @@ async def amain(argv: list[str] | None = None) -> int:
     _add_widget_args(solve_sub.add_parser("hcaptcha"))
     arkose = solve_sub.add_parser("arkose")
     _add_widget_args(arkose)
+    arkose.add_argument("--browser-arg", action="append", default=[])
     arkose.add_argument("--arkose-max-rounds", type=int, default=12)
 
     stress = sub.add_parser("stress")

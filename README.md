@@ -25,7 +25,7 @@
 | GeeTest v4 | `ai`、`slide`、`winlinze`、`match` | 已实现；题型和站点需要分别验证 | 厂商 pass token / flow evidence |
 | hCaptcha | HSW/MessagePack、binary、point、bounding-box、multiple-choice、drag-drop、ONNX fallback | `tree-climbing` 与 point 有真实有限样本；不是通用成功率承诺 | `checkcaptcha pass=true` + 厂商 token；配置站点断言时还需提交成功 |
 | Google reCAPTCHA | v2 动态 3x3、静态网格、token/callback、站点提交 | 动态 cars、bus、bicycles 有限矩阵证据；多 challenge 不逐题归因 | Google token；配置站点断言时还需提交成功 |
-| Arkose Labs FunCaptcha | enforcement frame、Canvas/DOM、图片选择、点选、旋转、拖拽、统一 Harness | 已接入，等待稳定的在线 `/fc/ca/ pass=true` 矩阵 | 最终 callback/field token + 明确的 `/fc/ca/ pass=true` |
+| Arkose Labs FunCaptcha | enforcement frame、Canvas/DOM、轨道轮播、图片选择、点选、旋转、拖拽、统一 Harness | 轨道轮播已有真实有限样本；同次运行也观察到厂商拒绝，不代表通用成功率 | 最终 callback/field token + 明确的 `/fc/ca/ pass=true` |
 
 ### 证据状态
 

@@ -207,7 +207,9 @@ def _extract_coordinate_points(value: Any) -> list[VisionPoint]:
     return points
 
 
-def validate_vision_answer(task: VisionTask, payload: Any, *, diagnostics: dict[str, Any] | None = None) -> VisionAnswer:
+def validate_vision_answer(
+    task: VisionTask, payload: Any, *, diagnostics: dict[str, Any] | None = None
+) -> VisionAnswer:
     """Parse and strictly validate a model JSON object.
 
     A malformed or ambiguous answer is a hard failure.  Returning a guessed
@@ -291,7 +293,12 @@ def validate_vision_answer(task: VisionTask, payload: Any, *, diagnostics: dict[
                 raise VisionBackendError(f"paths[{index}] must be an object")
             start = item.get("start", item.get("start_point"))
             end = item.get("end", item.get("end_point"))
-            paths.append(VisionPath(_parse_point(start, f"paths[{index}].start"), _parse_point(end, f"paths[{index}].end")))
+            paths.append(
+                VisionPath(
+                    _parse_point(start, f"paths[{index}].start"),
+                    _parse_point(end, f"paths[{index}].end"),
+                )
+            )
         _positive_count(task, len(paths))
         return VisionAnswer(
             task.kind,
@@ -303,6 +310,12 @@ def validate_vision_answer(task: VisionTask, payload: Any, *, diagnostics: dict[
 
     if task.kind == "multiple_choice":
         values = payload.get("choices", payload.get("selected"))
+        # A few OpenAI-compatible gateways normalize a one-item array into a
+        # singular ``choice`` field even when the schema asks for ``choices``.
+        # Accept it only for a single-choice task and still validate it against
+        # the declared option set below.
+        if values is None and "choice" in payload:
+            values = [payload.get("choice")]
         if not isinstance(values, list) or not values:
             raise VisionBackendError("multiple_choice response is missing choices")
         choices = tuple(str(value) for value in values)
@@ -327,10 +340,7 @@ def validate_vision_geometry(answer: VisionAnswer, *, width: int, height: int) -
 
     points = list(answer.points)
     points.extend(point for path in answer.paths for point in (path.start, path.end))
-    if any(
-        point.x < 0 or point.x >= width or point.y < 0 or point.y >= height
-        for point in points
-    ):
+    if any(point.x < 0 or point.x >= width or point.y < 0 or point.y >= height for point in points):
         raise VisionBackendError(
             f"vision answer contains a point outside {width}x{height} image bounds"
         )
@@ -370,21 +380,15 @@ async def solve_vision_task(
         try:
             candidate = await backend.solve(task)
             last_answer = candidate
-            confidence_error = (
-                candidate.confidence is None and effective.require_confidence
-            ) or (
-                candidate.confidence is not None
-                and candidate.confidence < effective.min_confidence
+            confidence_error = (candidate.confidence is None and effective.require_confidence) or (
+                candidate.confidence is not None and candidate.confidence < effective.min_confidence
             )
             if confidence_error:
                 confidence = (
-                    "missing"
-                    if candidate.confidence is None
-                    else f"{candidate.confidence:.3f}"
+                    "missing" if candidate.confidence is None else f"{candidate.confidence:.3f}"
                 )
                 raise VisionBackendError(
-                    f"vision confidence {confidence} is below "
-                    f"{effective.min_confidence:.3f}"
+                    f"vision confidence {confidence} is below {effective.min_confidence:.3f}"
                 )
             if task.width and task.height:
                 validate_vision_geometry(candidate, width=task.width, height=task.height)
@@ -538,7 +542,13 @@ class OpenAICompatibleVisionBackend:
         if not model.strip():
             raise ValueError("vision model must not be empty")
         normalized = base_url.rstrip("/")
-        self.endpoint = normalized if normalized.endswith("/chat/completions") else f"{normalized}/v1/chat/completions" if not normalized.endswith("/v1") else f"{normalized}/chat/completions"
+        self.endpoint = (
+            normalized
+            if normalized.endswith("/chat/completions")
+            else f"{normalized}/v1/chat/completions"
+            if not normalized.endswith("/v1")
+            else f"{normalized}/chat/completions"
+        )
         self.api_key = api_key
         self.model = model
         self.timeout_sec = max(1.0, float(timeout_sec))
@@ -548,8 +558,7 @@ class OpenAICompatibleVisionBackend:
         conflicts = sorted(reserved.intersection(self.extra_body))
         if conflicts:
             raise ValueError(
-                "vision extra_body cannot override reserved request fields: "
-                + ", ".join(conflicts)
+                "vision extra_body cannot override reserved request fields: " + ", ".join(conflicts)
             )
 
     def _request(
@@ -592,7 +601,11 @@ class OpenAICompatibleVisionBackend:
                 error_payload = response.json()
             except ValueError:
                 error_payload = {}
-            message = error_payload.get("error", {}).get("message", "request rejected") if isinstance(error_payload, dict) else "request rejected"
+            message = (
+                error_payload.get("error", {}).get("message", "request rejected")
+                if isinstance(error_payload, dict)
+                else "request rejected"
+            )
             raise VisionBackendError(f"vision gateway HTTP {response.status_code}: {message}")
         payload = self._read_stream(response)
         if not isinstance(payload, dict):
@@ -682,9 +695,7 @@ class OpenAICompatibleVisionBackend:
                 text = _content_text(delta.get("content"))
                 if text:
                     content.append(text)
-                private = _content_text(
-                    delta.get("reasoning_content", delta.get("reasoning"))
-                )
+                private = _content_text(delta.get("reasoning_content", delta.get("reasoning")))
                 if private:
                     reasoning.append(private)
         if not saw_event:
