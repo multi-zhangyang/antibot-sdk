@@ -2413,7 +2413,7 @@ class ArkoseCaptchaSolver:
         vision_base_url: str | None = None,
         vision_api_key: str | None = None,
         vision_api_key_env: str | None = "ANTIBOT_VISION_API_KEY",
-        vision_model: str | None = "gpt-5.4",
+        vision_model: str | None = None,
         vision_timeout_sec: float = 180,
         vision_min_confidence: float = 0.35,
         vision_retries: int = 2,
@@ -2463,7 +2463,7 @@ class ArkoseCaptchaSolver:
                         base_url=vision_base_url,
                         api_key=vision_api_key,
                         api_key_env=vision_api_key_env,
-                        model=vision_model or "gpt-5.4",
+                        model=vision_model,
                         timeout_sec=vision_timeout_sec,
                         extra_body=vision_extra_body,
                     )
@@ -2478,7 +2478,7 @@ class ArkoseCaptchaSolver:
             diagnostics["challenge_engine"] = {
                 "engine": "arkose-open-vocabulary-vision",
                 "ready": backend is not None,
-                "model": getattr(backend, "model", vision_model or "gpt-5.4") if backend else None,
+                "model": getattr(backend, "model", vision_model) if backend else None,
                 "supported_tasks": ["binary", "point", "multiple_choice", "drag_drop"],
                 "minimum_confidence": vision_min_confidence,
                 "inference_attempts": max(1, vision_retries),

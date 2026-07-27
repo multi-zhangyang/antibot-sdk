@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from ..models import CaptchaResult
 from ..policy import aliyun_policy_decision
@@ -22,6 +23,107 @@ from ..proxy import (
 VENDOR_DIR = Path(__file__).resolve().parents[1] / "vendor" / "aliyun"
 BRIDGE = VENDOR_DIR / "bridge.js"
 MINIMUM_NODE_VERSION = (22, 12, 0)
+ALIYUN_CAPTCHA_TYPES = (
+    "auto",
+    "invisible",
+    "one_click",
+    "slider",
+    "puzzle",
+    "image_restore",
+)
+ALIYUN_PASS_VERIFY_CODES = frozenset({"T001"})
+ALIYUN_NON_PRODUCTION_VERIFY_CODES = frozenset({"T005", "T006"})
+
+_CAPTCHA_TYPE_ALIASES = {
+    "": "auto",
+    "auto": "auto",
+    "detect": "auto",
+    "automatic": "auto",
+    "invisible": "invisible",
+    "traceless": "invisible",
+    "seamless": "invisible",
+    "one_click": "one_click",
+    "oneclick": "one_click",
+    "checkbox": "one_click",
+    "click": "one_click",
+    "slider": "slider",
+    "slide": "slider",
+    "puzzle": "puzzle",
+    "jigsaw": "puzzle",
+    "slider_puzzle": "puzzle",
+    "image_restore": "image_restore",
+    "image_restoration": "image_restore",
+    "restoration": "image_restore",
+    "restore": "image_restore",
+    "unknown": "unknown",
+}
+
+
+def normalize_aliyun_captcha_type(value: str | None, *, allow_unknown: bool = False) -> str:
+    key = (value or "auto").strip().lower().replace("-", "_").replace(" ", "_")
+    normalized = _CAPTCHA_TYPE_ALIASES.get(key)
+    if normalized is not None and (allow_unknown or normalized != "unknown"):
+        return normalized
+    if allow_unknown:
+        return "unknown"
+    expected = ", ".join(ALIYUN_CAPTCHA_TYPES)
+    raise ValueError(f"unsupported Aliyun captcha type: {value!r}; expected one of {expected}")
+
+
+def aliyun_verify_passed(value: dict[str, Any] | None) -> bool:
+    payload = value or {}
+    nested = payload.get("Result")
+    if isinstance(nested, dict):
+        payload = nested
+    code = str(payload.get("VerifyCode") or "").strip().upper()
+    return payload.get("VerifyResult") is True and code in ALIYUN_PASS_VERIFY_CODES
+
+
+def _aliyun_vendor_verification(raw: dict[str, Any]) -> dict[str, Any]:
+    verify = raw.get("verifyResponse")
+    verify = verify if isinstance(verify, dict) else {}
+    nested = verify.get("Result")
+    if isinstance(nested, dict):
+        verify = nested
+
+    network = raw.get("verifyNetwork")
+    network = network if isinstance(network, dict) else {}
+    envelope: dict[str, Any] = {}
+    text = network.get("text")
+    if isinstance(text, str) and text:
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                envelope = parsed
+        except json.JSONDecodeError:
+            pass
+
+    envelope_result = envelope.get("Result")
+    if isinstance(envelope_result, dict):
+        verify = envelope_result
+    code = str(verify.get("VerifyCode") or "").strip().upper()
+    endpoint_host = None
+    try:
+        endpoint_host = urlsplit(str(network.get("url") or "")).hostname
+    except ValueError:
+        pass
+    classification = {
+        "T001": "production_pass",
+        "T005": "test_mode",
+        "T006": "whitelist_mode",
+    }.get(code, "failure_or_unknown")
+
+    return {
+        "observed": bool(network or verify),
+        "endpoint_host": endpoint_host,
+        "http_status": network.get("status"),
+        "response_code": envelope.get("Code"),
+        "response_success": envelope.get("Success"),
+        "verify_result": verify.get("VerifyResult"),
+        "verify_code": code or None,
+        "classification": classification,
+        "production_pass": aliyun_verify_passed(verify),
+    }
 
 
 def is_recoverable_attempt_codes(codes: list[str]) -> bool:
@@ -67,7 +169,7 @@ def node_is_compatible(node: str | None = None) -> bool:
 
 
 class AliyunCaptchaSolver:
-    """Aliyun CAPTCHA V3 slider adapter using the bundled Node runner."""
+    """Aliyun CAPTCHA V3 multi-challenge adapter using the bundled Node runner."""
 
     def __init__(self, node: str | None = None):
         self.node = node or shutil.which("node") or "node"
@@ -98,6 +200,7 @@ class AliyunCaptchaSolver:
         self,
         *,
         target_url: str,
+        captcha_type: str = "auto",
         chrome_path: str | None = None,
         headless: bool | str | None = None,
         output_dir: str | None = None,
@@ -109,11 +212,27 @@ class AliyunCaptchaSolver:
         site_profile: str | None = "auto",
         profile: dict[str, Any] | None = None,
         env: dict[str, str] | None = None,
+        pre_captcha_fills: dict[str, str] | None = None,
+        pre_captcha_presses: list[str] | None = None,
+        pre_captcha_clicks: list[str] | None = None,
+        site_verification_control: bool = False,
+        site_verification_accepted_pattern: str | None = None,
+        site_verification_rejected_pattern: str | None = None,
         verify_wait_ms: int | None = None,
         captcha_wait_ms: int | None = None,
         max_attempts: int | None = None,
         timeout_sec: int = 180,
         cleanup_profile: bool = True,
+        vision_base_url: str | None = None,
+        vision_api_key: str | None = None,
+        vision_api_key_env: str = "ANTIBOT_VISION_API_KEY",
+        vision_model: str | None = None,
+        vision_timeout_sec: float = 180,
+        vision_min_confidence: float = 0.35,
+        vision_retries: int = 2,
+        vision_extra_body: dict[str, Any] | None = None,
+        image_restore_answer: dict[str, Any] | None = None,
+        restore_distance_px: float | None = None,
         extra_options: dict[str, Any] | None = None,
         session_retries: int | None = None,
         session_retry_delay_sec: float | None = None,
@@ -122,6 +241,10 @@ class AliyunCaptchaSolver:
     ) -> CaptchaResult:
         import asyncio
 
+        requested_captcha_type = normalize_aliyun_captcha_type(captcha_type)
+        fallback_captcha_type = (
+            requested_captcha_type if requested_captcha_type != "auto" else "unknown"
+        )
         detected_node = node_version(self.node)
         if not node_is_compatible(self.node):
             actual = (
@@ -132,7 +255,7 @@ class AliyunCaptchaSolver:
             return CaptchaResult(
                 provider="aliyun",
                 ok=False,
-                captcha_type="slider",
+                captcha_type=fallback_captcha_type,
                 capability="solver",
                 diagnostics={
                     "target_url": target_url,
@@ -145,7 +268,7 @@ class AliyunCaptchaSolver:
             return CaptchaResult(
                 provider="aliyun",
                 ok=False,
-                captcha_type="slider",
+                captcha_type=fallback_captcha_type,
                 capability="solver",
                 diagnostics={"target_url": target_url, "js_deps_installed": False},
                 errors=["Aliyun JavaScript dependencies are missing; run `antibot install-js-deps`"],
@@ -209,6 +332,7 @@ class AliyunCaptchaSolver:
 
         options: dict[str, Any] = {
             "targetUrl": target_url,
+            "captchaType": requested_captcha_type,
             "outputDir": output_root,
             "out": final_out,
             "browserArgs": [f"--user-data-dir={user_data_dir}"],
@@ -230,10 +354,87 @@ class AliyunCaptchaSolver:
             options["profile"] = merged_profile
         if merged_env:
             options["env"] = merged_env
+        if pre_captcha_fills:
+            options["preCaptchaFills"] = [
+                {"selector": str(selector), "value": str(value)}
+                for selector, value in pre_captcha_fills.items()
+            ]
+        if pre_captcha_presses:
+            options["preCaptchaPresses"] = [str(key) for key in pre_captcha_presses]
+        if pre_captcha_clicks:
+            options["preCaptchaClicks"] = [str(locator) for locator in pre_captcha_clicks]
+        if site_verification_control:
+            options["siteVerificationControl"] = True
+        if site_verification_accepted_pattern:
+            options["siteVerificationAcceptedPattern"] = (
+                site_verification_accepted_pattern
+            )
+        if site_verification_rejected_pattern:
+            options["siteVerificationRejectedPattern"] = (
+                site_verification_rejected_pattern
+            )
         if verify_wait_ms:
             options["verifyWaitMs"] = verify_wait_ms
         if max_attempts:
             options["maxAttempts"] = max_attempts
+        resolved_vision_base_url = vision_base_url or os.environ.get("ANTIBOT_VISION_BASE_URL")
+        resolved_vision_model = vision_model or os.environ.get("ANTIBOT_VISION_MODEL")
+        resolved_vision_key = vision_api_key or os.environ.get(vision_api_key_env)
+        reserved_vision_fields = {"model", "messages", "stream", "max_tokens"}
+        vision_conflicts = sorted(reserved_vision_fields.intersection(vision_extra_body or {}))
+        if vision_conflicts:
+            raise ValueError(
+                "vision_extra_body cannot override reserved request fields: "
+                + ", ".join(vision_conflicts)
+            )
+        vision_requested = any(
+            (vision_base_url, vision_model, vision_api_key, vision_extra_body)
+        ) or (
+            requested_captcha_type == "image_restore"
+            and image_restore_answer is None
+            and restore_distance_px is None
+        )
+        vision_complete = all(
+            (resolved_vision_base_url, resolved_vision_model, resolved_vision_key)
+        )
+        if vision_requested or vision_complete:
+            missing = [
+                name
+                for name, value in (
+                    ("vision_base_url", resolved_vision_base_url),
+                    ("vision_model", resolved_vision_model),
+                    (f"vision_api_key/{vision_api_key_env}", resolved_vision_key),
+                )
+                if not value
+            ]
+            if missing:
+                return CaptchaResult(
+                    provider="aliyun",
+                    ok=False,
+                    captcha_type=fallback_captcha_type,
+                    capability="solver",
+                    diagnostics={
+                        "target_url": target_url,
+                        "requested_captcha_type": requested_captcha_type,
+                    },
+                    errors=[
+                        "incomplete vision backend configuration: missing " + ", ".join(missing)
+                    ],
+                )
+            options["vision"] = {
+                "baseUrl": resolved_vision_base_url,
+                "model": resolved_vision_model,
+                "apiKeyEnv": vision_api_key_env,
+                "timeoutMs": max(1_000, int(vision_timeout_sec * 1_000)),
+                "minConfidence": max(0.0, min(1.0, float(vision_min_confidence))),
+                "retries": max(1, min(5, int(vision_retries))),
+            }
+            if vision_extra_body:
+                options["vision"]["extraBody"] = dict(vision_extra_body)
+        if image_restore_answer:
+            options["imageRestoreAnswer"] = dict(image_restore_answer)
+        if restore_distance_px is not None:
+            options["restoreDistancePx"] = float(restore_distance_px)
         if extra_options:
             if extra_options.get("browserArgs"):
                 options["browserArgs"] = [*options.get("browserArgs", []), *extra_options["browserArgs"]]
@@ -260,31 +461,57 @@ class AliyunCaptchaSolver:
         ) -> CaptchaResult:
             raw = raw or {}
             verify = raw.get("verifyResponse") or {}
-            verify_ok = verify.get("VerifyResult") is True or verify.get("VerifyCode") == "T001"
-            is_ok = bool(raw.get("ok") or verify_ok) if ok is None else ok
+            verify_ok = aliyun_verify_passed(verify)
+            is_ok = verify_ok if ok is None else ok
             artifacts = {
                 "out": str(raw.get("out") or final_out),
                 "outputDir": str(raw.get("outputDir") or output_root),
             }
-            for name in ("aliyun_bg_selected.png", "aliyun_puzzle_selected.png"):
+            for name in (
+                "aliyun_bg_selected.png",
+                "aliyun_puzzle_selected.png",
+                "aliyun_restore_selected.png",
+                "aliyun_restore_background.png",
+                "aliyun_restore_fragment.png",
+            ):
                 p = Path(artifacts["outputDir"]) / name
                 if p.exists():
                     artifacts[name] = str(p)
             raw_error = raw.get("error") or {}
             raw_msg = raw_error.get("message") if isinstance(raw_error, dict) else raw_error
+            site_evidence = raw.get("siteVerificationEvidence")
+            site_secondary_pass = bool(
+                isinstance(site_evidence, dict)
+                and site_evidence.get("site_secondary_pass") is True
+            )
             err_list = errors or []
             if not is_ok and not err_list:
-                err_list = [str(raw.get("verifyFailureCode") or raw_msg or "solve_failed")]
+                err_list = [
+                    "vendor_verification_not_observed"
+                    if site_secondary_pass
+                    else str(raw.get("verifyFailureCode") or raw_msg or "solve_failed")
+                ]
             diagnostics = {
                 "site_profile": resolved_site.name if resolved_site else None,
+                "requested_captcha_type": requested_captcha_type,
+                "detected_captcha_type": raw.get("captchaType"),
                 "attempt": raw.get("attempt"),
                 "maxAttempts": raw.get("maxAttempts") or max_attempts,
                 "candidate": raw.get("candidate"),
                 "trajectory": raw.get("trajectory"),
+                "vision": raw.get("vision"),
                 "chromePath": chrome_path,
                 "headless": headless if headless is not None else "runner-default",
                 "timed_out": timed_out,
                 "proxy": redacted_proxy(proxy_server),
+                "vendor_verification": _aliyun_vendor_verification(raw),
+                "site_verification": raw.get("siteVerificationNetwork"),
+                "site_verification_control": raw.get(
+                    "siteVerificationControlNetwork"
+                ),
+                "site_verification_evidence": raw.get(
+                    "siteVerificationEvidence"
+                ),
             }
             attempts = raw.get("attempts") or []
             codes = [
@@ -295,11 +522,18 @@ class AliyunCaptchaSolver:
             policy = aliyun_policy_decision(raw, errors=err_list, has_proxy=bool(proxy_server))
             if proxy_server is None and codes.count("F001") >= 2:
                 diagnostics["failure_class"] = "likely_ip_or_session_reputation"
-                diagnostics["hint"] = "Qoder/Aliyun F001 repeated without proxy; use proxy_server or cooldown, then retry same profile."
+                diagnostics["hint"] = (
+                    "Aliyun F001 repeated without a proxy; use proxy_server or a "
+                    "cooldown, then retry the same challenge configuration."
+                )
             if attempts:
                 diagnostics["attempt_codes"] = codes
                 diagnostics["f001_count"] = codes.count("F001")
             diagnostics["policy"] = policy.to_dict()
+            if site_secondary_pass and not is_ok:
+                diagnostics["failure_class"] = (
+                    "site_secondary_verified_vendor_result_not_observable"
+                )
             if not is_ok:
                 diagnostics.setdefault("failure_class", policy.failure_class)
             if raw.get("watchdog"):
@@ -311,7 +545,10 @@ class AliyunCaptchaSolver:
             return CaptchaResult(
                 provider="aliyun",
                 ok=is_ok,
-                captcha_type="slider",
+                captcha_type=normalize_aliyun_captcha_type(
+                    raw.get("captchaType") or fallback_captcha_type,
+                    allow_unknown=True,
+                ),
                 capability="solver",
                 verify_code=verify.get("VerifyCode") or raw.get("verifyFailureCode"),
                 elapsed_ms=raw.get("elapsedMs"),
@@ -323,7 +560,15 @@ class AliyunCaptchaSolver:
 
         async def maybe_session_retry(result: CaptchaResult) -> CaptchaResult:
             retry_budget = max(0, int(session_retries or 0))
-            if result.ok or _session_retry_depth >= retry_budget:
+            site_evidence = result.diagnostics.get("site_verification_evidence")
+            if (
+                result.ok
+                or (
+                    isinstance(site_evidence, dict)
+                    and site_evidence.get("site_secondary_pass") is True
+                )
+                or _session_retry_depth >= retry_budget
+            ):
                 return result
             attempts = result.raw.get("attempts") if isinstance(result.raw, dict) else []
             codes = [
@@ -351,6 +596,7 @@ class AliyunCaptchaSolver:
                 retry_max_attempts = min(int(max_attempts or 5), 2)
             retried = await self.solve(
                 target_url=target_url,
+                captcha_type=requested_captcha_type,
                 chrome_path=chrome_path,
                 headless=headless,
                 output_dir=retry_output_dir,
@@ -361,11 +607,31 @@ class AliyunCaptchaSolver:
                 site_profile=site_profile,
                 profile=profile,
                 env=env,
+                pre_captcha_fills=pre_captcha_fills,
+                pre_captcha_presses=pre_captcha_presses,
+                pre_captcha_clicks=pre_captcha_clicks,
+                site_verification_control=site_verification_control,
+                site_verification_accepted_pattern=(
+                    site_verification_accepted_pattern
+                ),
+                site_verification_rejected_pattern=(
+                    site_verification_rejected_pattern
+                ),
                 verify_wait_ms=verify_wait_ms,
                 captcha_wait_ms=captcha_wait_ms,
                 max_attempts=retry_max_attempts,
                 timeout_sec=timeout_sec,
                 cleanup_profile=cleanup_profile,
+                vision_base_url=vision_base_url,
+                vision_api_key=vision_api_key,
+                vision_api_key_env=vision_api_key_env,
+                vision_model=vision_model,
+                vision_timeout_sec=vision_timeout_sec,
+                vision_min_confidence=vision_min_confidence,
+                vision_retries=vision_retries,
+                vision_extra_body=vision_extra_body,
+                image_restore_answer=image_restore_answer,
+                restore_distance_px=restore_distance_px,
                 extra_options=extra_options,
                 session_retries=session_retries,
                 session_retry_delay_sec=session_retry_delay_sec,
@@ -408,6 +674,12 @@ class AliyunCaptchaSolver:
         stdout = b""
         stderr = b""
         proc = None
+        process_env = {
+            **proxy_free_environment(),
+            "NODE_PATH": str(VENDOR_DIR / "node_modules"),
+        }
+        if vision_api_key:
+            process_env[vision_api_key_env] = vision_api_key
         try:
             proc = await asyncio.create_subprocess_exec(
                 self.node,
@@ -416,10 +688,7 @@ class AliyunCaptchaSolver:
                 cwd=str(VENDOR_DIR),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env={
-                    **proxy_free_environment(),
-                    "NODE_PATH": str(VENDOR_DIR / "node_modules"),
-                },
+                env=process_env,
                 start_new_session=True,
             )
             try:

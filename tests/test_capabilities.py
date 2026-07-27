@@ -12,7 +12,28 @@ def test_capability_matrix_keeps_human_verification_boundary() -> None:
 
     assert set(solvers) == {"aliyun", "tencent", "geetest"}
     assert solvers["tencent"]["captcha_type"] == "slider"
-    assert solvers["aliyun"]["captcha_type"] == "slider"
+    assert solvers["aliyun"]["captcha_type"] == "aliyun_v3"
+    assert set(solvers["aliyun"]["variants"]) == {
+        "invisible",
+        "one_click",
+        "slider",
+        "puzzle",
+        "image_restore",
+        "spatial_reasoning",
+        "unknown_or_new_tasks",
+    }
+    assert "VerifyResult=true 和 VerifyCode=T001" in solvers["aliyun"]["scope"]
+    assert solvers["aliyun"]["variants"]["puzzle"] == "live_verified_limited_matrix"
+    assert solvers["aliyun"]["variants"]["invisible"] == "live_verified_limited_matrix"
+    assert (
+        solvers["aliyun"]["variants"]["image_restore"]
+        == "live_verified_limited_matrix"
+    )
+    assert (
+        solvers["aliyun"]["variants"]["slider"]
+        == "live_verified_site_secondary_limited_matrix"
+    )
+    assert "site_secondary_pass" in solvers["aliyun"]["scope"]
     assert solvers["geetest"]["captcha_type"] == "geetest_v4"
     assert set(browser_flows) == {"cloudflare", "recaptcha", "hcaptcha", "arkose"}
     assert browser_flows["cloudflare"]["category"] == "browser_flow"

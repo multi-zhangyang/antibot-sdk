@@ -2,7 +2,7 @@
 'use strict';
 try { require('dotenv').config({ quiet: true }); } catch {}
 /*
- * Generic Aliyun CAPTCHA V3 slider runner.
+ * Generic Aliyun CAPTCHA V3 multi-challenge runner.
  * - Opens TARGET_URL.
  * - Hooks addEventListener at document_start.
  * - Finds standard AliyunCaptcha puzzle DOM.
@@ -14,6 +14,15 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { installDeepHooks } = require('./deep_hooks');
+const {
+  CAPTCHA_TYPES,
+  captchaReady,
+  detectCaptchaType,
+  normalizeCaptchaType,
+  normalizeVendorCaptchaType,
+  verifyCode,
+  verifyPassed,
+} = require('./challenge_types');
 const { PNG } = require('pngjs');
 function loadPuppeteer(useRebrowser) {
   return useRebrowser ? require('rebrowser-puppeteer-core') : require('puppeteer-core');
@@ -24,8 +33,11 @@ const DEFAULT_SELECTORS = Object.freeze({
   entry: '#aliyunCaptcha-captcha-body,#aliyunCaptcha-captcha-wrapper',
   body: '#aliyunCaptcha-sliding-body',
   slider: '#aliyunCaptcha-sliding-slider',
+  track: '#aliyunCaptcha-sliding-wrapper,#aliyunCaptcha-sliding-track,#aliyunCaptcha-sliding-body',
   image: '#aliyunCaptcha-img',
   puzzle: '#aliyunCaptcha-puzzle',
+  checkbox: '#aliyunCaptcha-checkbox,[id^="aliyunCaptcha-"][role="checkbox"],[id^="aliyunCaptcha-"] input[type="checkbox"]',
+  prompt: '#aliyunCaptcha-title,#aliyunCaptcha-prompt,#aliyunCaptcha-sliding-text,[id^="aliyunCaptcha-"][class*="title"]',
 });
 const STABLE_PROFILE = Object.freeze({
   mode: 'cdpdrag',
@@ -61,8 +73,11 @@ function selectors(overrides = {}) {
     entry: overrides.entry || process.env.CAPTCHA_ENTRY_SELECTOR || DEFAULT_SELECTORS.entry,
     body: overrides.body || process.env.CAPTCHA_BODY_SELECTOR || DEFAULT_SELECTORS.body,
     slider: overrides.slider || process.env.CAPTCHA_SLIDER_SELECTOR || DEFAULT_SELECTORS.slider,
+    track: overrides.track || process.env.CAPTCHA_TRACK_SELECTOR || DEFAULT_SELECTORS.track,
     image: overrides.image || process.env.CAPTCHA_IMAGE_SELECTOR || DEFAULT_SELECTORS.image,
     puzzle: overrides.puzzle || process.env.CAPTCHA_PUZZLE_SELECTOR || DEFAULT_SELECTORS.puzzle,
+    checkbox: overrides.checkbox || process.env.CAPTCHA_CHECKBOX_SELECTOR || DEFAULT_SELECTORS.checkbox,
+    prompt: overrides.prompt || process.env.CAPTCHA_PROMPT_SELECTOR || DEFAULT_SELECTORS.prompt,
   };
 }
 
@@ -283,6 +298,326 @@ function alphaBounds(png) {
     count++; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
   }
   return count ? { minX, maxX, minY, maxY, width: maxX - minX + 1, height: maxY - minY + 1, count } : null;
+}
+
+function detectRestoreStrip(bgBuf, pieceBuf, geometry = {}) {
+  const bg = PNG.sync.read(bgBuf), piece = PNG.sync.read(pieceBuf);
+  if (bg.height !== piece.height || piece.width >= bg.width) {
+    throw new Error(`restore layers have incompatible dimensions: background=${bg.width}x${bg.height}, fragment=${piece.width}x${piece.height}`);
+  }
+  const cssWidth = Math.max(1, Number(geometry.cssWidth || bg.width));
+  const cssPerPng = cssWidth / bg.width;
+  const requestedMax = Number.isFinite(Number(geometry.maxDistance))
+    ? Number(geometry.maxDistance)
+    : (bg.width - piece.width) * cssPerPng;
+  const maxX = Math.max(0, Math.min(bg.width - piece.width, Math.floor(requestedMax / cssPerPng + 1e-6)));
+  const alphaThreshold = Math.max(1, Math.min(254, Number(geometry.alphaThreshold || 24)));
+  const samples = [];
+  for (let y = 0; y < piece.height; y++) for (let x = 0; x < piece.width; x++) {
+    const i = (y * piece.width + x) * 4;
+    const alpha = piece.data[i + 3];
+    if (alpha < alphaThreshold) continue;
+    samples.push({ x, y, i, weight: Math.pow(alpha / 255, 1.5) });
+  }
+  if (samples.length < Math.max(24, piece.width)) {
+    throw new Error(`restore fragment has too few visible pixels: ${samples.length}`);
+  }
+
+  const scores = [];
+  for (let offset = 0; offset <= maxX; offset++) {
+    let colorError = 0, colorWeight = 0, gradientError = 0, gradientWeight = 0;
+    for (const sample of samples) {
+      const bi = (sample.y * bg.width + offset + sample.x) * 4;
+      const pi = sample.i, weight = sample.weight;
+      colorError += weight * (
+        Math.abs(piece.data[pi] - bg.data[bi]) +
+        Math.abs(piece.data[pi + 1] - bg.data[bi + 1]) +
+        Math.abs(piece.data[pi + 2] - bg.data[bi + 2])
+      ) / 3;
+      colorWeight += weight;
+      if (sample.x > 0 && piece.data[pi - 1] >= alphaThreshold) {
+        const bp = bi - 4, pp = pi - 4;
+        gradientError += weight * (
+          Math.abs((piece.data[pi] - piece.data[pp]) - (bg.data[bi] - bg.data[bp])) +
+          Math.abs((piece.data[pi + 1] - piece.data[pp + 1]) - (bg.data[bi + 1] - bg.data[bp + 1])) +
+          Math.abs((piece.data[pi + 2] - piece.data[pp + 2]) - (bg.data[bi + 2] - bg.data[bp + 2]))
+        ) / 3;
+        gradientWeight += weight;
+      }
+      if (sample.y > 0 && piece.data[pi - piece.width * 4 + 3] >= alphaThreshold) {
+        const bp = bi - bg.width * 4, pp = pi - piece.width * 4;
+        gradientError += weight * (
+          Math.abs((piece.data[pi] - piece.data[pp]) - (bg.data[bi] - bg.data[bp])) +
+          Math.abs((piece.data[pi + 1] - piece.data[pp + 1]) - (bg.data[bi + 1] - bg.data[bp + 1])) +
+          Math.abs((piece.data[pi + 2] - piece.data[pp + 2]) - (bg.data[bi + 2] - bg.data[bp + 2]))
+        ) / 3;
+        gradientWeight += weight;
+      }
+    }
+    const color = colorError / Math.max(1e-9, colorWeight);
+    const gradient = gradientError / Math.max(1e-9, gradientWeight);
+    scores.push({ x: offset, score: color * 0.78 + gradient * 0.22, color, gradient });
+  }
+  scores.sort((a, b) => a.score - b.score || a.x - b.x);
+  const separated = [];
+  const separation = Math.max(3, Math.floor(piece.width * 0.75));
+  for (const score of scores) {
+    if (separated.every(candidate => Math.abs(candidate.x - score.x) >= separation)) separated.push(score);
+    if (separated.length >= 5) break;
+  }
+  const best = separated[0], runnerUp = separated[1] || best;
+  const margin = runnerUp && runnerUp !== best
+    ? Math.max(0, (runnerUp.score - best.score) / Math.max(1, runnerUp.score))
+    : 0;
+  // Local matching is authoritative only when the fragment is both a close
+  // pixel match and clearly separated from the next non-adjacent candidate.
+  // Semantic restoration scenes intentionally violate the first condition and
+  // are delegated to candidate-composite vision ranking.
+  const absoluteQuality = Math.exp(-best.score / 32);
+  const confidence = Math.max(0, Math.min(1, absoluteQuality * Math.min(1, 0.55 + margin * 3)));
+  const compact = candidate => ({
+    target_left_png: candidate.x,
+    distance_px: Number((candidate.x * cssPerPng).toFixed(3)),
+    score: Number(candidate.score.toFixed(3)),
+    color_error: Number(candidate.color.toFixed(3)),
+    gradient_error: Number(candidate.gradient.toFixed(3)),
+  });
+  return {
+    source: 'local_strip_match',
+    distance_px: Number((best.x * cssPerPng).toFixed(3)),
+    target_left_png: best.x,
+    confidence: Number(confidence.toFixed(4)),
+    score_margin: Number(margin.toFixed(4)),
+    css_per_png: Number(cssPerPng.toFixed(6)),
+    visible_pixels: samples.length,
+    fragment: { width: piece.width, height: piece.height, alpha_bounds: alphaBounds(piece) },
+    background: { width: bg.width, height: bg.height },
+    candidates: separated.map(compact),
+  };
+}
+
+function detectRestoreBoundaryContinuity(bgBuf, pieceBuf, geometry = {}) {
+  const bg = PNG.sync.read(bgBuf), piece = PNG.sync.read(pieceBuf);
+  if (bg.height !== piece.height || piece.width >= bg.width) {
+    throw new Error(`restore layers have incompatible dimensions: background=${bg.width}x${bg.height}, fragment=${piece.width}x${piece.height}`);
+  }
+  const cssWidth = Math.max(1, Number(geometry.cssWidth || bg.width));
+  const cssPerPng = cssWidth / bg.width;
+  const requestedMax = Number.isFinite(Number(geometry.maxDistance))
+    ? Number(geometry.maxDistance)
+    : (bg.width - piece.width) * cssPerPng;
+  const maxX = Math.max(0, Math.min(bg.width - piece.width, Math.floor(requestedMax / cssPerPng + 1e-6)));
+  const alphaThreshold = Math.max(1, Math.min(254, Number(geometry.alphaThreshold || 24)));
+  const directions = [
+    { name: 'top', dx: 0, dy: -1 },
+    { name: 'bottom', dx: 0, dy: 1 },
+    { name: 'left', dx: -1, dy: 0 },
+    { name: 'right', dx: 1, dy: 0 },
+  ];
+  const results = [];
+  for (const direction of directions) {
+    const boundary = [];
+    for (let y = 0; y < piece.height; y++) for (let x = 0; x < piece.width; x++) {
+      const i = (y * piece.width + x) * 4;
+      if (piece.data[i + 3] < alphaThreshold) continue;
+      const nx = x + direction.dx, ny = y + direction.dy;
+      if (nx >= 0 && nx < piece.width && ny >= 0 && ny < piece.height && piece.data[(ny * piece.width + nx) * 4 + 3] >= alphaThreshold) continue;
+      boundary.push({ x, y, nx, ny, i });
+    }
+    if (boundary.length < 4) continue;
+    const scores = [];
+    for (let offset = 0; offset <= maxX; offset++) {
+      let colorError = 0, samples = 0;
+      for (const sample of boundary) {
+        const bx = offset + sample.nx, by = sample.ny;
+        if (bx < 0 || bx >= bg.width || by < 0 || by >= bg.height) continue;
+        const bi = (by * bg.width + bx) * 4;
+        colorError += (
+          Math.abs(piece.data[sample.i] - bg.data[bi]) +
+          Math.abs(piece.data[sample.i + 1] - bg.data[bi + 1]) +
+          Math.abs(piece.data[sample.i + 2] - bg.data[bi + 2])
+        ) / 3;
+        samples++;
+      }
+      if (samples >= Math.max(3, boundary.length * 0.6)) scores.push({ x: offset, score: colorError / samples });
+    }
+    scores.sort((a, b) => a.score - b.score || a.x - b.x);
+    const separated = [];
+    const separation = Math.max(3, Math.floor(piece.width * 0.75));
+    for (const score of scores) {
+      if (separated.every(candidate => Math.abs(candidate.x - score.x) >= separation)) separated.push(score);
+      if (separated.length >= 3) break;
+    }
+    if (!separated.length) continue;
+    const best = separated[0], runnerUp = separated[1] || best;
+    const margin = runnerUp !== best ? Math.max(0, (runnerUp.score - best.score) / Math.max(1, runnerUp.score)) : 0;
+    const confidence = Math.max(0, Math.min(1, ((30 - best.score) / 15) * Math.min(1, margin / 0.5)));
+    results.push({
+      direction: direction.name,
+      distance_px: Number((best.x * cssPerPng).toFixed(3)),
+      target_left_png: best.x,
+      confidence: Number(confidence.toFixed(4)),
+      score: Number(best.score.toFixed(3)),
+      score_margin: Number(margin.toFixed(4)),
+      boundary_pixels: boundary.length,
+      candidates: separated.map(candidate => ({
+        target_left_png: candidate.x,
+        distance_px: Number((candidate.x * cssPerPng).toFixed(3)),
+        score: Number(candidate.score.toFixed(3)),
+      })),
+    });
+  }
+  results.sort((a, b) => b.confidence - a.confidence || a.score - b.score);
+  return { source: 'boundary_continuity', css_per_png: Number(cssPerPng.toFixed(6)), directions: results };
+}
+
+function renderRestoreCandidate(bgBuf, pieceBuf, targetLeft) {
+  const bg = PNG.sync.read(bgBuf), piece = PNG.sync.read(pieceBuf);
+  const offset = Math.round(Number(targetLeft));
+  if (!Number.isFinite(offset) || offset < 0 || offset + piece.width > bg.width || piece.height !== bg.height) {
+    throw new Error(`invalid restore candidate position: ${targetLeft}`);
+  }
+  const rendered = new PNG({ width: bg.width, height: bg.height });
+  bg.data.copy(rendered.data);
+  for (let y = 0; y < piece.height; y++) for (let x = 0; x < piece.width; x++) {
+    const pi = (y * piece.width + x) * 4, bi = (y * bg.width + offset + x) * 4;
+    const alpha = piece.data[pi + 3] / 255;
+    if (alpha <= 0) continue;
+    for (let channel = 0; channel < 3; channel++) {
+      rendered.data[bi + channel] = Math.round(piece.data[pi + channel] * alpha + rendered.data[bi + channel] * (1 - alpha));
+    }
+    rendered.data[bi + 3] = 255;
+  }
+  return PNG.sync.write(rendered);
+}
+
+function renderRestoreCandidateFocus(bgBuf, pieceBuf, targetLeft) {
+  const bg = PNG.sync.read(bgBuf), piece = PNG.sync.read(pieceBuf);
+  const bounds = alphaBounds(piece);
+  if (!bounds) throw new Error('restore fragment has no visible pixels');
+  const rendered = PNG.sync.read(renderRestoreCandidate(bgBuf, pieceBuf, targetLeft));
+  const sourceWidth = Math.min(bg.width, Math.max(64, piece.width * 5));
+  const sourceHeight = Math.min(bg.height, Math.max(64, bounds.height + 32));
+  const centerX = Number(targetLeft) + (bounds.minX + bounds.maxX + 1) / 2;
+  const centerY = (bounds.minY + bounds.maxY + 1) / 2;
+  const sourceX = Math.max(0, Math.min(bg.width - sourceWidth, Math.round(centerX - sourceWidth / 2)));
+  const sourceY = Math.max(0, Math.min(bg.height - sourceHeight, Math.round(centerY - sourceHeight / 2)));
+  const scale = Math.max(2, Math.min(4, Math.floor(300 / Math.max(sourceWidth, sourceHeight))));
+  const focused = new PNG({ width: sourceWidth * scale, height: sourceHeight * scale });
+  for (let y = 0; y < sourceHeight; y++) for (let x = 0; x < sourceWidth; x++) {
+    const sourceIndex = ((sourceY + y) * rendered.width + sourceX + x) * 4;
+    for (let dy = 0; dy < scale; dy++) for (let dx = 0; dx < scale; dx++) {
+      const targetIndex = ((y * scale + dy) * focused.width + x * scale + dx) * 4;
+      rendered.data.copy(focused.data, targetIndex, sourceIndex, sourceIndex + 4);
+    }
+  }
+  return PNG.sync.write(focused);
+}
+
+function restorePuzzleTravel(sliderDistance, maxSliderDistance) {
+  const slider = Math.max(0, Number(sliderDistance));
+  const max = Math.max(1, Number(maxSliderDistance));
+  return 12 * slider * slider / (13 * max) + slider / 13;
+}
+
+function restoreSliderTravel(targetLeft, maxSliderDistance) {
+  const target = Math.max(0, Number(targetLeft));
+  const max = Math.max(1, Number(maxSliderDistance));
+  return max * (Math.sqrt(1 + 624 * target / max) - 1) / 24;
+}
+
+function restoreQuantizedSliderTravel(targetLeft, maxSliderDistance) {
+  const target = Math.max(0, Number(targetLeft));
+  const max = Math.max(1, Number(maxSliderDistance));
+  const raw = restoreSliderTravel(target, max);
+  const candidates = [...new Set([Math.floor(raw), Math.round(raw), Math.ceil(raw)])]
+    .map(distance => Math.max(0, Math.min(max, distance)));
+  candidates.sort((a, b) => Math.abs(restorePuzzleTravel(a, max) - target) - Math.abs(restorePuzzleTravel(b, max) - target) || a - b);
+  return candidates[0];
+}
+
+function buildRestoreVisionCandidates(local, maxTargetPng, count = 9) {
+  const total = Math.max(3, Math.min(12, Math.floor(Number(count) || 9)));
+  const max = Math.max(0, Math.floor(Number(maxTargetPng) || 0));
+  const cssPerPng = Math.max(1e-9, Number(local && local.css_per_png || 1));
+  const grid = Array.from({ length: total }, (_, index) => Math.round(max * index / Math.max(1, total - 1)));
+  const usedIndexes = new Set();
+  const edgeTolerance = max / Math.max(1, total - 1) / 2;
+  for (const candidate of (local && local.candidates || []).slice(0, total)) {
+    const x = Math.max(0, Math.min(max, Math.round(Number(candidate.target_left_png))));
+    if (Math.min(x, max - x) <= edgeTolerance) continue;
+    let nearest = -1, nearestDelta = Infinity;
+    for (let index = 1; index < grid.length - 1; index++) {
+      if (usedIndexes.has(index)) continue;
+      const delta = Math.abs(grid[index] - x);
+      if (delta < nearestDelta) { nearest = index; nearestDelta = delta; }
+    }
+    if (nearest >= 0 && nearestDelta <= edgeTolerance) {
+      grid[nearest] = x;
+      usedIndexes.add(nearest);
+    }
+  }
+  const localByX = new Map((local && local.candidates || []).map(candidate => [Number(candidate.target_left_png), candidate]));
+  return [...new Set(grid)].sort((a, b) => a - b).map(x => ({
+    ...(localByX.get(x) || {}),
+    target_left_png: x,
+    distance_px: Number((x * cssPerPng).toFixed(3)),
+  }));
+}
+
+function buildRestoreRefinementCandidates(targetLeft, candidates, maxTargetPng, count = 9) {
+  const total = Math.max(5, Math.min(12, Math.floor(Number(count) || 9)));
+  const max = Math.max(0, Math.floor(Number(maxTargetPng) || 0));
+  const sorted = [...new Set((candidates || [])
+    .map(candidate => Math.max(0, Math.min(max, Math.round(Number(candidate.target_left_png)))))
+    .filter(Number.isFinite))].sort((a, b) => a - b);
+  if (sorted.length < 2) return Array.from({ length: total }, (_, index) => Math.round(max * index / Math.max(1, total - 1)));
+  const target = Math.max(0, Math.min(max, Number(targetLeft)));
+  let nearest = 0;
+  for (let index = 1; index < sorted.length; index++) {
+    if (Math.abs(sorted[index] - target) < Math.abs(sorted[nearest] - target)) nearest = index;
+  }
+  let low = sorted[Math.max(0, nearest - 1)];
+  let high = sorted[Math.min(sorted.length - 1, nearest + 1)];
+  if (low === high) {
+    const halfSpan = Math.max(4, Math.ceil(max / Math.max(2, sorted.length - 1)));
+    low = Math.max(0, Math.floor(target - halfSpan));
+    high = Math.min(max, Math.ceil(target + halfSpan));
+  }
+  return [...new Set(Array.from({ length: total }, (_, index) => Math.round(low + (high - low) * index / Math.max(1, total - 1))))];
+}
+
+function selectRestoreBoundaryFallback(boundary, local, pieceWidthCss) {
+  const tolerance = Math.max(3, Number(pieceWidthCss || 0) * 0.1);
+  const directions = (boundary && boundary.directions || [])
+    .filter(candidate => candidate.score <= 22 && candidate.score_margin >= 0.35);
+  const localCandidates = local && local.candidates || [];
+  const matches = [];
+  for (const direction of directions) {
+    const cluster = directions.filter(candidate => Math.abs(candidate.distance_px - direction.distance_px) <= tolerance);
+    if (cluster.length < 2) continue;
+    const center = cluster.reduce((sum, candidate) => sum + candidate.distance_px, 0) / cluster.length;
+    const localMatch = localCandidates
+      .map(candidate => ({ ...candidate, delta_px: Math.abs(candidate.distance_px - center) }))
+      .filter(candidate => candidate.delta_px <= tolerance)
+      .sort((a, b) => a.delta_px - b.delta_px || a.score - b.score)[0];
+    if (!localMatch) continue;
+    const evidence = [...cluster.map(candidate => candidate.distance_px), localMatch.distance_px].sort((a, b) => a - b);
+    const middle = Math.floor(evidence.length / 2);
+    const target = evidence.length % 2 ? evidence[middle] : (evidence[middle - 1] + evidence[middle]) / 2;
+    matches.push({
+      distance_px: Number(target.toFixed(3)),
+      confidence: Number(Math.min(...cluster.map(candidate => Math.max(0.7, candidate.confidence))).toFixed(4)),
+      tolerance_px: Number(tolerance.toFixed(3)),
+      directions: cluster.map(candidate => candidate.direction),
+      direction_targets_px: cluster.map(candidate => candidate.distance_px),
+      local_target_px: localMatch.distance_px,
+      local_score: localMatch.score,
+      spread_px: Math.max(...evidence) - Math.min(...evidence),
+    });
+  }
+  matches.sort((a, b) => a.spread_px - b.spread_px || b.directions.length - a.directions.length);
+  return matches[0] || null;
 }
 function detectGapBySlotMask(bg, puzzle) {
   const pieceBox = alphaBounds(puzzle);
@@ -533,19 +868,277 @@ function makeFingerprint(seedInput) {
   };
 }
 
+function requestCarriesCaptchaVerifyParam(postData) {
+  return /captchaVerifyParam/i.test(String(postData || ''));
+}
+
+function isAliyunVerificationEndpoint(url) {
+  try {
+    const host = new URL(String(url || '')).hostname.toLowerCase();
+    return /(?:^|\.)captcha-open(?:-[a-z0-9-]+)?\.aliyuncs\.com$/.test(host);
+  } catch {
+    return false;
+  }
+}
+
+function responseDecisionSummary(text) {
+  const raw = String(text || '');
+  if (!raw) return { kind: 'empty' };
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch {
+    const preview = raw
+      .replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
+      .replace(/\b[A-Za-z0-9_-]{32,}\b/g, '[redacted]')
+      .replace(/((?:captcha|password|secret|session|ticket|token)[^=:\s]{0,20}[=:]\s*)[^\s&;,]+/gi, '$1[redacted]')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 500);
+    return { kind: 'text', preview };
+  }
+  const decisionKey = /^(?:code|status|statusCode|success|ok|valid|verified|verifyResult|verifyCode|result|resultObject|message|msg|reason|error|errorCode|errorMessage)$/i;
+  const sensitiveKey = /(?:captcha|certify|credential|device|password|secret|security|session|sign(?:ature)?|ticket|token|authorization|cookie)/i;
+  function visit(value, depth = 0) {
+    if (value == null || typeof value === 'boolean' || typeof value === 'number') return value;
+    if (typeof value === 'string') return value.slice(0, 1000);
+    if (depth >= 4) return Array.isArray(value) ? `[array:${value.length}]` : '[object]';
+    if (Array.isArray(value)) return value.slice(0, 10).map(item => visit(item, depth + 1));
+    if (typeof value !== 'object') return String(value).slice(0, 1000);
+    const out = {};
+    for (const [key, item] of Object.entries(value).slice(0, 80)) {
+      if (sensitiveKey.test(key)) {
+        out[key] = '[redacted]';
+      } else if (decisionKey.test(key)) {
+        out[key] = visit(item, depth + 1);
+      } else if (item && typeof item === 'object') {
+        const nested = visit(item, depth + 1);
+        if (nested && typeof nested === 'object' && !Array.isArray(nested) && Object.keys(nested).length) out[key] = nested;
+      }
+    }
+    return out;
+  }
+  return { kind: 'json', value: visit(parsed) };
+}
+
+async function applyPreCaptchaFills(page, fills) {
+  if (!Array.isArray(fills) || !fills.length) return [];
+  const results = [];
+  for (const fill of fills) {
+    const selector = String(fill && fill.selector || '').trim();
+    if (!selector) throw new Error('pre-captcha fill selector is required');
+    const value = String(fill && fill.value != null ? fill.value : '');
+    const timeout = Math.max(1, Number(fill && fill.timeoutMs) || 15000);
+    const element = await page.waitForSelector(selector, { visible: true, timeout });
+    if (!element) throw new Error(`pre-captcha fill target not found: ${selector}`);
+    await element.click({ clickCount: 3 });
+    await page.keyboard.press('Backspace').catch(() => {});
+    await element.type(value, { delay: Math.max(0, Number(fill && fill.delayMs) || 5) });
+    results.push({ selector, filled: true, valueLength: value.length });
+  }
+  return results;
+}
+
+async function applyPreCaptchaPresses(page, presses) {
+  if (!Array.isArray(presses) || !presses.length) return [];
+  const results = [];
+  for (const value of presses) {
+    const key = String(value || '').trim();
+    if (!key) throw new Error('pre-captcha press key is required');
+    await page.keyboard.press(key);
+    results.push({ key, pressed: true });
+  }
+  return results;
+}
+
+async function applyPreCaptchaClicks(page, clicks) {
+  if (!Array.isArray(clicks) || !clicks.length) return [];
+  const timeout = Math.max(1, num('ALIYUN_PRE_CLICK_TIMEOUT_MS', 15000));
+  const results = [];
+  for (const value of clicks) {
+    const locator = String(value || '').trim();
+    if (!locator) throw new Error('pre-captcha click locator is required');
+    if (locator.startsWith('text:')) {
+      const text = locator.slice(5).trim();
+      if (!text) throw new Error('pre-captcha click text is required');
+      await page.waitForFunction(expected => {
+        const candidates = document.querySelectorAll('button,a,[role="button"],[onclick]');
+        return Array.from(candidates).some(node => {
+          const rect = node.getBoundingClientRect();
+          return rect.width > 1 && rect.height > 1 && String(node.textContent || '').trim() === expected;
+        });
+      }, { timeout }, text);
+      const clicked = await page.evaluate(expected => {
+        const candidates = document.querySelectorAll('button,a,[role="button"],[onclick]');
+        const node = Array.from(candidates).find(candidate => {
+          const rect = candidate.getBoundingClientRect();
+          return rect.width > 1 && rect.height > 1 && String(candidate.textContent || '').trim() === expected;
+        });
+        if (!node) return false;
+        node.click();
+        return true;
+      }, text);
+      if (!clicked) throw new Error(`pre-captcha click text not found: ${text}`);
+      results.push({ locator: `text:${text}`, clicked: true });
+    } else {
+      const element = await page.waitForSelector(locator, { visible: true, timeout });
+      if (!element) throw new Error(`pre-captcha click target not found: ${locator}`);
+      await element.click({ delay: 50 });
+      results.push({ locator, clicked: true });
+    }
+    await sleep(150);
+  }
+  return results;
+}
+
+function mutateCaptchaVerifyParam(postData, replacement) {
+  const raw = String(postData || '');
+  try {
+    const parsed = JSON.parse(raw);
+    let changed = false;
+    function visit(value, depth = 0) {
+      if (!value || typeof value !== 'object' || depth > 8) return;
+      for (const key of Object.keys(value)) {
+        if (/^captchaVerifyParam$/i.test(key)) {
+          value[key] = replacement;
+          changed = true;
+        } else {
+          visit(value[key], depth + 1);
+        }
+      }
+    }
+    visit(parsed);
+    if (changed) return JSON.stringify(parsed);
+  } catch {}
+  try {
+    const params = new URLSearchParams(raw);
+    let changed = false;
+    for (const key of Array.from(params.keys())) {
+      if (/^captchaVerifyParam$/i.test(key)) {
+        params.set(key, replacement);
+        changed = true;
+      }
+    }
+    if (changed) return params.toString();
+  } catch {}
+  return null;
+}
+
+function summaryMatches(summary, pattern) {
+  if (!pattern) return false;
+  const text = JSON.stringify(summary || {});
+  try { return new RegExp(String(pattern), 'i').test(text); } catch { return text.includes(String(pattern)); }
+}
+
+function classifySiteVerificationEvidence(result, options = {}) {
+  const primary = result && result.siteVerificationNetwork;
+  const control = result && result.siteVerificationControlNetwork;
+  const acceptedPattern = options.siteVerificationAcceptedPattern || '';
+  const rejectedPattern = options.siteVerificationRejectedPattern || '';
+  const responsesDiffer = !!primary && !!control && JSON.stringify(primary.responseSummary) !== JSON.stringify(control.responseSummary);
+  const acceptedPatternMatched = !!primary && summaryMatches(primary.responseSummary, acceptedPattern);
+  const rejectedPatternMatched = !!control && summaryMatches(control.responseSummary, rejectedPattern);
+  const siteSecondaryPass = responsesDiffer && acceptedPatternMatched && rejectedPatternMatched;
+  return {
+    classification: siteSecondaryPass ? 'site_secondary_check_pass' : 'site_secondary_check_not_proven',
+    site_secondary_pass: siteSecondaryPass,
+    responses_differ: responsesDiffer,
+    accepted_pattern_configured: !!acceptedPattern,
+    accepted_pattern_matched: acceptedPatternMatched,
+    rejected_pattern_configured: !!rejectedPattern,
+    rejected_pattern_matched: rejectedPatternMatched,
+    vendor_production_pass: verifyPassed(result && result.verifyResponse),
+  };
+}
+
+async function runSiteVerificationControl(page, result, options = {}) {
+  const request = result && result.__siteVerificationRequest;
+  if (!request) return { attempted: false, error: 'site verification request not captured' };
+  const marker = `antibot-invalid-control-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const body = mutateCaptchaVerifyParam(request.postData, marker);
+  if (!body) return { attempted: false, error: 'captchaVerifyParam could not be mutated' };
+  result.__siteVerificationControlMarker = marker;
+  const replay = await page.evaluate(async ({ url, method, body, contentType }) => {
+    try {
+      const response = await fetch(url, {
+        method,
+        credentials: 'include',
+        headers: contentType ? { 'Content-Type': contentType } : {},
+        body,
+      });
+      await response.text().catch(() => '');
+      return { attempted: true, status: response.status };
+    } catch (error) {
+      return { attempted: true, error: String(error && error.message || error) };
+    }
+  }, { url: request.url, method: request.method, body, contentType: request.contentType });
+  const started = Date.now();
+  const timeoutMs = Math.max(500, Number(options.siteVerificationControlWaitMs) || 10000);
+  while (!result.siteVerificationControlNetwork && Date.now() - started < timeoutMs) await sleep(100);
+  return {
+    ...replay,
+    response_observed: !!result.siteVerificationControlNetwork,
+    elapsed_ms: Date.now() - started,
+  };
+}
+
 function attachResponseLogger(page, result) {
   if (!page || !result || result.__responseLoggerAttached) return;
   Object.defineProperty(result, '__responseLoggerAttached', { value: true, enumerable: false, configurable: true });
+  Object.defineProperty(result, '__siteVerificationRequest', { value: null, writable: true, enumerable: false, configurable: true });
+  Object.defineProperty(result, '__siteVerificationControlMarker', { value: '', writable: true, enumerable: false, configurable: true });
   page.on('response', async res => {
     const url = res.url();
-    if (!/captcha|aliyun|cloudauth|VerifyCaptcha/i.test(url)) return;
     const req = res.request();
-    let text = ''; try { text = await res.text(); } catch {}
     const postData = req.postData() || '';
-    const isVerifyRequest = /Action=VerifyCaptchaV3|CaptchaVerifyParam/i.test(postData);
+    const vendorUrl = /captcha|aliyun|cloudauth|VerifyCaptcha/i.test(url);
+    const siteVerificationRequest = requestCarriesCaptchaVerifyParam(postData);
+    if (!vendorUrl && !siteVerificationRequest) return;
+    let text = ''; try { text = await res.text(); } catch {}
+    if (siteVerificationRequest && !isAliyunVerificationEndpoint(url)) {
+      let contentType = '';
+      let requestContentType = '';
+      try { contentType = String(res.headers()['content-type'] || '').slice(0, 200); } catch {}
+      try { requestContentType = String(req.headers()['content-type'] || '').slice(0, 200); } catch {}
+      const siteItem = {
+        at: Date.now(),
+        method: req.method(),
+        url,
+        status: res.status(),
+        requestBodyLen: postData.length,
+        responseBodyLen: text.length,
+        contentType,
+        responseSummary: responseDecisionSummary(text),
+      };
+      const isControl = !!result.__siteVerificationControlMarker && postData.includes(result.__siteVerificationControlMarker);
+      if (isControl) {
+        result.siteVerificationControlNetwork = siteItem;
+      } else {
+        result.__siteVerificationRequest = { url, method: req.method(), postData, contentType: requestContentType };
+        result.siteVerificationNetwork = siteItem;
+        result.siteVerificationNetworks = result.siteVerificationNetworks || [];
+        result.siteVerificationNetworks.push(siteItem);
+        while (result.siteVerificationNetworks.length > 20) result.siteVerificationNetworks.shift();
+      }
+      return;
+    }
+    const isVerifyRequest = /Action=VerifyCaptchaV3|VerifyIntelligentCaptcha|CaptchaVerifyParam/i.test(`${url} ${postData}`);
     const item = { at: Date.now(), method: req.method(), url, status: res.status(), postDataLen: postData.length, isVerifyRequest, text: text.slice(0, 20000) };
     result.net.push(item);
-    if (isVerifyRequest && /VerifyCode|VerifyResult|T001|F001|F015/.test(text)) {
+    try {
+      const parsed = JSON.parse(text);
+      const payload = parsed && parsed.Result && typeof parsed.Result === 'object'
+        ? parsed.Result
+        : parsed;
+      const vendorType = String(payload && payload.CaptchaType || '').trim().toUpperCase();
+      const captchaType = normalizeVendorCaptchaType(vendorType);
+      if (captchaType) {
+        result.initCaptcha = {
+          vendorType,
+          captchaType,
+          staticPath: String(payload.StaticPath || '').slice(0, 200),
+        };
+      }
+    } catch {}
+    if (isVerifyRequest && /VerifyCode|VerifyResult|[TF]\d{3}/.test(text)) {
       result.verifyNetwork = item;
       try { const j = JSON.parse(text); result.verifyResponse = j.Result || j; } catch {}
     }
@@ -909,59 +1502,143 @@ async function setupDynamicJsForce(page) {
   return { pe, file };
 }
 
-async function captchaState(page, sel = selectors()) {
-  return page.evaluate((SEL) => {
+async function captchaState(page, sel = selectors(), requestedType = CAPTCHA_TYPES.AUTO, verifyResponse = null, initCaptcha = null) {
+  const state = await page.evaluate((SEL, REQUESTED) => {
     function one(el) {
       if (!el) return null;
       const r = el.getBoundingClientRect();
       const cs = getComputedStyle(el);
       const visible = !!(r.width > 1 && r.height > 1 && cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity || 1) !== 0);
-      return { visible, x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height, left: r.left, top: r.top, id: el.id || '', cls: String(el.className || ''), tag: el.tagName || '', text: (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120), src: el.src || '' };
+      return { visible, x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width, height: r.height, left: r.left, top: r.top, right: r.right, bottom: r.bottom, id: el.id || '', cls: String(el.className || ''), tag: el.tagName || '', role: el.getAttribute && el.getAttribute('role') || '', text: (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 240), src: el.src || '' };
     }
     function all(sel) { try { return Array.from(document.querySelectorAll(sel || '')).map(one).filter(Boolean); } catch { return []; } }
     function pick(sel) { const xs = all(sel); xs.sort((a, b) => (b.visible - a.visible) || (b.width * b.height - a.width * a.height)); return xs[0] || null; }
-    function autoSlider() {
-      const xs = all('[id*=slide],[class*=slide],[id*=slider],[class*=slider],[role=slider]')
+    function hasAliyunMarker(value) {
+      return /aliyun[-_]?captcha|aliyuncaptcha/i.test(`${value && value.id || ''} ${value && value.cls || ''}`);
+    }
+    function nearAny(value, anchors, pad = 80) {
+      return anchors.some(anchor => anchor && anchor.visible && !(
+        value.right < anchor.left - pad || value.left > anchor.right + pad ||
+        value.bottom < anchor.top - pad || value.top > anchor.bottom + pad
+      ));
+    }
+    function vendorCandidates(values, anchors) {
+      const scoped = values.filter(value => hasAliyunMarker(value) || nearAny(value, anchors));
+      // Explicit challenge types may use caller-provided selectors on wrappers without Aliyun IDs.
+      return scoped.length || REQUESTED === 'auto' ? scoped : values;
+    }
+    function autoSlider(anchors) {
+      const xs = vendorCandidates(all('[id*=slide],[class*=slide],[id*=slider],[class*=slider],[role=slider]'), anchors)
         .filter(x => x.visible && x.width >= 16 && x.width <= 140 && x.height >= 16 && x.height <= 100);
       xs.sort((a, b) => Math.abs(a.width - a.height) - Math.abs(b.width - b.height) || (a.width * a.height - b.width * b.height));
       return xs[0] || null;
     }
     function imageCandidates() { return all('img').filter(x => x.visible && x.src && x.width >= 10 && x.height >= 10); }
-    function autoBg() {
-      const xs = imageCandidates().filter(x => x.width >= 120 && x.height >= 60);
+    function autoBg(anchors) {
+      const xs = vendorCandidates(imageCandidates(), anchors).filter(x => x.width >= 120 && x.height >= 60);
       xs.sort((a, b) => b.width * b.height - a.width * a.height);
       return xs[0] || null;
     }
-    function autoPuzzle(bg) {
+    function autoPuzzle(bg, anchors) {
       const bgSrc = bg && bg.src;
-      const xs = imageCandidates().filter(x => x.src !== bgSrc && x.width >= 18 && x.height >= 18 && x.width <= 160 && x.height <= 160);
+      const xs = vendorCandidates(imageCandidates(), anchors).filter(x => x.src !== bgSrc && x.width >= 18 && x.height >= 18 && x.width <= 160 && x.height <= 160);
       xs.sort((a, b) => Math.abs(a.width - a.height) - Math.abs(b.width - b.height) || b.width * b.height - a.width * a.height);
       return xs[0] || null;
     }
+    function autoCheckbox(anchors) {
+      const xs = vendorCandidates(all('[role="checkbox"],input[type="checkbox"],[id*="checkbox"],[class*="checkbox"]'), anchors)
+        .filter(x => x.visible && x.width >= 12 && x.height >= 12 && x.width <= 160 && x.height <= 120);
+      xs.sort((a, b) => (a.id.startsWith('aliyunCaptcha-') ? -1 : 0) - (b.id.startsWith('aliyunCaptcha-') ? -1 : 0) || a.width * a.height - b.width * b.height);
+      return xs[0] || null;
+    }
+    function autoTrack(slider, anchors) {
+      const xs = vendorCandidates(all('[id*=track],[class*=track],[id*=wrapper],[class*=wrapper]'), anchors)
+        .filter(x => x.visible && slider && x.width >= slider.width * 2 && x.height >= slider.height * 0.7 && x.height <= slider.height * 3);
+      xs.sort((a, b) => a.width * a.height - b.width * b.height);
+      return xs[0] || null;
+    }
+    const entry = pick(SEL.entry);
     const pickedBody = pick(SEL.body);
     const pickedSlider = pick(SEL.slider);
+    const pickedTrack = pick(SEL.track);
     const pickedImg = pick(SEL.image);
     const pickedPuzzle = pick(SEL.puzzle);
-    const slider = pickedSlider || autoSlider();
-    const img = pickedImg || autoBg();
-    const puzzle = pickedPuzzle || autoPuzzle(img);
-    const body = pickedBody || img;
-    const entry = pick(SEL.entry);
-    const ready = !!(body && body.visible && slider && slider.visible && img && img.src && puzzle && puzzle.src && img.src !== puzzle.src);
-    return { ready, bodyRect: body && { x: body.left, y: body.top, width: body.width, height: body.height }, sliderRect: slider && { x: slider.left, y: slider.top, width: slider.width, height: slider.height }, imgSrc: img && img.src, puzzleSrc: puzzle && puzzle.src, entry, selectorAuto: { body: !pickedBody && !!body, slider: !pickedSlider && !!slider, image: !pickedImg && !!img, puzzle: !pickedPuzzle && !!puzzle }, href: location.href, title: document.title };
-  }, sel).catch(e => ({ ready: false, error: e.message }));
+    const pickedCheckbox = pick(SEL.checkbox);
+    const pickedPrompt = pick(SEL.prompt);
+    const anchors = [entry, pickedBody, pickedSlider, pickedTrack, pickedPrompt, pickedCheckbox].filter(Boolean);
+    const slider = pickedSlider || autoSlider(anchors);
+    const track = pickedTrack || autoTrack(slider, [...anchors, slider].filter(Boolean));
+    const img = pickedImg || autoBg([...anchors, slider, track].filter(Boolean));
+    const puzzle = pickedPuzzle || autoPuzzle(img, [...anchors, slider, track, img].filter(Boolean));
+    const checkbox = pickedCheckbox || autoCheckbox([...anchors, slider, track, img].filter(Boolean));
+    const body = pickedBody || img || track;
+    const roots = [entry, body, track, pickedPrompt, checkbox].filter(Boolean);
+    const text = roots.map(x => x.text).filter(Boolean).join(' ').slice(0, 1200);
+    const hintNode = document.querySelector([
+      '[id^="aliyunCaptcha-"][data-captcha-type]',
+      '[id^="aliyunCaptcha-"][data-verify-type]',
+      '[id^="aliyunCaptcha-"][data-type]',
+      '[id^="aliyunCaptcha-"][class*="restore"]',
+      '[id^="aliyunCaptcha-"][class*="puzzle"]',
+      '[class*="aliyunCaptcha"][data-captcha-type]',
+      '[class*="aliyunCaptcha"][data-verify-type]',
+    ].join(','));
+    const challengeHint = hintNode ? [hintNode.getAttribute('data-captcha-type'), hintNode.getAttribute('data-verify-type'), hintNode.getAttribute('data-type'), hintNode.id, hintNode.className].filter(Boolean).join(' ').slice(0, 400) : '';
+    const visibleChallenge = !![entry, body, track, slider, img, puzzle, checkbox].find(x => x && x.visible);
+    return {
+      bodyRect: body && { x: body.left, y: body.top, width: body.width, height: body.height },
+      sliderRect: slider && { x: slider.left, y: slider.top, width: slider.width, height: slider.height },
+      trackRect: track && { x: track.left, y: track.top, width: track.width, height: track.height },
+      imageRect: img && { x: img.left, y: img.top, width: img.width, height: img.height },
+      imgSrc: img && img.src,
+      puzzleSrc: puzzle && puzzle.src,
+      entry,
+      slider,
+      track,
+      checkbox,
+      puzzle,
+      prompt: pickedPrompt && pickedPrompt.text,
+      text,
+      challengeHint,
+      visibleChallenge,
+      selectorAuto: { body: !pickedBody && !!body, slider: !pickedSlider && !!slider, track: !pickedTrack && !!track, image: !pickedImg && !!img, puzzle: !pickedPuzzle && !!puzzle, checkbox: !pickedCheckbox && !!checkbox },
+      href: location.href,
+      title: document.title,
+    };
+  }, sel, requestedType).catch(e => ({ ready: false, error: e.message }));
+  state.verifyResponse = verifyResponse;
+  state.vendorCaptchaType = initCaptcha && initCaptcha.vendorType || '';
+  state.captchaType = detectCaptchaType(state, requestedType);
+  state.ready = captchaReady(state, requestedType);
+  delete state.verifyResponse;
+  return state;
 }
 
 async function clickEntry(page, result, sel = selectors()) {
-  const clicked = await page.evaluate((SEL) => {
+  const forceHiddenEntry = envFlag('ALIYUN_FORCE_ENTRY_DOM_CLICK', false);
+  const clicked = await page.evaluate((SEL, FORCE_HIDDEN_ENTRY) => {
     function vis(el) { if (!el) return null; const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); if (!(r.width > 20 && r.height > 10) || cs.display === 'none' || cs.visibility === 'hidden') return null; return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: (el.textContent || '').replace(/\s+/g, ' ').trim(), id: el.id || '', cls: String(el.className || ''), area: r.width * r.height }; }
+    const explicitEntries = Array.from(document.querySelectorAll(SEL.entry || ''));
+    const explicitItems = explicitEntries.map(vis).filter(Boolean);
+    explicitItems.sort((a, b) => a.area - b.area);
+    if (explicitItems[0]) return { ...explicitItems[0], score: 100, method: 'mouse' };
+    const hiddenEntry = FORCE_HIDDEN_ENTRY && explicitEntries[0];
+    if (hiddenEntry && typeof hiddenEntry.click === 'function') {
+      hiddenEntry.click();
+      return {
+        method: 'dom-click',
+        text: (hiddenEntry.textContent || '').replace(/\s+/g, ' ').trim(),
+        id: hiddenEntry.id || '',
+        cls: String(hiddenEntry.className || ''),
+      };
+    }
     const items = [];
-    for (const el of Array.from(document.querySelectorAll(SEL.entry || ''))) { const v = vis(el); if (v) items.push({ ...v, score: 100 }); }
     for (const el of Array.from(document.querySelectorAll('button,div,span,a'))) { const v = vis(el); if (!v) continue; if (/click to verify|verify|验证|点击验证/i.test(v.text)) items.push({ ...v, score: 50 }); }
-    items.sort((a, b) => b.score - a.score || a.area - b.area);
-    return items[0] || null;
-  }, sel).catch(e => ({ error: e.message }));
-  if (clicked && !clicked.error) {
+    items.sort((a, b) => a.area - b.area);
+    if (items[0]) return { ...items[0], method: 'mouse' };
+    return null;
+  }, sel, forceHiddenEntry).catch(e => ({ error: e.message }));
+  if (clicked && !clicked.error && clicked.method === 'mouse') {
     await page.mouse.move(clicked.x - 40, clicked.y - 24, { steps: 10 }).catch(() => {});
     await page.mouse.click(clicked.x, clicked.y, { delay: 80 }).catch(() => {});
   }
@@ -969,17 +1646,520 @@ async function clickEntry(page, result, sel = selectors()) {
   return clicked;
 }
 
-async function waitForCaptcha(page, result, sel = selectors()) {
+async function waitForCaptcha(page, result, sel = selectors(), requestedType = CAPTCHA_TYPES.AUTO) {
   const timeout = num('CAPTCHA_WAIT_MS', 90000), clickEvery = num('CAPTCHA_CLICK_RETRY_MS', 1000);
   const started = Date.now(); let lastClick = 0, state = null;
   result.entryClicks = [];
   while (Date.now() - started < timeout) {
-    state = await captchaState(page, sel);
+    state = await captchaState(page, sel, requestedType, result.verifyResponse, result.initCaptcha);
     if (state.ready) return state;
     if (Date.now() - lastClick >= clickEvery) { await clickEntry(page, result, sel); lastClick = Date.now(); }
     await sleep(300);
   }
   throw new Error(`captcha not ready after ${timeout}ms: ${JSON.stringify(state)}`);
+}
+
+async function captureChallengeArtifact(page, state, outputDir) {
+  const target = state && (
+    state.imageRect ||
+    state.checkbox ||
+    state.bodyRect ||
+    state.entry
+  );
+  if (!target) return null;
+  const left = Number(target.left ?? target.x);
+  const top = Number(target.top ?? target.y);
+  const width = Number(target.width);
+  const height = Number(target.height);
+  if (![left, top, width, height].every(Number.isFinite) || width <= 1 || height <= 1) return null;
+  const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const padding = 8;
+  const x = Math.max(0, left - padding);
+  const y = Math.max(0, top - padding);
+  const clip = {
+    x,
+    y,
+    width: Math.max(1, Math.min(viewport.width - x, width + padding * 2)),
+    height: Math.max(1, Math.min(viewport.height - y, height + padding * 2)),
+  };
+  const artifact = path.join(outputDir, `aliyun_challenge_${state.captchaType}.png`);
+  await page.screenshot({ path: artifact, type: 'png', clip, captureBeyondViewport: false });
+  return artifact;
+}
+
+async function waitForVerification(result, timeoutMs) {
+  const started = Date.now();
+  while (!result.verifyNetwork && !verifyPassed(result.verifyResponse) && !result.siteVerificationNetwork && Date.now() - started < timeoutMs) {
+    await sleep(150);
+  }
+  return {
+    elapsedMs: Date.now() - started,
+    observed: !!result.verifyNetwork || !!result.verifyResponse || !!result.siteVerificationNetwork,
+    code: verifyCode(result.verifyResponse),
+    passed: verifyPassed(result.verifyResponse),
+  };
+}
+
+function challengeRunSpec(state, distance, profile, runMode, sel) {
+  if (!state.sliderRect) throw new Error('captcha slider geometry not found');
+  const sx = state.sliderRect.x + state.sliderRect.width / 2;
+  const sy = state.sliderRect.y + state.sliderRect.height / 2;
+  const points = buildTrajectory(sx, sy, distance, profile.style || null, profile);
+  return {
+    points,
+    spec: {
+      mode: runMode,
+      startX: sx,
+      startY: sy,
+      points,
+      warm: buildWarm(sx, sy, {
+        warmPoints: profile.warmPoints,
+        warmDtMin: profile.warmDtMinMs,
+        warmDtMax: profile.warmDtMaxMs,
+        warmStartX: profile.warmStartX,
+        warmStartY: profile.warmStartY,
+      }),
+      releaseHoldMs: Number(profile.releaseHoldMs),
+      releaseHoldJitterMs: Number(profile.releaseHoldJitterMs),
+      pressHoldMs: profile.pressHoldMs,
+      pressHoldJitterMs: profile.pressHoldJitterMs,
+      postDownMs: profile.postDownMs,
+      sliderSelector: sel.slider,
+      bodySelector: sel.body,
+      imageSelector: sel.image,
+      puzzleSelector: sel.puzzle,
+      requestedSliderDistancePx: Number(distance),
+      alignPuzzle: false,
+    },
+  };
+}
+
+async function runConfiguredDrag(page, runMode, spec) {
+  if (runMode === 'cdpdrag' || runMode === 'mouse') return runCdpMouse(page, spec);
+  if (runMode === 'xdotool') return runXdotoolDrag(page, spec);
+  return page.evaluate((value) => window.__AC_run(value), spec);
+}
+
+async function runOneClick(page, state) {
+  const target = state.checkbox || state.entry;
+  if (!target || !target.visible) throw new Error('one-click checkbox geometry not found');
+  const fromX = Math.max(1, target.x - 70 - Math.random() * 30);
+  const fromY = Math.max(1, target.y - 30 - Math.random() * 20);
+  await page.mouse.move(fromX, fromY, { steps: 10 + Math.floor(Math.random() * 8) });
+  await sleep(80 + Math.floor(Math.random() * 180));
+  await page.mouse.move(target.x, target.y, { steps: 7 + Math.floor(Math.random() * 7) });
+  await sleep(60 + Math.floor(Math.random() * 100));
+  await page.mouse.click(target.x, target.y, { delay: 60 + Math.floor(Math.random() * 100) });
+  return { type: CAPTCHA_TYPES.ONE_CLICK, target: { x: target.x, y: target.y, id: target.id, cls: target.cls } };
+}
+
+async function runSliderToRight(page, state, profile, runMode, sel) {
+  const slider = state.sliderRect;
+  const track = state.trackRect || state.bodyRect;
+  if (!slider || !track) throw new Error('slider or track geometry not found');
+  const startX = slider.x + slider.width / 2;
+  const targetX = track.x + track.width - slider.width / 2;
+  const distance = Math.max(1, targetX - startX);
+  const built = challengeRunSpec(state, distance, profile, runMode, sel);
+  const run = await runConfiguredDrag(page, runMode, built.spec);
+  return { run, distance, trajectory: built.points.__meta, start: { x: built.spec.startX, y: built.spec.startY } };
+}
+
+function extractJsonObject(text) {
+  const source = String(text || '').trim();
+  if (!source) return null;
+  const fenced = source.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidates = [source, fenced && fenced[1]].filter(Boolean);
+  for (const candidate of candidates) {
+    try { const parsed = JSON.parse(candidate.trim()); if (parsed && typeof parsed === 'object') return parsed; } catch {}
+    const start = candidate.indexOf('{'), end = candidate.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try { const parsed = JSON.parse(candidate.slice(start, end + 1)); if (parsed && typeof parsed === 'object') return parsed; } catch {}
+    }
+  }
+  return null;
+}
+
+function messageText(value) {
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return '';
+  return value.map(item => typeof item === 'string' ? item : (item && typeof item.text === 'string' ? item.text : '')).join('');
+}
+
+function visionEndpoint(baseUrl) {
+  const normalized = String(baseUrl || '').replace(/\/+$/, '');
+  if (normalized.endsWith('/chat/completions')) return normalized;
+  if (normalized.endsWith('/v1')) return `${normalized}/chat/completions`;
+  return `${normalized}/v1/chat/completions`;
+}
+
+async function requestRestoreDistance(image, geometry, options = {}, layers = {}, requestOptions = {}) {
+  const configured = options.vision || {};
+  const staticAnswer = options.imageRestoreAnswer || configured.answer;
+  if (staticAnswer && typeof staticAnswer === 'object') {
+    const answerSpace = Number.isFinite(Number(staticAnswer.target_left_px)) ? 'image_target_left' : 'slider';
+    return { answer: staticAnswer, metadata: { backend: 'configured_answer', answer_space: answerSpace } };
+  }
+  if (Number.isFinite(Number(options.restoreDistancePx))) {
+    return {
+      answer: { distance_px: Number(options.restoreDistancePx), confidence: 1 },
+      metadata: { backend: 'configured_distance', answer_space: 'slider' },
+    };
+  }
+
+  const baseUrl = configured.baseUrl || process.env.ANTIBOT_VISION_BASE_URL || '';
+  const model = configured.model || process.env.ANTIBOT_VISION_MODEL || '';
+  const apiKeyEnv = configured.apiKeyEnv || 'ANTIBOT_VISION_API_KEY';
+  const apiKey = process.env[apiKeyEnv] || '';
+  const missing = [!baseUrl && 'vision_base_url', !model && 'vision_model', !apiKey && `vision_api_key/${apiKeyEnv}`].filter(Boolean);
+  if (missing.length) throw new Error(`image_restore requires a vision backend; missing ${missing.join(', ')}`);
+
+  const retries = Math.max(1, Math.min(5, Number(configured.retries || 2)));
+  const minConfidence = Math.max(0, Math.min(1, Number(configured.minConfidence ?? 0.35)));
+  const timeoutMs = Math.max(1000, Number(configured.timeoutMs || 180000));
+  const hasSeparateLayers = Buffer.isBuffer(layers.background) && Buffer.isBuffer(layers.fragment);
+  const maxVisionCandidates = Math.max(3, Math.min(12, Number(configured.maxCandidates || 9)));
+  const candidateDetails = Array.isArray(geometry.localCandidates)
+    ? geometry.localCandidates.slice(0, maxVisionCandidates).map(candidate => ({
+      distance: Number(Number(candidate.distance_px ?? candidate.distance).toFixed(1)),
+      targetLeft: Number(candidate.target_left_png),
+    })).filter(candidate => Number.isFinite(candidate.distance) && Number.isFinite(candidate.targetLeft))
+    : [];
+  const candidates = candidateDetails.map(candidate => candidate.distance);
+  const refinement = requestOptions.stage === 'refinement';
+  const instruction = hasSeparateLayers ? [
+    'Solve this generic horizontal image-restoration task.',
+    `Image 1 is a ${geometry.backgroundWidth}x${geometry.backgroundHeight} background. Image 2 is a separate ${geometry.fragmentWidth}x${geometry.fragmentHeight} transparent fragment.`,
+    'The fragment starts at left=0 and can move only right. Find the left-edge position where overlaying it best restores the background.',
+    refinement
+      ? 'The layer images are followed by labeled, magnified local composites around a coarse target. Determine the precise horizontal attachment point.'
+      : 'The layer images are followed by labeled candidate composites covering the full horizontal range.',
+    'First identify the detached object and the exact object in the scene that is missing this part.',
+    'Choose the composite that attaches the fragment at the same vertical level and produces one coherent completed scene.',
+    'Reject a candidate that overlays an already complete repeated object, covers an object body, leaves the missing connection open, or floats at an unrelated edge.',
+    candidates.length ? `The candidate fragment left positions in image CSS pixels are: ${candidates.join(', ')}. Choose among them or interpolate between adjacent candidates when that makes the connection exact.` : '',
+    `The valid target_left_px range is 0 through ${geometry.maxDistance.toFixed(1)} image CSS pixels.`,
+    'Return ONLY compact JSON: {"target_left_px":123.4,"confidence":0.85}.',
+    'Do not return slider travel, screen coordinates, prose, Markdown, or a negative position. If uncertain return confidence 0.',
+  ].filter(Boolean).join(' ') : [
+    'Solve this generic horizontal image-restoration task.',
+    'The image shows a movable object or fragment and the location where it semantically belongs.',
+    `Estimate the horizontal slider travel in CSS pixels from its initial position to the correct restored position. The valid range is 0 through ${geometry.maxDistance.toFixed(1)}.`,
+    `The supplied PNG is ${geometry.pngWidth}x${geometry.pngHeight} pixels and represents a ${geometry.cssWidth.toFixed(1)}x${geometry.cssHeight.toFixed(1)} CSS-pixel region.`,
+    'Report distance_px in CSS pixels, not PNG pixel coordinates.',
+    'Return ONLY compact JSON: {"distance_px":123.4,"confidence":0.85}.',
+    'Do not return screen coordinates, prose, Markdown, or a negative distance. If uncertain return confidence 0.',
+  ].join(' ');
+  const imageContent = hasSeparateLayers ? [
+    { type: 'image_url', image_url: { url: `data:image/png;base64,${layers.background.toString('base64')}`, detail: 'high' } },
+    { type: 'image_url', image_url: { url: `data:image/png;base64,${layers.fragment.toString('base64')}`, detail: 'high' } },
+  ] : [
+    { type: 'image_url', image_url: { url: `data:image/png;base64,${image.toString('base64')}`, detail: 'high' } },
+  ];
+  if (hasSeparateLayers) {
+    for (const candidate of candidateDetails) {
+      const rendered = refinement
+        ? renderRestoreCandidateFocus(layers.background, layers.fragment, candidate.targetLeft)
+        : renderRestoreCandidate(layers.background, layers.fragment, candidate.targetLeft);
+      imageContent.push(
+        { type: 'text', text: `Candidate target_left_px=${candidate.distance}` },
+        { type: 'image_url', image_url: { url: `data:image/png;base64,${rendered.toString('base64')}`, detail: 'high' } },
+      );
+    }
+  }
+  const body = {
+    model,
+    messages: [{ role: 'user', content: [
+      { type: 'text', text: instruction },
+      ...imageContent,
+    ] }],
+    temperature: 0,
+    stream: false,
+    ...(configured.extraBody || {}),
+  };
+  for (const reserved of ['model', 'messages', 'stream', 'max_tokens']) {
+    if (configured.extraBody && Object.prototype.hasOwnProperty.call(configured.extraBody, reserved)) {
+      throw new Error(`vision extraBody cannot override reserved field: ${reserved}`);
+    }
+  }
+
+  const errors = [], attempts = [];
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const started = Date.now();
+    let httpStatus = null;
+    try {
+      const response = await fetch(visionEndpoint(baseUrl), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      httpStatus = response.status;
+      const raw = await response.text();
+      const payload = (() => { try { return JSON.parse(raw); } catch { return {}; } })();
+      if (!response.ok) {
+        const message = payload && payload.error && payload.error.message || 'request rejected';
+        throw new Error(`vision gateway HTTP ${response.status}: ${message}`);
+      }
+      const choice = payload && Array.isArray(payload.choices) && payload.choices[0];
+      const message = choice && choice.message || {};
+      const parsed = extractJsonObject(messageText(message.content)) || extractJsonObject(messageText(message.reasoning_content));
+      if (!parsed) throw new Error('vision gateway returned no parseable JSON');
+      const distance = Number(parsed.target_left_px ?? parsed.target_left ?? parsed.distance_px ?? parsed.distance);
+      const confidence = Number(parsed.confidence ?? 0);
+      if (!Number.isFinite(distance) || distance < 0 || distance > geometry.maxDistance + 2) {
+        throw new Error(`vision distance is outside 0..${geometry.maxDistance.toFixed(1)}`);
+      }
+      if (!Number.isFinite(confidence) || confidence < minConfidence || confidence > 1) {
+        throw new Error(`vision confidence ${confidence} is below ${minConfidence}`);
+      }
+      return {
+        answer: { distance_px: distance, confidence },
+        metadata: {
+          backend: 'openai_compatible',
+          answer_space: hasSeparateLayers ? 'image_target_left' : 'slider',
+          model: payload.model || model,
+          finish_reason: choice && choice.finish_reason,
+          attempt,
+          errors,
+          elapsed_ms: Date.now() - started,
+          http_status: response.status,
+          response_body_length: raw.length,
+          stage: requestOptions.stage || 'coarse',
+          attempts: [...attempts, { attempt, elapsed_ms: Date.now() - started, http_status: response.status, outcome: 'accepted' }],
+        },
+      };
+    } catch (error) {
+      const message = error && error.message || String(error);
+      errors.push(`attempt ${attempt}: ${message}`);
+      attempts.push({ attempt, elapsed_ms: Date.now() - started, http_status: httpStatus, outcome: 'error', error: message });
+    }
+  }
+  const failure = new Error(errors[errors.length - 1] || 'vision backend returned no answer');
+  failure.visionAttempts = attempts;
+  throw failure;
+}
+
+async function runImageRestore(page, state, profile, runMode, sel, outputDir, options) {
+  const slider = state.sliderRect;
+  const track = state.trackRect || state.bodyRect;
+  const imageRect = state.imageRect || state.bodyRect;
+  if (!slider || !track || !imageRect) throw new Error('image restoration geometry not found');
+  const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const clip = {
+    x: Math.max(0, imageRect.x),
+    y: Math.max(0, imageRect.y),
+    width: Math.max(1, Math.min(imageRect.width, viewport.width - Math.max(0, imageRect.x))),
+    height: Math.max(1, Math.min(imageRect.height, viewport.height - Math.max(0, imageRect.y))),
+  };
+  const image = await page.screenshot({ type: 'png', clip, captureBeyondViewport: false });
+  const artifact = path.join(outputDir, 'aliyun_restore_selected.png');
+  fs.writeFileSync(artifact, image);
+  const png = PNG.sync.read(image);
+  const maxDistance = Math.max(1, track.width - slider.width);
+  let background = null, fragment = null, local = null, boundary = null, layerError = '';
+  let backgroundPng = null, fragmentPng = null;
+  const backgroundArtifact = path.join(outputDir, 'aliyun_restore_background.png');
+  const fragmentArtifact = path.join(outputDir, 'aliyun_restore_fragment.png');
+  try {
+    if (state.imgSrc && state.puzzleSrc) {
+      [background, fragment] = await Promise.all([getBuf(state.imgSrc, options.userAgent), getBuf(state.puzzleSrc, options.userAgent)]);
+      fs.writeFileSync(backgroundArtifact, background);
+      fs.writeFileSync(fragmentArtifact, fragment);
+      backgroundPng = PNG.sync.read(background);
+      fragmentPng = PNG.sync.read(fragment);
+      local = detectRestoreStrip(background, fragment, { maxDistance, cssWidth: clip.width });
+      boundary = detectRestoreBoundaryContinuity(background, fragment, { maxDistance, cssWidth: clip.width });
+    }
+  } catch (error) {
+    layerError = error && error.message || String(error);
+  }
+  const configuredAnswer = options.imageRestoreAnswer || (options.vision && options.vision.answer);
+  const configuredDistance = Number.isFinite(Number(options.restoreDistancePx));
+  const localMinConfidence = Math.max(0, Math.min(1, Number(options.vision?.localMinConfidence ?? 0.72)));
+  const maxTargetPng = backgroundPng && fragmentPng
+    ? Math.min(backgroundPng.width - fragmentPng.width, Math.floor(maxDistance / Math.max(1e-9, local && local.css_per_png || 1)))
+    : 0;
+  const visionCandidates = local
+    ? buildRestoreVisionCandidates(local, maxTargetPng, options.vision?.maxCandidates || 9)
+    : [];
+  const boundaryFallback = selectRestoreBoundaryFallback(
+    boundary,
+    local,
+    fragmentPng ? fragmentPng.width * Math.max(1e-9, Number(local && local.css_per_png || 1)) : 0,
+  );
+  let vision;
+  if (!configuredAnswer && !configuredDistance && local && local.confidence >= localMinConfidence) {
+    vision = {
+      answer: { target_left_px: local.target_left_png, confidence: local.confidence },
+      metadata: { backend: 'local_strip_match', answer_space: 'image_target_left', local, layer_error: layerError || null },
+    };
+  } else if (!configuredAnswer && !configuredDistance && boundaryFallback) {
+    vision = {
+      answer: { target_left_px: boundaryFallback.distance_px, confidence: boundaryFallback.confidence },
+      metadata: {
+        backend: 'boundary_continuity_consensus',
+        answer_space: 'image_target_left',
+        boundary_fallback: boundaryFallback,
+        local,
+        boundary,
+        layer_error: layerError || null,
+      },
+    };
+  } else {
+    vision = await requestRestoreDistance(image, {
+    maxDistance,
+    pngWidth: png.width,
+    pngHeight: png.height,
+    cssWidth: clip.width,
+    cssHeight: clip.height,
+      backgroundWidth: backgroundPng && backgroundPng.width,
+      backgroundHeight: backgroundPng && backgroundPng.height,
+      fragmentWidth: fragmentPng && fragmentPng.width,
+      fragmentHeight: fragmentPng && fragmentPng.height,
+      localCandidates: visionCandidates,
+    }, options, { background, fragment }, { stage: 'coarse' });
+    if (vision.metadata.backend === 'openai_compatible' && backgroundPng && fragmentPng && visionCandidates.length >= 2) {
+      const coarseTarget = Number(vision.answer.target_left_px ?? vision.answer.distance_px);
+      const refinementTargets = buildRestoreRefinementCandidates(
+        coarseTarget,
+        visionCandidates,
+        maxTargetPng,
+        options.vision?.refinementCandidates || 9,
+      );
+      const cssPerPng = Math.max(1e-9, Number(local && local.css_per_png || 1));
+      const refinementCandidates = refinementTargets.map(target => ({
+        target_left_png: target,
+        distance_px: Number((target * cssPerPng).toFixed(3)),
+      }));
+      try {
+        const refined = await requestRestoreDistance(image, {
+          maxDistance,
+          pngWidth: png.width,
+          pngHeight: png.height,
+          cssWidth: clip.width,
+          cssHeight: clip.height,
+          backgroundWidth: backgroundPng.width,
+          backgroundHeight: backgroundPng.height,
+          fragmentWidth: fragmentPng.width,
+          fragmentHeight: fragmentPng.height,
+          localCandidates: refinementCandidates,
+        }, options, { background, fragment }, { stage: 'refinement' });
+        const refinedTarget = Number(refined.answer.target_left_px ?? refined.answer.distance_px);
+        const evidenceWindow = Math.max(12, maxTargetPng / Math.max(1, visionCandidates.length - 1) * 0.6);
+        const localTarget = Number(local && local.distance_px);
+        const boundaryMatch = (boundary && boundary.directions || [])
+          .filter(candidate => candidate.score <= 20 && candidate.score_margin >= 0.35)
+          .map(candidate => ({
+            ...candidate,
+            coarse_delta_px: Math.abs(candidate.distance_px - coarseTarget),
+            refined_delta_px: Math.abs(candidate.distance_px - refinedTarget),
+            local_delta_px: Number.isFinite(localTarget) ? Math.abs(candidate.distance_px - localTarget) : null,
+          }))
+          .filter(candidate => candidate.coarse_delta_px <= evidenceWindow)
+          .sort((a, b) => a.coarse_delta_px - b.coarse_delta_px || a.score - b.score)[0];
+        refined.metadata.coarse = {
+          target_left_px: coarseTarget,
+          confidence: vision.answer.confidence,
+          candidates: visionCandidates.map(candidate => candidate.distance_px),
+          request: vision.metadata,
+        };
+        refined.metadata.refinement_candidates = refinementCandidates.map(candidate => candidate.distance_px);
+        const localRefines = Number.isFinite(localTarget)
+          && local.score_margin >= 0.12
+          && Math.abs(localTarget - coarseTarget) <= evidenceWindow
+          && Math.abs(localTarget - refinedTarget) <= evidenceWindow;
+        if (localRefines) {
+          refined.metadata.stage = 'local_evidence_refinement';
+          refined.metadata.local_refinement = {
+            target_left_px: localTarget,
+            score: local.score,
+            score_margin: local.score_margin,
+            coarse_delta_px: Number(Math.abs(localTarget - coarseTarget).toFixed(3)),
+            refined_delta_px: Number(Math.abs(localTarget - refinedTarget).toFixed(3)),
+            evidence_window_px: Number(evidenceWindow.toFixed(3)),
+          };
+          refined.answer = {
+            distance_px: localTarget,
+            confidence: Math.min(Number(refined.answer.confidence), Math.max(0.7, Number(local.confidence))),
+          };
+        } else if (boundaryMatch) {
+          const evidence = [coarseTarget, refinedTarget, boundaryMatch.distance_px];
+          const localCorroborates = Number.isFinite(localTarget) && evidence.some(value => Math.abs(value - localTarget) <= evidenceWindow);
+          if (localCorroborates) evidence.push(localTarget);
+          evidence.sort((a, b) => a - b);
+          const middle = Math.floor(evidence.length / 2);
+          const consensus = evidence.length % 2
+            ? evidence[middle]
+            : (evidence[middle - 1] + evidence[middle]) / 2;
+          refined.metadata.stage = 'evidence_fusion';
+          refined.metadata.boundary_refinement = {
+            ...boundaryMatch,
+            refined_target_left_px: refinedTarget,
+            evidence_window_px: Number(evidenceWindow.toFixed(3)),
+            local_corroborates: localCorroborates,
+            evidence_target_left_px: evidence,
+            consensus_target_left_px: Number(consensus.toFixed(3)),
+          };
+          refined.answer = {
+            distance_px: consensus,
+            confidence: Math.min(Number(refined.answer.confidence), Math.max(0.7, boundaryMatch.confidence)),
+          };
+        }
+        vision = refined;
+      } catch (error) {
+        vision.metadata.refinement_error = error && error.message || String(error);
+        vision.metadata.refinement_candidates = refinementCandidates.map(candidate => candidate.distance_px);
+      }
+    }
+    vision.metadata.local = local;
+    vision.metadata.boundary = boundary;
+    vision.metadata.layer_error = layerError || null;
+  }
+  const answerSpace = vision.metadata.answer_space || 'slider';
+  const targetLeft = answerSpace === 'image_target_left'
+    ? Number(vision.answer.target_left_px ?? vision.answer.distance_px)
+    : null;
+  const rawDistance = answerSpace === 'image_target_left'
+    ? restoreSliderTravel(targetLeft, maxDistance)
+    : Number(vision.answer.distance_px);
+  const distance = answerSpace === 'image_target_left'
+    ? restoreQuantizedSliderTravel(targetLeft, maxDistance)
+    : rawDistance;
+  if (!Number.isFinite(distance) || distance < 0 || distance > maxDistance + 2) {
+    throw new Error(`restore slider distance is outside 0..${maxDistance.toFixed(1)}`);
+  }
+  const built = challengeRunSpec(state, distance, profile, runMode, sel);
+  built.spec.targetPuzzleX = targetLeft;
+  const run = await runConfiguredDrag(page, runMode, built.spec);
+  const observedTargetRaw = run && run.geometry && run.geometry.observedPuzzleLeftPx;
+  const observedTarget = Number(observedTargetRaw);
+  const hasObservedTarget = observedTargetRaw !== null && observedTargetRaw !== undefined && Number.isFinite(observedTarget);
+  return {
+    run,
+    distance,
+    targetLeft,
+    maxDistance,
+    confidence: vision.answer.confidence,
+    vision: vision.metadata,
+    mapping: answerSpace === 'image_target_left' ? {
+      type: 'aliyun_image_restore_quadratic',
+      target_left_px: targetLeft,
+      raw_slider_distance_px: Number(rawDistance.toFixed(3)),
+      slider_distance_px: Number(distance.toFixed(3)),
+      projected_fragment_left_px: Number(restorePuzzleTravel(distance, maxDistance).toFixed(3)),
+      observed_fragment_left_px: hasObservedTarget ? observedTarget : null,
+      observed_target_error_px: hasObservedTarget ? Number((observedTarget - targetLeft).toFixed(3)) : null,
+    } : { type: 'configured_slider_distance', slider_distance_px: Number(distance.toFixed(3)) },
+    artifact,
+    artifacts: {
+      composite: artifact,
+      background: background ? backgroundArtifact : null,
+      fragment: fragment ? fragmentArtifact : null,
+    },
+    trajectory: built.points.__meta,
+    start: { x: built.spec.startX, y: built.spec.startY },
+  };
 }
 
 async function readGap(page, result, outputDir, tag = 'latest', sel = selectors(), ua) {
@@ -1021,6 +2201,7 @@ async function runCdpMouse(page, spec) {
   calls.push({ at: Date.now(), type: 'mousedown', mode: 'cdpdrag', x: Math.round(spec.startX), y: Math.round(spec.startY), buttons: 1 });
   const postDown = Math.max(0, spec.postDownMs || 0);
   if (postDown) await sleep(postDown);
+  const initialGeometry = await readCdpDragGeometry(page, spec);
   let lastT = 0;
   let cur = { x: spec.startX, y: spec.startY };
   const maxMoveDelay = num('LISTENER_MAX_MOVE_DELAY_MS', 220);
@@ -1065,9 +2246,64 @@ async function runCdpMouse(page, spec) {
   }
   const hold = Math.max(0, (spec.releaseHoldMs || 0) + Math.floor(Math.random() * Math.max(0, spec.releaseHoldJitterMs || 0)));
   await sleep(hold);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))).catch(() => {});
+  const preReleaseGeometry = await readCdpDragGeometry(page, spec);
+  const geometry = summarizeCdpDragGeometry(initialGeometry, preReleaseGeometry, spec, cur);
   await page.mouse.up({ button: 'left' }).catch(() => {});
   calls.push({ at: Date.now(), type: 'mouseup', mode: 'cdpdrag', x: Math.round(cur.x), y: Math.round(cur.y), buttons: 0 });
-  return { ok: true, mode: 'cdpdrag', align: alignReads, calls: calls.slice(-100), errors: [] };
+  return { ok: true, mode: 'cdpdrag', align: alignReads, geometry, calls: calls.slice(-100), errors: [] };
+}
+
+async function readCdpDragGeometry(page, spec) {
+  return page.evaluate((s) => {
+    const img = document.querySelector(s.imageSelector || '#aliyunCaptcha-img');
+    const puzzle = document.querySelector(s.puzzleSelector || '#aliyunCaptcha-puzzle');
+    const slider = document.querySelector(s.sliderSelector || '#aliyunCaptcha-sliding-slider');
+    const body = document.querySelector(s.bodySelector || '#aliyunCaptcha-sliding-body');
+    const rect = (el) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return {
+        left: r.left,
+        top: r.top,
+        width: r.width,
+        height: r.height,
+        styleLeft: Number.parseFloat(cs.left) || 0,
+        transform: cs.transform,
+      };
+    };
+    const imageRect = rect(img);
+    const puzzleRect = rect(puzzle);
+    const sliderRect = rect(slider);
+    const bodyRect = rect(body);
+    return {
+      image: imageRect,
+      puzzle: puzzleRect,
+      slider: sliderRect,
+      body: bodyRect,
+      puzzleLeftPx: imageRect && puzzleRect ? puzzleRect.left - imageRect.left : null,
+      sliderLeftPx: bodyRect && sliderRect ? sliderRect.left - bodyRect.left : null,
+    };
+  }, spec).catch(error => ({ error: error && error.message || String(error) }));
+}
+
+function summarizeCdpDragGeometry(initial, preRelease, spec, pointer) {
+  const rounded = value => Number.isFinite(Number(value)) ? Number(Number(value).toFixed(3)) : null;
+  const delta = (after, before) => Number.isFinite(Number(after)) && Number.isFinite(Number(before))
+    ? rounded(Number(after) - Number(before))
+    : null;
+  return {
+    requestedSliderDistancePx: rounded(spec.requestedSliderDistancePx),
+    pointerDistancePx: delta(pointer && pointer.x, spec.startX),
+    initial,
+    preRelease,
+    observedSliderDisplacementPx: delta(preRelease && preRelease.sliderLeftPx, initial && initial.sliderLeftPx),
+    observedPuzzleDisplacementPx: delta(preRelease && preRelease.puzzleLeftPx, initial && initial.puzzleLeftPx),
+    observedSliderLeftPx: rounded(preRelease && preRelease.sliderLeftPx),
+    observedPuzzleLeftPx: rounded(preRelease && preRelease.puzzleLeftPx),
+    observedImageLeftPx: rounded(preRelease && preRelease.image && preRelease.image.left),
+  };
 }
 
 function runXdotool(args) {
@@ -1200,6 +2436,7 @@ async function solveCaptchaOnce(options = {}) {
     const outputDir = options.outputDir ? path.resolve(options.outputDir) : defaultOutputDir();
     const out = options.out ? path.resolve(options.out) : (process.env.OUT ? path.resolve(process.env.OUT) : path.join(outputDir, 'aliyun_captcha_run.json'));
     const sel = selectors(options.selectors || {});
+    const requestedCaptchaType = normalizeCaptchaType(options.captchaType || process.env.ALIYUN_CAPTCHA_TYPE || CAPTCHA_TYPES.AUTO);
     const ua = userAgent(options.userAgent);
     const runMode = process.env.LISTENER_MODE || STABLE_PROFILE.mode;
     const useXdotool = runMode === 'xdotool';
@@ -1216,7 +2453,7 @@ async function solveCaptchaOnce(options = {}) {
     if (useXdotool) headless = false;
 
     fs.mkdirSync(outputDir, { recursive: true });
-    const result = { at: new Date().toISOString(), targetUrl, selectors: sel, profile, net: [], outputDir, out };
+    const result = { at: new Date().toISOString(), targetUrl, requestedCaptchaType, selectors: sel, profile, net: [], outputDir, out };
     partialResult = result;
     result.watchdogConfig = {
       enabled: envFlag('ALIYUN_WATCHDOG_ENABLED', true),
@@ -1307,12 +2544,83 @@ async function solveCaptchaOnce(options = {}) {
       if (cdp && fp && fp.timezone) await cdp.send('Emulation.setTimezoneOverride', { timezoneId: fp.timezone }).catch(() => {});
       await wd('page.goto', result.watchdogConfig.gotoMs, () => page.goto(targetUrl, { waitUntil: options.gotoWaitUntil || process.env.GOTO_WAIT_UNTIL || 'domcontentloaded', timeout: options.gotoTimeoutMs || num('GOTO_TIMEOUT_MS', 60000) }));
       await sleep(options.afterGotoMs ?? num('AFTER_GOTO_MS', 500));
+      if (options.preCaptchaFills && options.preCaptchaFills.length) {
+        result.preCaptchaFills = await wd('site.pre_captcha_fills', result.watchdogConfig.preActionMs, () => applyPreCaptchaFills(page, options.preCaptchaFills));
+      }
+      if (options.preCaptchaPresses && options.preCaptchaPresses.length) {
+        result.preCaptchaPresses = await wd('site.pre_captcha_presses', result.watchdogConfig.preActionMs, () => applyPreCaptchaPresses(page, options.preCaptchaPresses));
+      }
+      if (options.preCaptchaClicks && options.preCaptchaClicks.length) {
+        result.preCaptchaClicks = await wd('site.pre_captcha_clicks', result.watchdogConfig.preActionMs, () => applyPreCaptchaClicks(page, options.preCaptchaClicks));
+      }
       if (options.preCaptchaAction) {
         result.preCaptchaAction = await wd('site.pre_captcha_action', result.watchdogConfig.preActionMs, () => options.preCaptchaAction(page, result).catch(e => ({ error: e.message })));
       }
     }
-    await wd('captcha.wait_ready', result.watchdogConfig.captchaMs, () => waitForCaptcha(page, result, sel));
+    const observedState = await wd('captcha.wait_ready', result.watchdogConfig.captchaMs, () => waitForCaptcha(page, result, sel, requestedCaptchaType));
+    result.state = observedState;
+    result.captchaType = observedState.captchaType;
     await sleep(options.afterCaptchaVisibleMs ?? num('AFTER_CAPTCHA_VISIBLE_MS', 500));
+    result.challengeArtifact = await wd(
+      'captcha.screenshot',
+      result.watchdogConfig.runtimeMs,
+      () => captureChallengeArtifact(page, observedState, outputDir),
+    );
+    if (observedState.captchaType !== CAPTCHA_TYPES.PUZZLE) {
+      const waitVerify = options.verifyWaitMs || num('VERIFY_WAIT_MS', 12000);
+      if (observedState.captchaType === CAPTCHA_TYPES.ONE_CLICK) {
+        result.verifyNetwork = null;
+        result.verifyResponse = null;
+        result.interaction = await wd('captcha.one_click', result.watchdogConfig.dragMs, () => runOneClick(page, observedState));
+      } else if (observedState.captchaType === CAPTCHA_TYPES.SLIDER) {
+        result.verifyNetwork = null;
+        result.verifyResponse = null;
+        const sliderRun = await wd('captcha.slider_to_right', result.watchdogConfig.dragMs, () => runSliderToRight(page, observedState, profile, runMode, sel));
+        result.listenerRun = sliderRun.run;
+        result.distance = sliderRun.distance;
+        result.trajectory = sliderRun.trajectory;
+        result.start = sliderRun.start;
+      } else if (observedState.captchaType === CAPTCHA_TYPES.IMAGE_RESTORE) {
+        result.verifyNetwork = null;
+        result.verifyResponse = null;
+        const visionTimeout = Number(options.vision?.timeoutMs || 180000);
+        const visionRetries = Math.max(1, Math.min(5, Number(options.vision?.retries || 2)));
+        const restoreRun = await wd('captcha.image_restore', Math.max(result.watchdogConfig.dragMs, visionTimeout * visionRetries * 2 + 10000), () => runImageRestore(page, observedState, profile, runMode, sel, outputDir, options));
+        result.listenerRun = restoreRun.run;
+        result.distance = restoreRun.distance;
+        result.restoreTargetLeft = restoreRun.targetLeft;
+        result.maxDistance = restoreRun.maxDistance;
+        result.trajectory = restoreRun.trajectory;
+        result.start = restoreRun.start;
+        result.vision = { ...restoreRun.vision, confidence: restoreRun.confidence };
+        result.restoreMapping = restoreRun.mapping;
+        result.restoreArtifact = restoreRun.artifact;
+        result.restoreArtifacts = restoreRun.artifacts;
+      } else if (observedState.captchaType !== CAPTCHA_TYPES.INVISIBLE) {
+        throw new Error(`unsupported or undetected Aliyun challenge type: ${observedState.captchaType}`);
+      }
+      result.verificationWait = await waitForVerification(result, waitVerify);
+      if (options.siteVerificationControl) {
+        result.siteVerificationControl = await wd('site.verification_control', result.watchdogConfig.preActionMs, () => runSiteVerificationControl(page, result, options));
+        result.siteVerificationEvidence = classifySiteVerificationEvidence(result, options);
+      }
+      result.runtime = await wd('runtime.snapshot:primary', result.watchdogConfig.runtimeMs, () => page.evaluate(() => ({
+        calls: window.__AC && window.__AC.calls.slice(-50),
+        errors: window.__AC && window.__AC.errors.slice(-20),
+        payloads: window.__AC && window.__AC.payloads.slice(-40),
+        formOps: window.__AC && window.__AC.formOps.slice(-40),
+        listenerCount: window.__AC && window.__AC.listeners.length,
+        captchaParams: window.__AC && window.__AC.captchaParams && window.__AC.captchaParams.slice(-20),
+      })).catch(e => ({ error: e.message })));
+      result.ok = verifyPassed(result.verifyResponse);
+      result.verifyFailureCode = result.ok ? '' : verifyFailureCode(result);
+      if (result.verifyFailureCode === 'F001') {
+        result.f001Detected = true;
+        result.retryHint = 'organic-next-attempt';
+      }
+      fs.writeFileSync(out, JSON.stringify(result, null, 2));
+      return result;
+    }
     const maxRefreshes = num('LISTENER_MAX_REFRESHES', 0);
     const maxVerifyRefreshes = num('LISTENER_MAX_VERIFY_REFRESHES', 0);
     const verifyRefreshCodes = envList('LISTENER_VERIFY_REFRESH_CODES', 'NONE').map(normalizeVerifyCode);
@@ -1416,7 +2724,7 @@ async function solveCaptchaOnce(options = {}) {
     const waitVerify = options.verifyWaitMs || num('VERIFY_WAIT_MS', 12000), started = Date.now();
     while (!result.verifyNetwork && Date.now() - started < waitVerify) await sleep(150);
     result.runtime = await wd('runtime.snapshot:primary', result.watchdogConfig.runtimeMs, () => page.evaluate(() => ({ calls: window.__AC && window.__AC.calls.slice(-50), errors: window.__AC && window.__AC.errors.slice(-20), jsonHits: window.__AC && window.__AC.jsonHits.slice(-40), payloads: window.__AC && window.__AC.payloads.slice(-40), formOps: window.__AC && window.__AC.formOps.slice(-40), listenerCount: window.__AC && window.__AC.listeners.length, captchaParams: window.__AC && window.__AC.captchaParams && window.__AC.captchaParams.slice(-20), btoaHits: window.__AC && window.__AC.btoaHits && window.__AC.btoaHits.slice(-20), u8Hits: window.__AC && window.__AC.u8Hits && window.__AC.u8Hits.slice(-20), trackPairs: window.__AC && window.__AC.trackPairs && window.__AC.trackPairs.slice(-40), foundTrackObjects: window.__AC && window.__AC.foundTrackObjects && window.__AC.foundTrackObjects.slice(-20), trackHits: window.__AC && window.__AC.trackHits && window.__AC.trackHits.slice(-40), vmpIns: window.__AC && window.__AC.vmpIns && window.__AC.vmpIns.slice(-40), updates: window.__AC && window.__AC.updates && window.__AC.updates.slice(-20), secretHits: window.__AC && window.__AC.secretHits && window.__AC.secretHits.slice(-20), sigKeys: window.__AC && window.__AC.sigKeys && window.__AC.sigKeys.slice(-20), deepHooksInited: window.__AC && window.__AC.deepHooksInited })).catch(e => ({ error: e.message })));
-    result.ok = !!(result.verifyResponse && (result.verifyResponse.VerifyResult === true || result.verifyResponse.VerifyCode === 'T001'));
+    result.ok = verifyPassed(result.verifyResponse);
     result.verifyFailureCode = result.ok ? '' : verifyFailureCode(result);
     // Auto-delta search: if F015 with valid candidate, try +/- 4/8 px on SAME puzzle before refreshing
     const f015Like = result.verifyResponse && result.verifyResponse.VerifyCode === 'F015';
@@ -1436,7 +2744,7 @@ async function solveCaptchaOnce(options = {}) {
         result[`listenerRun_${adjTag}`] = await wd(`captcha.drag:${adjTag}`, result.watchdogConfig.dragMs, () => (runMode === 'cdpdrag' || runMode === 'mouse') ? runCdpMouse(page, adjSpec) : (runMode === 'xdotool' ? runXdotoolDrag(page, adjSpec) : page.evaluate((spec) => window.__AC_run(spec), adjSpec)));
         const adjStarted = Date.now();
         while (!result.verifyNetwork && Date.now() - adjStarted < waitVerify) await sleep(150);
-        const adjOk = !!(result.verifyResponse && (result.verifyResponse.VerifyResult === true || result.verifyResponse.VerifyCode === 'T001'));
+        const adjOk = verifyPassed(result.verifyResponse);
         result[`delta_${adjTag}`] = { step, raw: cand.raw, distance: adjDist, code: result.verifyResponse?.VerifyCode, ok: adjOk };
         if (adjOk) {
           result.ok = true;
@@ -1497,7 +2805,7 @@ async function solveCaptchaOnce(options = {}) {
           result[`listenerRun_${refreshTag}`] = await wd(`captcha.drag:${refreshTag}`, result.watchdogConfig.dragMs, () => (runMode === 'cdpdrag' || runMode === 'mouse') ? runCdpMouse(page, rSpec) : (runMode === 'xdotool' ? runXdotoolDrag(page, rSpec) : page.evaluate((spec) => window.__AC_run(spec), rSpec)));
           const rStarted = Date.now();
           while (!result.verifyNetwork && Date.now() - rStarted < waitVerify) await sleep(150);
-          result.ok = !!(result.verifyResponse && (result.verifyResponse.VerifyResult === true || result.verifyResponse.VerifyCode === 'T001'));
+          result.ok = verifyPassed(result.verifyResponse);
           result.verifyFailureCode = result.ok ? '' : verifyFailureCode(result);
           if (result.ok) {
             result.state = rState;
@@ -1560,7 +2868,7 @@ function copyAttemptArtifacts(result, finalOutputDir, finalOut) {
     const sameDir = hasSrcDir && path.resolve(srcDir) === path.resolve(finalOutputDir);
     fs.mkdirSync(finalOutputDir, { recursive: true });
     if (hasSrcDir && !sameDir) {
-      for (const name of ['aliyun_bg_selected.png', 'aliyun_puzzle_selected.png', 'aggregate.json', 'aggregate.tsv']) {
+      for (const name of ['aliyun_bg_selected.png', 'aliyun_puzzle_selected.png', 'aliyun_restore_selected.png', 'aliyun_restore_background.png', 'aliyun_restore_fragment.png', 'aggregate.json', 'aggregate.tsv']) {
         const src = path.join(srcDir, name), dst = path.join(finalOutputDir, name);
         if (fs.existsSync(src)) fs.copyFileSync(src, dst);
       }
@@ -1663,6 +2971,16 @@ module.exports = {
   detectGapByPuzzle,
   detectGapByLightPatch,
   detectGapBySlotMask,
+  detectRestoreStrip,
+  detectRestoreBoundaryContinuity,
+  renderRestoreCandidate,
+  renderRestoreCandidateFocus,
+  restorePuzzleTravel,
+  restoreSliderTravel,
+  restoreQuantizedSliderTravel,
+  buildRestoreVisionCandidates,
+  buildRestoreRefinementCandidates,
+  selectRestoreBoundaryFallback,
   buildTrajectory,
   candidateMetrics,
   selectors,
@@ -1676,6 +2994,22 @@ module.exports = {
   waitForCaptcha,
   runCdpMouse,
   buildWarm,
+  CAPTCHA_TYPES,
+  detectCaptchaType,
+  normalizeCaptchaType,
+  normalizeVendorCaptchaType,
+  verifyPassed,
+  requestCarriesCaptchaVerifyParam,
+  isAliyunVerificationEndpoint,
+  responseDecisionSummary,
+  applyPreCaptchaFills,
+  applyPreCaptchaPresses,
+  applyPreCaptchaClicks,
+  mutateCaptchaVerifyParam,
+  classifySiteVerificationEvidence,
+  runSiteVerificationControl,
+  attachResponseLogger,
+  captureChallengeArtifact,
 };
 
 if (require.main === module) main();

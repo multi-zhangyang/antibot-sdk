@@ -177,8 +177,17 @@ def default_adapter_registry() -> ProviderAdapterRegistry:
             ProviderAdapter(
                 provider="aliyun",
                 category="solver",
-                modalities=("image", "protocol"),
-                challenge_kinds=("slider", "token"),
+                modalities=("image", "behavior", "protocol"),
+                challenge_kinds=(
+                    "invisible",
+                    "one_click",
+                    "slider",
+                    "puzzle",
+                    "image_restore",
+                    "drag_drop",
+                    "token",
+                ),
+                strategies=("provider_native", "vision"),
             ),
             ProviderAdapter(
                 provider="arkose",

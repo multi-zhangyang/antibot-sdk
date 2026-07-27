@@ -32,6 +32,12 @@ from .runtime import runtime_diagnostics
 from .stress import compact_result, run_stress
 
 _LAZY_EXPORTS = {
+    "ALIYUN_CAPTCHA_TYPES": (".providers.aliyun", "ALIYUN_CAPTCHA_TYPES"),
+    "ALIYUN_NON_PRODUCTION_VERIFY_CODES": (
+        ".providers.aliyun",
+        "ALIYUN_NON_PRODUCTION_VERIFY_CODES",
+    ),
+    "ALIYUN_PASS_VERIFY_CODES": (".providers.aliyun", "ALIYUN_PASS_VERIFY_CODES"),
     "AliyunCaptchaSolver": (".providers.aliyun", "AliyunCaptchaSolver"),
     "BrowserAutomation": (".providers.browser", "BrowserAutomation"),
     "CaptchaWidgetSolver": (".providers.widgets", "CaptchaWidgetSolver"),
@@ -138,6 +144,11 @@ _LAZY_EXPORTS = {
     ),
     "is_geetest_success_payload": (".providers.geetest", "is_geetest_success_payload"),
     "is_recoverable_attempt_codes": (".providers.aliyun", "is_recoverable_attempt_codes"),
+    "aliyun_verify_passed": (".providers.aliyun", "aliyun_verify_passed"),
+    "normalize_aliyun_captcha_type": (
+        ".providers.aliyun",
+        "normalize_aliyun_captcha_type",
+    ),
     "latest_geetest_success": (".providers.geetest", "latest_geetest_success"),
     "normalize_geetest_variant": (".providers.geetest", "normalize_geetest_variant"),
     "normalize_widget_provider": (".providers.widgets", "normalize_widget_provider"),
@@ -163,6 +174,9 @@ def __dir__() -> list[str]:
     return sorted(set(globals()) | set(_LAZY_EXPORTS))
 
 __all__ = [
+    "ALIYUN_CAPTCHA_TYPES",
+    "ALIYUN_NON_PRODUCTION_VERIFY_CODES",
+    "ALIYUN_PASS_VERIFY_CODES",
     "AliyunCaptchaSolver",
     "AliyunPolicyEngine",
     "AliyunSiteProfile",
@@ -246,6 +260,7 @@ __all__ = [
     "VisionChallengePolicy",
     "VisionTask",
     "aliyun_policy_decision",
+    "aliyun_verify_passed",
     "aliyun_profile_for_url",
     "compact_result",
     "create_app",
@@ -256,6 +271,7 @@ __all__ = [
     "geetest_v4_success_from_events",
     "is_geetest_success_payload",
     "normalize_geetest_variant",
+    "normalize_aliyun_captcha_type",
     "normalize_widget_provider",
     "normalize_arkose_provider",
     "latest_geetest_success",

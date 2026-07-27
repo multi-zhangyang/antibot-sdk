@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "type": "commonjs",
-  "description": "Bundled Aliyun CAPTCHA V3 slider runner for antibot-sdk.",
+  "description": "Bundled Aliyun CAPTCHA V3 multi-challenge runner for antibot-sdk.",
   "author": "multi-zhangyang",
   "license": "MIT",
   "engines": {
     "node": ">=22.12.0"
   },
   "scripts": {
-    "check:syntax": "node -c bridge.js && node -c src/runner.js && node -c src/aggregate.js && node -c src/stability.js && node -c src/stability_stats.js && node -c src/index.js && node -c src/deep_hooks.js && node -c src/site_profiles.js",
+    "check:syntax": "node -c bridge.js && node -c src/runner.js && node -c src/challenge_types.js && node -c src/aggregate.js && node -c src/stability.js && node -c src/stability_stats.js && node -c src/index.js && node -c src/deep_hooks.js",
     "stats": "node src/stability_stats.js"
   },
   "dependencies": {
@@ -35,7 +35,7 @@
   "keywords": [
     "aliyun",
     "captcha",
-    "slider",
+    "multi-challenge",
     "v3",
     "replay",
     "reverse-engineering"

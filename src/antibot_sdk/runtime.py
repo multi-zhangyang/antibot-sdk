@@ -67,13 +67,8 @@ def runtime_diagnostics(browser_binary: str | None = None) -> dict[str, Any]:
     vision_ready = bool(
         vision_config["base_url"] and vision_config["model"] and vision_config["api_key"]
     )
-    arkose_vision_config = {
-        **vision_config,
-        "model": vision_config["model"] or "gpt-5.4",
-    }
-    arkose_vision_ready = bool(
-        arkose_vision_config["base_url"] and arkose_vision_config["api_key"]
-    )
+    arkose_vision_config = dict(vision_config)
+    arkose_vision_ready = vision_ready
     providers = {
         "cloudflare": {
             "ready": bool(modules["pydoll"] and chrome),

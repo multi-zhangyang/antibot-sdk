@@ -2,7 +2,6 @@
 'use strict';
 const fs = require('fs');
 const { solveCaptcha } = require('./src/runner');
-const { attachSiteProfile } = require('./src/site_profiles');
 
 async function main() {
   const inputPath = process.argv[2];
@@ -14,10 +13,7 @@ async function main() {
     }
     delete options.env;
   }
-  const resolved = attachSiteProfile(options);
-  options = resolved.options;
   const result = await solveCaptcha(options);
-  if (resolved.siteProfile) result.siteProfile = resolved.siteProfile;
   process.stdout.write(JSON.stringify(result));
 }
 

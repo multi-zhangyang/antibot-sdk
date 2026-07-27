@@ -10,13 +10,13 @@ from antibot_sdk.providers.aliyun import (
 )
 
 
-def test_qoder_profile_auto_detects_aliyun() -> None:
-    url = "https://qoder.com/users/sign-up"
-    profile = aliyun_profile_for_url(url)
-    assert profile is not None
-    assert profile.name == "qoder_signup"
-    assert profile.profile["totalMs"] == 2000
-    assert detect_provider_for_url(url) == "aliyun"
+def test_aliyun_does_not_apply_host_specific_profiles() -> None:
+    for url in (
+        "https://first-host.example/sign-up",
+        "https://second-host.example/login",
+        "https://third-host.example/auth",
+    ):
+        assert aliyun_profile_for_url(url) is None
 
 
 def test_provider_detection_is_lean() -> None:
@@ -49,7 +49,7 @@ def test_list_profiles_only_slider_targets() -> None:
         "arkose",
     }
     assert "managed" in profiles["cloudflare"]
-    assert "qoder_signup" in profiles["aliyun"]
+    assert profiles["aliyun"] == {}
     assert "cloud_product" in profiles["tencent"]
     assert "matrix_ai_detect" in profiles["tencent"]
     assert "v4_demo" in profiles["geetest"]
@@ -65,7 +65,6 @@ def test_vendored_runtime_files_present() -> None:
     aliyun_vendor = AliyunCaptchaSolver.vendor_dir()
     assert (aliyun_vendor / "bridge.js").is_file()
     assert (aliyun_vendor / "src" / "runner.js").is_file()
-    assert (aliyun_vendor / "src" / "site_profiles.js").is_file()
 
     root = Path(__file__).resolve().parents[1] / "src" / "antibot_sdk" / "vendor" / "tencent"
     assert (root / "browser_pool.py").is_file()

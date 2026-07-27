@@ -21,7 +21,7 @@
 | --- | --- | --- | --- |
 | Cloudflare / Turnstile | 页面级浏览器流、managed challenge、Turnstile response、会话 cookie | 浏览器流可用；站点结果取决于真实会话 | clearance、非测试 token、vendor pass 或站点验证证据 |
 | Tencent Captcha | 滑块、文字点选、统一 `drag` / `point` action | 已实现；独立在线矩阵需按站点复测 | `cap_union_new_verify` 的 `errorCode=0` + 非空 ticket |
-| Aliyun Captcha V3 | Node/Puppeteer 滑块 runner、缺口定位、轨迹和失败策略 | 已实现 | 厂商 runner 的真实 verify 结果 |
+| Aliyun Captcha V3 | 无痕、一点即过、纯滑块、拼图、图像复原；V2/V3 popup/embed 自动分型 | 拼图、无痕和图像复原有厂商 `T001` 有限样本；纯滑块有站点差分二次校验证据 | `ok` 只接受 `VerifyResult=true` + `T001`；站点差分证明单独报告，`T005/T006` 不计生产通过 |
 | GeeTest v4 | `ai`、`slide`、`winlinze`、`match` | 已实现；题型和站点需要分别验证 | 厂商 pass token / flow evidence |
 | hCaptcha | HSW/MessagePack、binary、point、bounding-box、multiple-choice、drag-drop、ONNX fallback | `tree-climbing` 与 point 有真实有限样本；不是通用成功率承诺 | `checkcaptcha pass=true` + 厂商 token；配置站点断言时还需提交成功 |
 | Google reCAPTCHA | v2 动态 3x3、静态网格、token/callback、站点提交 | 动态 cars、bus、bicycles 有限矩阵证据；多 challenge 不逐题归因 | Google token；配置站点断言时还需提交成功 |
@@ -105,6 +105,79 @@ uv run antibot solve geetest \
   --raw
 ```
 
+### Aliyun Captcha V3
+
+默认 `auto` 优先读取 `InitCaptchaV3.CaptchaType`，并以当前阿里云组件的 DOM、提示文字和
+图层作为回退证据，区分五种现行形态：`TRACELESS -> invisible`、
+`CHECK_BOX -> one_click`、`SLIDING -> slider`、`PUZZLE -> puzzle`、
+`INPAINTING -> image_restore`。未知厂商类型不会被猜成已支持题型。空间推理形态已由厂商于
+2025-08-28 下线，不在当前矩阵中。
+
+```bash
+uv run antibot solve aliyun \
+  --target-url 'https://your-target.example/login' \
+  --captcha-type auto \
+  --headless true \
+  --timeout 180 \
+  --raw
+```
+
+图像复原需要视觉网关；密钥只从指定环境变量进入 Node 子进程，不写入 options JSON、结果或日志：
+
+```bash
+export ANTIBOT_VISION_BASE_URL='https://gateway.example/v1'
+export ANTIBOT_VISION_API_KEY='runtime-only-secret'
+
+uv run antibot solve aliyun \
+  --target-url 'https://your-target.example/login' \
+  --captcha-type image_restore \
+  --vision-base-url "$ANTIBOT_VISION_BASE_URL" \
+  --vision-model 'your-vision-model' \
+  --vision-api-key-env ANTIBOT_VISION_API_KEY \
+  --vision-min-confidence 0.5 \
+  --output-dir /tmp/antibot-aliyun \
+  --raw
+```
+
+`captcha_type=auto` 会结合独立拼图块、单张大图和提示文字区分拼图与图像复原；定制 DOM
+无法提供足够证据时，应显式传 `puzzle` 或 `image_restore`。生产成功门要求线上
+`VerifyCaptchaV3` 同时返回 `VerifyResult=true` 和 `VerifyCode=T001`。`T005`（测试模式）与
+`T006`（白名单模式）会保留在 `verify_code` 和脱敏诊断中，但 `ok` 始终为 `false`。
+每次可见挑战会在动作前保存仅覆盖验证码区域的 `aliyun_challenge_<type>.png`；图像复原还会
+分别保存原始背景、透明碎片和求解时的验证码裁剪图。以下是严格 `T001` 样本中的验证码裁剪，
+不包含承载页面、账户数据或验证令牌：
+
+![Aliyun image restoration challenge crop](docs/assets/aliyun-image-restore-example.png)
+
+站点业务接口不暴露 `VerifyCaptchaV3` 响应时，可以显式启用差分验证。runner 会在内存中复用
+同一业务请求，只将 `captchaVerifyParam` 换成无效对照值；结果仅保存 URL、长度、HTTP 状态和
+脱敏响应摘要，不保存请求体、账号、密码或验证码参数。必须同时配置真实响应与对照响应模式，
+两者匹配且响应不同才会得到 `site_secondary_check_pass`；该结论不会将 `ok` 改成 `true`：
+
+```bash
+export ANTIBOT_SITE_LOGIN='runtime-site-login'
+export ANTIBOT_SITE_PASSWORD='runtime-site-password'
+
+antibot solve aliyun \
+  --target-url 'https://your-target.example/login' \
+  --captcha-type slider \
+  --pre-captcha-fill "#login=$ANTIBOT_SITE_LOGIN" \
+  --pre-captcha-fill "#password=$ANTIBOT_SITE_PASSWORD" \
+  --site-verification-control \
+  --site-verification-accepted-pattern 'credentials rejected' \
+  --site-verification-rejected-pattern 'captcha rejected'
+```
+
+当前有限在线证据按题型记录：拼图有 3 次独立运行返回 HTTP 200、`Code=Success`、
+`Success=true`、`VerifyResult=true`、`VerifyCode=T001`；图像复原有一次相同严格条件的
+`T001`，同一串行运行的前一次题面为 `F015`；纯滑块有一次真实参数与无效参数的站点二次校验
+差分通过，但未观察到厂商直返 `T001`；无痕有一次 `T001` 和一次 `F008`。这些只是有限成功/
+失败样本，不代表稳定成功率。一点即过已实现 `CHECK_BOX` 协议分型、可见控件定位、自然鼠标
+点击和动作后厂商校验等待，但仍待独立在线 `T001`，因此能力状态保持
+`implemented_pending_independent_live_matrix`。承载页面不进入求解策略：页面入口、表单和
+提交动作只通过显式运行时参数提供，题型与算法只依据阿里云组件的实时协议响应、DOM、图层和
+验证响应选择。
+
 ### Arkose Labs FunCaptcha
 
 视觉网关凭据只通过环境变量提供，不写入源码、JSON、回放或日志：
@@ -116,7 +189,7 @@ export ANTIBOT_VISION_API_KEY='runtime-only-secret'
 uv run antibot solve arkose \
   --target-url 'https://your-authorized-target.example/arkose' \
   --vision-base-url "$ANTIBOT_VISION_BASE_URL" \
-  --vision-model 'gpt-5.4' \
+  --vision-model 'your-vision-model' \
   --vision-api-key-env ANTIBOT_VISION_API_KEY \
   --arkose-max-rounds 12 \
   --output-dir /tmp/antibot-arkose \
@@ -129,8 +202,9 @@ Arkose 成功必须同时具备：
 2. `/fc/ca/` response body 中明确的 `answered`、`solved`、`pass`、`success` 等语义；
 3. 若指定站点提交断言，提交后的 selector/text 也必须匹配。
 
-OpenAI-compatible 视觉后端统一使用 SSE 流式请求：请求体包含 `stream: true`，不会发送
-`max_tokens`。`--vision-extra-json` 不能覆盖 `model`、`messages`、`stream` 或 `max_tokens`。
+Python Harness 的 OpenAI-compatible 视觉后端使用 SSE 流式请求：请求体包含 `stream: true`，
+不会发送 `max_tokens`。`--vision-extra-json` 不能覆盖 `model`、`messages`、`stream` 或
+`max_tokens`。Aliyun Node 图像复原路径使用同一聊天补全协议的非流式结构化 JSON 响应。
 
 ### hCaptcha 官方页面流
 
@@ -143,7 +217,7 @@ export ANTIBOT_VISION_API_KEY='runtime-only-secret'
 uv run antibot solve hcaptcha \
   --target-url 'https://accounts.hcaptcha.com/demo' \
   --vision-base-url "$ANTIBOT_VISION_BASE_URL" \
-  --vision-model 'gpt-5.4' \
+  --vision-model 'your-vision-model' \
   --vision-api-key-env ANTIBOT_VISION_API_KEY \
   --submit-selector '#hcaptcha-demo-submit' \
   --success-selector '.hcaptcha-success' \
@@ -160,7 +234,7 @@ export ANTIBOT_VISION_API_KEY='runtime-only-secret'
 uv run antibot solve recaptcha \
   --target-url 'https://2captcha.com/demo/recaptcha-v2' \
   --vision-base-url 'https://gateway.example/v1' \
-  --vision-model 'gpt-5.4' \
+  --vision-model 'your-vision-model' \
   --vision-api-key-env ANTIBOT_VISION_API_KEY \
   --submit-selector 'form:has(#g-recaptcha) button[type="submit"]' \
   --success-text 'Captcha is passed successfully!' \
@@ -199,7 +273,7 @@ async def main() -> None:
             headless=True,
             timeout_sec=180,
             vision_base_url="https://gateway.example/v1",
-            vision_model="gpt-5.4",
+            vision_model="your-vision-model",
             vision_api_key_env="ANTIBOT_VISION_API_KEY",
         )
         print(result.ok)
@@ -207,6 +281,30 @@ async def main() -> None:
 
 
 asyncio.run(main())
+```
+
+阿里云也可通过客户端显式选择题型；视觉地址、模型和密钥都由运行时配置提供：
+
+```python
+import asyncio
+
+from antibot_sdk import AntibotClient
+
+
+async def solve_aliyun() -> None:
+    async with AntibotClient() as client:
+        result = await client.solve_aliyun(
+            target_url="https://your-target.example/login",
+            captcha_type="image_restore",
+            headless=True,
+            vision_base_url="https://gateway.example/v1",
+            vision_model="your-vision-model",
+            vision_api_key_env="ANTIBOT_VISION_API_KEY",
+        )
+        print(result.ok, result.captcha_type, result.verify_code)
+
+
+asyncio.run(solve_aliyun())
 ```
 
 统一 Harness 也可以直接接入新的 provider session：

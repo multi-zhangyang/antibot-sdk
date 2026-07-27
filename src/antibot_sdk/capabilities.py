@@ -123,10 +123,29 @@ CAPABILITY_MATRIX: dict[str, dict[str, Any]] = {
         "provider": "aliyun",
         "name": "Aliyun Captcha V3",
         "category": "solver",
-        "captcha_type": "slider",
-        "status": "active",
-        "output": "VerifyResult / VerifyCode / artifacts",
-        "scope": "阿里云滑块验证码：Node/Puppeteer runner、DOM hook、缺口定位、轨迹与失败策略。",
+        "captcha_type": "aliyun_v3",
+        "status": "live_verified_limited_matrix",
+        "output": "VerifyResult / VerifyCode / redacted site differential evidence / artifacts",
+        "scope": (
+            "阿里云验证码 2.0 V3 页面流：自动区分无痕、一点即过、拖到最右的滑块、"
+            "拼图和图像复原，兼容 popup/embed 入口；拼图使用本地缺口识别，图像复原结合"
+            "OpenAI-compatible 粗/精视觉、本地图层匹配、边界连续性证据和控件整数位移映射。"
+            "CaptchaResult.ok 仅在线上 "
+            "VerifyCaptchaV3 同时返回 VerifyResult=true 和 VerifyCode=T001 时成立；无法观察厂商"
+            "直返的站点可选用真实参数与无效参数的同请求差分验证，并单独报告 site_secondary_pass，"
+            "绝不将其伪装成 T001。"
+            "T005（测试模式）与 T006（白名单模式）只保留为非生产诊断，不视为真实解题通过。空间推理已由厂商于 "
+            "2025-08-28 下线，不列入当前支持矩阵。"
+        ),
+        "variants": {
+            "invisible": "live_verified_limited_matrix",
+            "one_click": "implemented_pending_independent_live_matrix",
+            "slider": "live_verified_site_secondary_limited_matrix",
+            "puzzle": "live_verified_limited_matrix",
+            "image_restore": "live_verified_limited_matrix",
+            "spatial_reasoning": "vendor_retired_2025_08_28",
+            "unknown_or_new_tasks": "explicit_failure",
+        },
     },
     "geetest": {
         "provider": "geetest",

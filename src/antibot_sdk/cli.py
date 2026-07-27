@@ -14,7 +14,7 @@ from ._version import __version__
 from .capabilities import list_capabilities
 from .client import AntibotClient
 from .profiles import detect_provider_for_url, list_profiles
-from .providers.aliyun import AliyunCaptchaSolver
+from .providers.aliyun import ALIYUN_CAPTCHA_TYPES, AliyunCaptchaSolver
 from .providers.geetest import DEFAULT_GEETEST_DEMO_URL
 from .runtime import runtime_diagnostics
 from .stress import run_stress
@@ -84,12 +84,26 @@ def _headless_bool(value: str | None, *, default: bool = True) -> bool:
 def _compact_raw(raw: Any) -> Any:
     if not isinstance(raw, dict):
         return raw
+    verify = raw.get("verifyResponse")
+    compact_verify = None
+    if isinstance(verify, dict):
+        nested = verify.get("Result")
+        if isinstance(nested, dict):
+            verify = nested
+        compact_verify = {
+            key: verify.get(key)
+            for key in ("VerifyResult", "VerifyCode")
+            if verify.get(key) is not None
+        }
     keep = {
         "ok": raw.get("ok"),
         "ticket": raw.get("ticket"),
         "randstr": raw.get("randstr"),
-        "verifyResponse": raw.get("verifyResponse"),
+        "verifyResponse": compact_verify,
         "verifyFailureCode": raw.get("verifyFailureCode"),
+        "siteVerificationNetwork": raw.get("siteVerificationNetwork"),
+        "siteVerificationControlNetwork": raw.get("siteVerificationControlNetwork"),
+        "siteVerificationEvidence": raw.get("siteVerificationEvidence"),
         "attempt": raw.get("attempt"),
         "maxAttempts": raw.get("maxAttempts"),
         "attempts": raw.get("attempts"),
@@ -143,6 +157,7 @@ def _add_tencent_args(parser: argparse.ArgumentParser) -> None:
 
 def _add_aliyun_args(parser: argparse.ArgumentParser) -> None:
     _add_common_target_args(parser)
+    parser.add_argument("--captcha-type", default="auto", choices=ALIYUN_CAPTCHA_TYPES)
     parser.add_argument("--chrome-path")
     parser.add_argument("--headless", default="auto", choices=["auto", "true", "false", "1", "0", "yes", "no", "new"])
     parser.add_argument("--output-dir")
@@ -152,13 +167,97 @@ def _add_aliyun_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--site-profile", default="auto")
     parser.add_argument("--profile-json")
     parser.add_argument("--env", action="append", default=[])
+    parser.add_argument(
+        "--pre-captcha-fill",
+        action="append",
+        default=[],
+        metavar="CSS=VALUE",
+        help="fill a visible form field after navigation; values are runtime-only",
+    )
+    parser.add_argument(
+        "--pre-captcha-press",
+        action="append",
+        default=[],
+        metavar="KEY",
+        help="press a key after runtime form fills",
+    )
+    parser.add_argument(
+        "--pre-captcha-click",
+        action="append",
+        default=[],
+        metavar="CSS|text:LABEL",
+        help="click a visible CSS target or exact text after navigation",
+    )
+    parser.add_argument("--site-verification-control", action="store_true")
+    parser.add_argument("--site-verification-accepted-pattern")
+    parser.add_argument("--site-verification-rejected-pattern")
     parser.add_argument("--verify-wait-ms", type=int)
     parser.add_argument("--captcha-wait-ms", type=int)
     parser.add_argument("--max-attempts", type=int)
     parser.add_argument("--session-retries", type=int)
     parser.add_argument("--session-retry-delay-sec", type=float)
     parser.add_argument("--session-retry-max-attempts", type=int)
+    parser.add_argument("--vision-base-url")
+    parser.add_argument("--vision-model")
+    parser.add_argument("--vision-api-key-env", default="ANTIBOT_VISION_API_KEY")
+    parser.add_argument("--vision-timeout", type=float, default=180)
+    parser.add_argument("--vision-min-confidence", type=float, default=0.35)
+    parser.add_argument("--vision-retries", type=int, default=2)
+    parser.add_argument(
+        "--vision-extra-json",
+        help="OpenAI-compatible request fields as JSON or @path; never put API keys here",
+    )
+    parser.add_argument("--restore-distance-px", type=float)
     parser.add_argument("--keep-profile", action="store_true")
+
+
+def _aliyun_kwargs(args: argparse.Namespace, *, target_url: str | None = None) -> dict[str, Any]:
+    return {
+        "target_url": target_url or args.target_url,
+        "captcha_type": getattr(args, "captcha_type", "auto"),
+        "chrome_path": getattr(args, "chrome_path", None),
+        "headless": _headless_any(getattr(args, "headless", None)),
+        "output_dir": getattr(args, "output_dir", None),
+        "out": getattr(args, "out", None),
+        "proxy_server": getattr(args, "proxy", None),
+        "user_agent": getattr(args, "user_agent", None),
+        "selectors": _kv(getattr(args, "selector", [])),
+        "site_profile": getattr(args, "site_profile", None)
+        or getattr(args, "profile", None)
+        or "auto",
+        "profile": _json_arg(getattr(args, "profile_json", None)),
+        "env": _kv(getattr(args, "env", [])),
+        "pre_captcha_fills": _kv(getattr(args, "pre_captcha_fill", [])),
+        "pre_captcha_presses": list(getattr(args, "pre_captcha_press", [])),
+        "pre_captcha_clicks": list(getattr(args, "pre_captcha_click", [])),
+        "site_verification_control": bool(
+            getattr(args, "site_verification_control", False)
+        ),
+        "site_verification_accepted_pattern": getattr(
+            args, "site_verification_accepted_pattern", None
+        ),
+        "site_verification_rejected_pattern": getattr(
+            args, "site_verification_rejected_pattern", None
+        ),
+        "verify_wait_ms": getattr(args, "verify_wait_ms", None),
+        "captcha_wait_ms": getattr(args, "captcha_wait_ms", None),
+        "max_attempts": getattr(args, "max_attempts", None),
+        "timeout_sec": getattr(args, "timeout", None) or 180,
+        "cleanup_profile": not bool(getattr(args, "keep_profile", False)),
+        "session_retries": getattr(args, "session_retries", None),
+        "session_retry_delay_sec": getattr(args, "session_retry_delay_sec", None),
+        "session_retry_max_attempts": getattr(args, "session_retry_max_attempts", None),
+        "vision_base_url": getattr(args, "vision_base_url", None),
+        "vision_api_key_env": getattr(
+            args, "vision_api_key_env", "ANTIBOT_VISION_API_KEY"
+        ),
+        "vision_model": getattr(args, "vision_model", None),
+        "vision_timeout_sec": getattr(args, "vision_timeout", 180),
+        "vision_min_confidence": getattr(args, "vision_min_confidence", 0.35),
+        "vision_retries": getattr(args, "vision_retries", 2),
+        "vision_extra_body": _json_arg(getattr(args, "vision_extra_json", None)),
+        "restore_distance_px": getattr(args, "restore_distance_px", None),
+    }
 
 
 def _add_cloudflare_args(parser: argparse.ArgumentParser, *, positional_url: bool = False) -> None:
@@ -384,7 +483,7 @@ def _arkose_kwargs(
         "success_text": getattr(args, "success_text", None),
         "verification_wait_ms": getattr(args, "verification_wait_ms", 4000),
         "vision_base_url": getattr(args, "vision_base_url", None),
-        "vision_model": getattr(args, "vision_model", None) or "gpt-5.4",
+        "vision_model": getattr(args, "vision_model", None),
         "vision_api_key_env": getattr(args, "vision_api_key_env", "ANTIBOT_VISION_API_KEY"),
         "vision_timeout_sec": getattr(args, "vision_timeout", 180),
         "vision_min_confidence": getattr(args, "vision_min_confidence", 0.35),
@@ -502,6 +601,15 @@ async def amain(argv: list[str] | None = None) -> int:
     auto.add_argument("--recaptcha-max-rounds", type=int, default=8)
     auto.add_argument("--hcaptcha-max-attempts", type=int, default=6)
     auto.add_argument("--arkose-max-rounds", type=int, default=12)
+    auto.add_argument("--captcha-type", default="auto", choices=ALIYUN_CAPTCHA_TYPES)
+    auto.add_argument("--vision-base-url")
+    auto.add_argument("--vision-model")
+    auto.add_argument("--vision-api-key-env", default="ANTIBOT_VISION_API_KEY")
+    auto.add_argument("--vision-timeout", type=float, default=180)
+    auto.add_argument("--vision-min-confidence", type=float, default=0.35)
+    auto.add_argument("--vision-retries", type=int, default=2)
+    auto.add_argument("--vision-extra-json")
+    auto.add_argument("--restore-distance-px", type=float)
 
     solve = sub.add_parser("solve")
     solve_sub = solve.add_subparsers(dest="provider", required=True)
@@ -665,14 +773,7 @@ async def amain(argv: list[str] | None = None) -> int:
                 parser.error("auto requires url or --target-url")
             provider = detect_provider_for_url(target_url) if args.provider == "auto" else args.provider
             if provider == "aliyun":
-                ret = await client.solve_aliyun(
-                    target_url=target_url,
-                    chrome_path=args.chrome_path,
-                    headless=_headless_any(args.headless),
-                    proxy_server=args.proxy,
-                    timeout_sec=args.timeout or 180,
-                    site_profile=args.profile or "auto",
-                )
+                ret = await client.solve_aliyun(**_aliyun_kwargs(args, target_url=target_url))
             elif provider == "tencent":
                 ret = await client.solve_tencent(
                     target_url=target_url,
@@ -769,27 +870,7 @@ async def amain(argv: list[str] | None = None) -> int:
             return 0 if ret.ok else 2
 
         if args.cmd == "solve" and args.provider == "aliyun":
-            ret = await client.solve_aliyun(
-                target_url=args.target_url,
-                chrome_path=args.chrome_path,
-                headless=_headless_any(args.headless),
-                output_dir=args.output_dir,
-                out=args.out,
-                proxy_server=args.proxy,
-                user_agent=args.user_agent,
-                selectors=_kv(args.selector),
-                site_profile=args.site_profile,
-                profile=_json_arg(args.profile_json),
-                env=_kv(args.env),
-                verify_wait_ms=args.verify_wait_ms,
-                captcha_wait_ms=args.captcha_wait_ms,
-                max_attempts=args.max_attempts,
-                timeout_sec=args.timeout or 180,
-                cleanup_profile=not args.keep_profile,
-                session_retries=args.session_retries,
-                session_retry_delay_sec=args.session_retry_delay_sec,
-                session_retry_max_attempts=args.session_retry_max_attempts,
-            )
+            ret = await client.solve_aliyun(**_aliyun_kwargs(args))
             emit(ret, include_raw=args.raw)
             return 0 if ret.ok else 2
 
@@ -844,24 +925,7 @@ async def amain(argv: list[str] | None = None) -> int:
                 per_run_timeout=args.timeout,
                 output_json=args.output_json,
                 run_once=lambda _i: client.solve_aliyun(
-                    target_url=args.target_url,
-                    chrome_path=args.chrome_path,
-                    headless=_headless_any(args.headless),
-                    output_dir=args.output_dir,
-                    proxy_server=args.proxy,
-                    user_agent=args.user_agent,
-                    selectors=_kv(args.selector),
-                    site_profile=args.site_profile,
-                    profile=_json_arg(args.profile_json),
-                    env=_kv(args.env),
-                    verify_wait_ms=args.verify_wait_ms,
-                    captcha_wait_ms=args.captcha_wait_ms,
-                    max_attempts=args.max_attempts,
-                    timeout_sec=args.timeout or 180,
-                    cleanup_profile=not args.keep_profile,
-                    session_retries=args.session_retries,
-                    session_retry_delay_sec=args.session_retry_delay_sec,
-                    session_retry_max_attempts=args.session_retry_max_attempts,
+                    **{**_aliyun_kwargs(args), "out": None}
                 ),
             )
             emit(payload if args.full else {"summary": payload["summary"]}, include_raw=True)
