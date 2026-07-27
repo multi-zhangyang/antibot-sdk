@@ -27,6 +27,13 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22.12.0"
+          cache: npm
+          cache-dependency-path: src/antibot_sdk/vendor/aliyun/package-lock.json
+
       - name: Install uv
         uses: astral-sh/setup-uv@v9.0.0
         with:
@@ -34,6 +41,14 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --extra dev --extra service
+
+      - name: Install Aliyun runner dependencies
+        run: npm ci --ignore-scripts
+        working-directory: src/antibot_sdk/vendor/aliyun
+
+      - name: Check Aliyun runner syntax
+        run: npm run check:syntax
+        working-directory: src/antibot_sdk/vendor/aliyun
 
       - name: Run tests
         run: uv run pytest -q
